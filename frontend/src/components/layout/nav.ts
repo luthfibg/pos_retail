@@ -11,4 +11,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/products', label: 'Produk', permission: 'inventory.view' },
   { to: '/categories', label: 'Kategori', permission: 'category.manage' },
   { to: '/suppliers', label: 'Supplier', permission: 'supplier.manage' },
+  { to: '/inventory/opening', label: 'Stok Awal', permission: 'inventory.adjust.approve' },
+  { to: '/inventory/movements', label: 'Riwayat Stok', permission: 'inventory.view' },
 ];

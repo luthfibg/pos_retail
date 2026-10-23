@@ -21,10 +21,26 @@ export function formatQty(value: Decimal | null | undefined): string {
   return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 3 }).format(n);
 }
 
+/** Waktu API berbentuk "2026-10-23 03:15:00.123" (UTC tanpa penanda zona). Tanpa 'Z', browser salah menganggapnya waktu lokal. */
+export function parseApiTime(value: string): Date {
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(value);
+  const iso = value.includes('T') ? value : value.replace(' ', 'T');
+  return new Date(hasZone ? iso : `${iso}Z`);
+}
+
 /** Waktu dari API disimpan UTC; tampilkan WIB. */
-export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  return new Intl.DateTimeFormat('id-ID', {
-    dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jakarta',
-  }).format(new Date(iso));
+export function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = parseApiTime(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jakarta' }).format(d);
+}
+
+/** Tanggal murni "YYYY-MM-DD" (mis. kadaluarsa). Tidak digeser zona waktu. */
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return '—';
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeZone: 'UTC' }).format(d);
 }

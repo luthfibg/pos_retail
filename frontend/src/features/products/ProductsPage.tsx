@@ -9,6 +9,7 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { Product } from '@/lib/api/types';
 import { ProductFormDialog } from './ProductFormDialog';
+import { ProductStockDialog } from '@/features/inventory/ProductStockDialog';
 
 const STATUS_LABEL: Record<ProductStatus, string> = {
   active: 'Aktif',
@@ -25,6 +26,7 @@ export function ProductsPage() {
   const { can } = useAuth();
   const [dialog, setDialog] = useState<{ product?: Product } | null>(null);
   const canEdit = can('product.update');
+  const [stockOf, setStockOf] = useState<Product | null>(null);
 
   const categories = useQuery({ queryKey: ['categories', 'all'], queryFn: () => categoryApi.list() });
 
@@ -95,7 +97,7 @@ export function ProductsPage() {
               <th className="px-3 py-2 text-right">Stok</th>
               <th className="px-3 py-2">Kondisi stok</th>
               <th className="px-3 py-2">Status</th>
-              {canEdit && <th className="px-3 py-2" />}
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -111,18 +113,19 @@ export function ProductsPage() {
                 <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.stock_sellable)} {p.unit_name}</td>
                 <td className="px-3 py-2"><StockBadge status={p.stock_status} /></td>
                 <td className="px-3 py-2 text-slate-600">{STATUS_LABEL[p.status]}</td>
-                {canEdit && (
-                  <td className="px-3 py-2 text-right">
-                    <button type="button" onClick={() => setDialog({ product: p })} className="text-sm text-slate-700 underline">Ubah</button>
-                  </td>
-                )}
+                <td className="whitespace-nowrap px-3 py-2 text-right">
+                  <button type="button" onClick={() => setStockOf(p)} className="text-sm text-slate-700 underline">Stok</button>
+                  {canEdit && (
+                    <button type="button" onClick={() => setDialog({ product: p })} className="ml-3 text-sm text-slate-700 underline">Ubah</button>
+                  )}
+                </td>
               </tr>
             ))}
             {!products.isLoading && rows.length === 0 && (
-              <tr><td colSpan={canEdit ? 8 : 7} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
             )}
             {products.isLoading && (
-              <tr><td colSpan={canEdit ? 8 : 7} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
             )}
           </tbody>
         </table>
@@ -154,6 +157,7 @@ export function ProductsPage() {
         </div>
       )}
 
+      {stockOf && <ProductStockDialog product={stockOf} onClose={() => setStockOf(null)} />}
       {dialog && <ProductFormDialog product={dialog.product} onClose={() => setDialog(null)} />}
     </div>
   );

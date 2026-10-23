@@ -106,3 +106,82 @@ export interface SupplierInput {
   address?: string | null;
   default_payment_terms?: PaymentTerms;
 }
+
+export type ExpiryStatus = 'none' | 'ok' | 'near_expiry' | 'expired';
+
+export interface StockTotals {
+  qty_sellable: Decimal;
+  qty_quarantine: Decimal;
+  qty_damaged: Decimal;
+}
+
+export interface StockBatch {
+  balance_id: number;
+  batch_id: number | null;
+  batch_code: string | null;
+  expiry_date: string | null; // YYYY-MM-DD (tanggal WIB)
+  expiry_status: ExpiryStatus;
+  is_opening: boolean;
+  received_at: string | null; // UTC
+  location_id: number;
+  shelf_position_id: number | null;
+  qty_sellable: Decimal;
+  qty_quarantine: Decimal;
+  qty_damaged: Decimal;
+}
+
+/** Urutan `batches` = urutan FEFO (yang dijual lebih dulu di atas). */
+export interface ProductStock {
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  track_expiry: boolean;
+  avg_cost: Decimal | null; // HPP: hanya tampilkan di layar Admin
+  totals: StockTotals;
+  batches: StockBatch[];
+}
+
+export type MovementType =
+  | 'opening_balance' | 'receipt' | 'putaway' | 'transfer' | 'sale' | 'sale_void'
+  | 'customer_return' | 'supplier_return_out' | 'supplier_replacement_in' | 'adjustment' | 'write_off';
+
+export interface Movement {
+  id: number;
+  product_id: number;
+  sku: string;
+  product_name: string;
+  batch_id: number | null;
+  batch_code: string | null;
+  expiry_date: string | null;
+  movement_type: MovementType;
+  qty: Decimal;
+  unit_cost: Decimal | null;
+  from_location_id: number | null;
+  from_bucket: string | null;
+  to_location_id: number | null;
+  to_bucket: string | null;
+  ref_type: string | null;
+  ref_id: number | null;
+  occurred_at: string; // UTC
+  created_by: number | null;
+  created_by_name: string | null;
+}
+
+export interface OpeningBalanceItemInput {
+  product_id: number;
+  qty: Decimal;
+  unit_cost?: Decimal;
+  expiry_date?: string;
+  batch_code?: string;
+}
+
+export interface OpeningBalanceInput {
+  note?: string;
+  items: OpeningBalanceItemInput[];
+}
+
+export interface OpeningBalanceResult {
+  document_no: string;
+  items: { product_id: number; batch_id: number; qty: Decimal }[];
+}

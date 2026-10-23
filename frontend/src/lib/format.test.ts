@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatQty, formatRupiah } from './format';
+import { formatDate, formatDateTime, formatQty, formatRupiah, parseApiTime } from './format';
 
 describe('format', () => {
   it('menampilkan rupiah tanpa desimal bila bulat', () => {
@@ -15,5 +15,19 @@ describe('format', () => {
   it('qty membuang nol di belakang', () => {
     expect(formatQty('3.000')).toBe('3');
     expect(formatQty('12.500')).toBe('12,5');
+  });
+
+  it('waktu API tanpa zona dibaca sebagai UTC', () => {
+    expect(parseApiTime('2026-10-23 03:15:00.123').toISOString()).toBe('2026-10-23T03:15:00.123Z');
+    expect(parseApiTime('2026-10-23T03:15:00Z').toISOString()).toBe('2026-10-23T03:15:00.000Z');
+  });
+  it('menampilkan WIB (UTC+7)', () => {
+    // 03:15 UTC = 10:15 WIB
+    expect(formatDateTime('2026-10-23 03:15:00.000')).toMatch(/10[.:]15/);
+  });
+  it('tanggal murni tidak bergeser', () => {
+    expect(formatDate('2027-03-01')).toContain('2027');
+    expect(formatDate('2027-03-01')).toMatch(/\b1\b/);
+    expect(formatDate(null)).toBe('—');
   });
 });
