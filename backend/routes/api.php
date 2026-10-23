@@ -42,3 +42,4 @@ Route::middleware('auth:sanctum')->group(function () {
 // Modul lain dipisah per berkas (aturan kerja bersama beberapa agent, handoff bagian 8).
 require __DIR__.'/api/inventory.php';
 require __DIR__.'/api/customers.php';
+require __DIR__.'/api/pos.php';
