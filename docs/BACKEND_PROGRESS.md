@@ -2,7 +2,9 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 23 Oktober 2026 · **Dikerjakan:** WS-B (Inventory inti) dan WS-A (Data karyawan + notifikasi)
+**Diperbarui:** 23 Oktober 2026 · **Dikerjakan:** WS-B (Inventory inti), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan)
+
+> **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
 ## Cara membaca status
 
@@ -149,10 +151,114 @@ Tipe saat ini: `customer.limit_needed` (`entity_type: "customer"`) → arahkan k
 
 ---
 
+## 4. Shift Kasir 🟡
+
+Alur: `open` → `counting` (penjualan baru **diblokir**) → `closed` → `reviewed`. Satu laci, satu shift aktif; Kasir hanya mengelola shift sendiri, Admin (`shift.review`) boleh semua.
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/shifts/current` | `shift.open` | Shift aktif milik saya; `{"data": null}` bila belum ada → tampilkan layar "Buka Shift" |
+| POST | `/api/shifts/open` | `shift.open` | Buka shift. Body opsional `{"counted_opening_cash": "0"}` (hitungan uang di laci; selisih dengan saldo awal dicatat di audit) |
+| GET | `/api/shifts/{id}` | `shift.open` | Detail (Kasir: hanya miliknya, selain itu 404) |
+| POST | `/api/shifts/{id}/start-count` | `shift.close` | Mulai penutupan: status `counting`, penjualan baru ditolak |
+| POST | `/api/shifts/{id}/close` | `shift.close` | Tutup: `{"counted_cash": "44000", "variance_note": "..."}` |
+| POST | `/api/shifts/{id}/review` | `shift.review` (Admin) | Tinjau shift `closed` → `reviewed` (`{"note"}` opsional) |
+| GET | `/api/shifts` | `shift.review` (Admin) | Daftar: `status`, `cashier_id`, `date_from`, `date_to`, `per_page` |
+
+Respons shift (`data`):
+```json
+{ "id": 1, "doc_number": "SHIFT-202610-000001", "register_id": 1, "cashier_id": 4, "cashier_name": "Kasir-jual",
+  "status": "open", "opening_balance": "0.00", "opened_at": "2026-10-23 03:00:00.000", "closed_at": null,
+  "summary": { "cash_sales_count": 1, "cash_sales_total": "27500.00", "credit_sales_count": 0,
+               "credit_sales_total": "0.00", "cash_in": "0.00", "cash_out": "0.00" },
+  "expected_cash": null, "counted_cash": null, "variance": null, "variance_note": null,
+  "float_kept": null, "reviewed_at": null }
+```
+- **Hitung buta:** selama shift `open`/`counting`, `expected_cash` dan `variance` bernilai `null` untuk Kasir (hanya Admin melihatnya). Setelah `closed`, keduanya terisi. Jangan tampilkan perkiraan kas di layar hitung kasir.
+- `opening_balance` = endapan shift sebelumnya (0 untuk shift pertama). Gagal membuka shift → 422 `errors.shift` (sudah punya shift / laci sedang dipakai kasir lain, pesan menyebut namanya).
+- Tutup shift: bila selisih ≠ 0, `variance_note` **wajib** (422 `errors.variance_note`). Selisih = terhitung − diharapkan (negatif = kurang).
+- **Sementara:** saat tutup, `float_kept` = seluruh kas terhitung (belum ada modul setoran). Setoran dan endapan ⏳ — jangan buatkan UI setoran dulu.
+- Kas masuk/keluar lain (`cash_movements`) ikut dihitung di kas diharapkan, tetapi belum ada endpoint untuk mencatatnya ⏳.
+
+---
+
+## 5. Penjualan (POS) 🟡
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| POST | `/api/sales` | `sales.create` | **Posting penjualan** (tunai atau kredit potong gaji) |
+| GET | `/api/sales` | `sales.create` | Riwayat. Kasir: hanya miliknya; Admin: semua. Filter `q` (nomor struk), `shift_id`, `customer_id`, `status`, `payment_mode`, `date_from`, `date_to`, `per_page` |
+| GET | `/api/sales/{id}` | `sales.create` | Struk lengkap (item, pembayaran, `receipt`) |
+| POST | `/api/sales/{id}/reprint` | `receipt.reprint` | Cetak ulang: struk sama dengan `receipt.is_copy = true`, `copy_label = "SALINAN"`; tercatat di log cetak + audit |
+
+Void, retur, dan pembatalan struk ⏳ (belum ada).
+
+### POST `/api/sales`
+
+Tunai:
+```json
+{ "idempotency_key": "6f1c...-uuid", "payment_mode": "cash", "amount_tendered": "50000",
+  "customer_id": null,
+  "items": [ { "product_id": 12, "qty": "2" }, { "product_id": 15, "qty": "0.5" } ] }
+```
+Kredit potong gaji:
+```json
+{ "idempotency_key": "…uuid…", "payment_mode": "payroll_credit", "customer_id": 3,
+  "items": [ { "product_id": 12, "qty": "1" } ] }
+```
+Kredit dengan pengecualian Admin (hanya dikirim setelah Kasir melihat error `credit_limit` dan Admin mengetik kredensial sendiri di dialog):
+```json
+{ "...": "...", "credit_exception": { "approver_username": "admin", "approver_password": "…", "note": "Disetujui HRD, kebutuhan mendesak" } }
+```
+Aturan frontend:
+- **`idempotency_key` wajib UUID dan dibuat sekali per keranjang** (buat saat mulai transaksi, kirim ulang kunci yang SAMA bila jaringan putus/timeout). Kirim ulang → `200` dengan `"replayed": true` dan struk yang sama; transaksi tidak ganda. Struk baru → `201`, `"replayed": false`. Kunci baru hanya untuk keranjang baru.
+- Kirim hanya `product_id` dan `qty`. Harga, diskon, PPN, HPP dan batch FEFO **dihitung server**; tampilkan angka dari respons, jangan menghitung ulang. Kasir tidak bisa mengubah harga/diskon (diskon = aturan Admin).
+- Produk sama di beberapa baris digabung server. `qty` maks 3 desimal, maks 99.999.
+- Hanya produk berstatus `active` dengan harga yang bisa dijual (`pending_price`/`inactive` ditolak).
+
+Respons (`data`):
+```json
+{ "id": 21, "doc_number": "SALE-202610-000001", "shift_id": 1, "cashier_id": 4, "cashier_name": "Kasir-jual",
+  "customer_id": null, "customer_name": null, "customer_no": null,
+  "payment_mode": "cash", "subtotal": "27500.00", "discount_total": "0.00",
+  "tax_rate": null, "tax_amount": "0.00", "total": "27500.00",
+  "status": "posted", "billing_status": "not_applicable", "over_limit": false, "posted_at": "2026-10-23 03:10:00.000",
+  "items": [ { "id": 40, "product_id": 12, "sku": "P-000012", "name": "Air Mineral 600ml", "unit_name": "pcs",
+               "qty": "2.000", "unit_price": "10000.00", "discount_amount": "0.00", "line_total": "20000.00" } ],
+  "payment": { "method": "cash", "amount_tendered": "50000.00", "change_given": "22500.00", "amount_applied": "27500.00" },
+  "receipt": { "store_name": "…", "is_copy": false, "copy_label": null, "note": null } }
+```
+Kredit: `payment` = `null`, `billing_status` = `"unbilled"`, `receipt.note` = "Belum dibayar. Ditagihkan lewat potong gaji." (struk kredit hanya menampilkan subtotal barang; PPN kredit dihitung saat invoice).
+
+### Error yang perlu penanganan khusus (422, `errors.<kunci>`)
+| Kunci | Arti | Tindakan UI |
+|---|---|---|
+| `shift` | Belum buka shift, atau shift sedang `counting` | Arahkan ke Buka Shift / tunggu penutupan |
+| `items.N.qty` | Stok tidak mencukupi (pesan menyebut tersedia dan diminta) | Tandai baris N; seluruh transaksi **tidak** terposting |
+| `items.N.product_id` | Produk tidak ada / belum bisa dijual | Hapus baris N |
+| `amount_tendered` | Uang diterima kurang dari total | Minta nominal baru |
+| `customer_id` | Kredit tapi karyawan belum dipilih / belum diverifikasi / nonaktif / batas belum diisi | Tawarkan tunai |
+| `credit_limit` | **Melebihi batas kredit** (pesan memuat sisa batas dan total) | Tawarkan: ganti ke tunai, atau dialog pengecualian Admin |
+| `approver_password` | Kredensial penyetuju salah / tidak berwenang / terlalu banyak percobaan | Ulangi dialog |
+| `credit_exception.note` | Catatan pengecualian kosong | Wajibkan catatan |
+| `idempotency_key` | Kunci sudah dipakai kasir lain | Buat kunci baru |
+| `payment_mode` | Konfigurasi PPN belum lengkap (bila PPN diaktifkan) | Hubungi Admin |
+
+Pengecualian berhasil → `over_limit: true` pada struk (label "melebihi batas" dipakai di rincian invoice dan laporan).
+
+### Catatan perilaku
+- Stok FEFO: Kasir tidak memilih batch; batch kadaluarsa tidak terjual (stok tampak "ada" di `stock_sellable` tetapi bisa ditolak `items.N.qty`).
+- PPN tunai hanya aktif bila Admin mengaktifkan (`vat_enabled`) dan tarif dikonfigurasi (R-04 belum dikonfirmasi klien); default mati.
+- Tunai masuk ledger kas kecil otomatis; kredit tidak menyentuh laci.
+- Tidak ada endpoint pencarian produk baru: pakai pencarian/`by-barcode` produk yang sudah ada dan pemilih karyawan (`GET /api/customers?q=`, perhatikan `credit_state`).
+
+---
+
 ## Perubahan lain yang memengaruhi frontend
-- `routes/api.php` kini memuat `routes/api/inventory.php` dan `routes/api/customers.php`; URL lama tidak berubah.
+- `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, dan `routes/api/pos.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-23 (2)** — WS-D: shift (buka/hitung/tutup/tinjau, hitung buta, saldo awal = endapan sebelumnya) dan posting penjualan (tunai + kredit, FEFO, diskon Admin, PPN opsional, batas kredit + pengecualian Admin, idempotensi, riwayat, cetak ulang SALINAN). Status: 🟡 belum dijalankan.
 - **2026-10-23** — WS-B: `InventoryService` (saldo, pergerakan, batch, FEFO, anti-negatif, HPP rata-rata bergerak), stok awal, lihat stok per batch, riwayat pergerakan. WS-A: data karyawan (input Kasir, verifikasi dan batas oleh Admin), notifikasi `customer.limit_needed`. Status: 🟡 belum dijalankan.
 - **sebelumnya** — Auth + RBAC ✅, kategori ✅, supplier ✅, produk (+harga, barcode otomatis, status stok) ✅. Detail kontraknya ada di `HANDOFF_POS_RETAIL_SMK.md` bagian 6.

@@ -30,6 +30,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Denah rak | Belum | — |
 | Inventory inti: `InventoryService` (saldo/pergerakan/batch/FEFO/anti-negatif/HPP), stok awal, lihat stok, riwayat pergerakan | Kode + test selesai | **BELUM dijalankan** |
 | Penerimaan barang, transfer, adjustment | Belum (tabel ada) | — |
+| Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Kode + test selesai | **BELUM dijalankan** |
 | PR → PO → penerimaan | Belum (tabel ada) | — |
 | POS (shift, penjualan, struk, void), setoran/endapan | Belum (tabel ada) | — |
 | Periode tagihan + invoice HRD | Belum (tabel ada) | — |
@@ -68,7 +69,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 3. **Uang = `DECIMAL(18,2)`, qty = `DECIMAL(18,3)`**; API mengembalikan **string desimal** (`"3500.00"`), jangan float. Waktu disimpan **UTC**, tampil WIB.
 4. **Otorisasi:** route memakai `->middleware(['auth:sanctum', 'can:<kode.permission>'])`. Kode permission dan deskripsi hanya didefinisikan di `app/Support/PermissionCatalog.php` (satu sumber). Subset Kasir ada di `PermissionCatalog::cashier()`.
 5. **Persetujuan (PR Owner, pengecualian kredit, write-off, adjustment):** pakai `ReauthService::confirm($username, $password, $permission, $requester)`. Pemberi persetujuan mengetik password akunnya sendiri; tidak ada password bersama.
-6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`, `customer.create|update|status_change|verify|set_limit`, `inventory.opening_balance`.
+6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`, `customer.create|update|status_change|verify|set_limit`, `inventory.opening_balance`, `shift.open|start_count|close|review`, `sale.post`, `sale.credit_exception`, `receipt.reprint`.
 7. **Dokumen terposting tidak dihapus/diedit.** Koreksi lewat pembatalan, reversal, atau dokumen koreksi yang bertaut.
 8. **Penomoran dokumen:** `NumberSequence::next($storeId, $jenis, $periode)` — hanya di dalam transaksi — lalu `DocumentNumber::format('SALE', $n, '202610')` → `SALE-202610-000123` (sudah ada; stok awal memakai `OPEN-000001`).
 9. **Stok:** saldo (`inventory_balances`) turunan dari `inventory_movements` (append-only). Stok negatif **dilarang**. Semua perubahan stok lewat `InventoryService` (`receive`, `sell` FEFO, `voidSale`), **wajib di dalam `DB::transaction` pemanggil**; produk dikunci berurutan id. Hitung qty/uang dengan `App\Support\Decimal` (integer), bukan float.
@@ -122,6 +123,8 @@ php artisan test                                     # butuh .env.testing -> DB_
 | POST / PATCH | `/api/products` | `product.create` / `product.update` (harga: `price.change`, status: `product.activate`) |
 
 **Endpoint tambahan (WS-A/WS-B, belum dijalankan; kontrak lengkap di `docs/BACKEND_PROGRESS.md`):** `GET /api/inventory/products/{id}/stock`, `GET /api/inventory/movements`, `POST /api/inventory/opening-balances` · `GET/POST /api/customers`, `GET/PATCH /api/customers/{id}`, `POST /api/customers/{id}/verify`, `PUT|GET /api/customers/{id}/credit-limit(s)` · `GET /api/notifications`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`.
+
+**Endpoint POS (WS-D, belum dijalankan):** `GET /api/shifts/current`, `POST /api/shifts/open`, `GET /api/shifts/{id}`, `POST /api/shifts/{id}/start-count|close|review`, `GET /api/shifts` · `POST|GET /api/sales`, `GET /api/sales/{id}`, `POST /api/sales/{id}/reprint`.
 
 **Berkas penting** (di folder keluaran proyek): `schema_paket1.sql`, `erd_paket1.md`, zip migration, zip tahap1b (seeder/auth/RBAC), zip tahap1c (master data), `SETUP.md`, `SETUP_AUTH_RBAC.md`, `PANDUAN_MASTER_DATA.md`.
 

@@ -1,6 +1,6 @@
 import { api } from './client';
 import type {
-  Category, CategoryInput, LoginResponse, Me, Movement, MovementType, OpeningBalanceInput,
+  Category, CategoryInput, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Supplier, SupplierInput,
 } from './types';
 
@@ -67,4 +67,29 @@ export const inventoryApi = {
   movements: (f: MovementFilters = {}) => api<Paginated<Movement>>('/inventory/movements', { query: { ...f } }),
   openingBalance: (input: OpeningBalanceInput) =>
     api<{ data: OpeningBalanceResult }>('/inventory/opening-balances', { method: 'POST', body: input }).then((r) => r.data),
+};
+
+export const customerApi = {
+  list: (f: { q?: string; status?: CustomerStatus; page?: number; per_page?: number } = {}) =>
+    api<Paginated<Customer>>('/customers', { query: { ...f } }),
+  get: (id: number) => api<{ data: Customer }>(`/customers/${id}`).then((r) => r.data),
+  create: (input: CustomerInput) =>
+    api<{ data: Customer }>('/customers', { method: 'POST', body: input }).then((r) => r.data),
+  update: (
+    id: number,
+    input: Partial<CustomerInput> & { status?: 'active' | 'inactive'; reason?: string },
+  ) => api<{ data: Customer }>(`/customers/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
+  verify: (id: number, input: { credit_limit?: string; note?: string }) =>
+    api<{ data: Customer }>(`/customers/${id}/verify`, { method: 'POST', body: input }).then((r) => r.data),
+  setLimit: (id: number, input: { limit_amount: string; note?: string }) =>
+    api<{ data: Customer }>(`/customers/${id}/credit-limit`, { method: 'PUT', body: input }).then((r) => r.data),
+  limitHistory: (id: number) =>
+    api<{ data: CreditLimitRecord[] }>(`/customers/${id}/credit-limits`).then((r) => r.data),
+};
+
+export const notificationApi = {
+  list: (f: { unread?: boolean; page?: number; per_page?: number } = {}) =>
+    api<NotificationList>('/notifications', { query: { unread: f.unread ? 1 : undefined, page: f.page, per_page: f.per_page } }),
+  read: (id: number) => api<{ data: { id: number; read: boolean } }>(`/notifications/${id}/read`, { method: 'POST' }),
+  readAll: () => api<{ data: { marked: number } }>('/notifications/read-all', { method: 'POST' }),
 };

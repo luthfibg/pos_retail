@@ -185,3 +185,47 @@ export interface OpeningBalanceResult {
   document_no: string;
   items: { product_id: number; batch_id: number; qty: Decimal }[];
 }
+
+export type CustomerStatus = 'pending_verification' | 'active' | 'inactive';
+export type CreditState = 'not_verified' | 'limit_not_set' | 'available' | 'exhausted' | 'inactive';
+
+/** `credit_limit` dan `credit_used` hanya dikirim ke pengguna dengan izin customer.set_limit (Admin). */
+export interface Customer {
+  id: number;
+  customer_no: string;
+  name: string;
+  department: string | null;
+  status: CustomerStatus;
+  credit_state: CreditState;
+  credit_remaining: Decimal | null;
+  verified_at: string | null;
+  credit_limit?: Decimal | null;
+  credit_used?: Decimal;
+}
+
+export interface CustomerInput {
+  customer_no: string;
+  name: string;
+  department?: string | null;
+}
+
+export interface CreditLimitRecord {
+  id: number;
+  limit_amount: Decimal;
+  effective_from: string; // UTC
+  set_by: number;
+  set_by_name: string | null;
+  note: string | null;
+}
+
+export interface AppNotification {
+  id: number;
+  type: string;
+  entity_type: string | null;
+  entity_id: number | null;
+  message: string;
+  read_at: string | null;
+  created_at: string; // UTC
+}
+
+export type NotificationList = Paginated<AppNotification> & { unread_count: number };

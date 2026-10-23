@@ -10,6 +10,7 @@ import { CategoriesPage } from '@/features/categories/CategoriesPage';
 import { SuppliersPage } from '@/features/suppliers/SuppliersPage';
 import { OpeningBalancePage } from '@/features/inventory/OpeningBalancePage';
 import { MovementsPage } from '@/features/inventory/MovementsPage';
+import { CustomersPage } from '@/features/customers/CustomersPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -39,6 +40,10 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="supplier.manage" />,
             children: [{ path: 'suppliers', element: <SuppliersPage /> }],
+          },
+          {
+            element: <RequirePermission permission="customer.select" />,
+            children: [{ path: 'customers', element: <CustomersPage /> }],
           },
           {
             element: <RequirePermission permission="inventory.adjust.approve" />,
