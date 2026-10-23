@@ -24,16 +24,18 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Auth: login/logout/me (Sanctum, throttle, audit) | Selesai | **Lolos** test |
 | RBAC: role + override per pengguna, `Gate::before`, `can:<permission>` | Selesai | **Lolos** test |
 | Re-auth persetujuan (`ReauthService`, lockout 5x, penanda self-approval) | Selesai | **Lolos** test |
-| Master data: kategori, supplier, produk (+price_history, barcode otomatis, status stok) | Kode selesai | **BELUM dijalankan** (target ±59 test hijau) |
-| Frontend React + TypeScript | **Belum ada sama sekali** | — |
-| Customers (karyawan), batas kredit, notifikasi, denah rak | Belum | — |
-| Inventory (saldo/pergerakan/batch/FEFO), penerimaan, transfer, adjustment | Belum (tabel ada) | — |
+| Master data: kategori, supplier, produk (+price_history, barcode otomatis, status stok) | Selesai | **Lolos** test di mesin pengguna |
+| Frontend React + Vite + TypeScript | **Sudah dimulai** oleh pengguna (sedang menyusun CRUD produk) | Belum ditinjau agent ini |
+| Customers (karyawan), verifikasi, batas kredit, notifikasi `customer.limit_needed` | Kode + test selesai | **BELUM dijalankan** |
+| Denah rak | Belum | — |
+| Inventory inti: `InventoryService` (saldo/pergerakan/batch/FEFO/anti-negatif/HPP), stok awal, lihat stok, riwayat pergerakan | Kode + test selesai | **BELUM dijalankan** |
+| Penerimaan barang, transfer, adjustment | Belum (tabel ada) | — |
 | PR → PO → penerimaan | Belum (tabel ada) | — |
 | POS (shift, penjualan, struk, void), setoran/endapan | Belum (tabel ada) | — |
 | Periode tagihan + invoice HRD | Belum (tabel ada) | — |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
-**Penting:** kode backend ditulis tanpa dapat dijalankan di lingkungan penyusun (tidak ada PHP). Yang bertanda "Lolos" sudah dijalankan pengguna. Kode master data baru dikirim; kemungkinan ada kesalahan kecil pada eksekusi pertama.
+**Penting:** kode backend ditulis tanpa dapat dijalankan di lingkungan penyusun (tidak ada PHP). Yang bertanda "Lolos" sudah dijalankan pengguna. Kode baru berikutnya harus diperlakukan sama: tandai "belum dijalankan" sampai pengguna menjalankan `php artisan test`.
 
 ---
 
@@ -66,10 +68,10 @@ php artisan test                                     # butuh .env.testing -> DB_
 3. **Uang = `DECIMAL(18,2)`, qty = `DECIMAL(18,3)`**; API mengembalikan **string desimal** (`"3500.00"`), jangan float. Waktu disimpan **UTC**, tampil WIB.
 4. **Otorisasi:** route memakai `->middleware(['auth:sanctum', 'can:<kode.permission>'])`. Kode permission dan deskripsi hanya didefinisikan di `app/Support/PermissionCatalog.php` (satu sumber). Subset Kasir ada di `PermissionCatalog::cashier()`.
 5. **Persetujuan (PR Owner, pengecualian kredit, write-off, adjustment):** pakai `ReauthService::confirm($username, $password, $permission, $requester)`. Pemberi persetujuan mengetik password akunnya sendiri; tidak ada password bersama.
-6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`.
+6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`, `customer.create|update|status_change|verify|set_limit`, `inventory.opening_balance`.
 7. **Dokumen terposting tidak dihapus/diedit.** Koreksi lewat pembatalan, reversal, atau dokumen koreksi yang bertaut.
-8. **Penomoran dokumen:** `NumberSequence::next($storeId, $jenis, $periode)` — hanya di dalam transaksi. (Pembentuk format nomor seperti `SALE-202610-000123` belum dibuat.)
-9. **Stok:** saldo (`inventory_balances`) turunan dari `inventory_movements` (append-only). Stok negatif **dilarang**.
+8. **Penomoran dokumen:** `NumberSequence::next($storeId, $jenis, $periode)` — hanya di dalam transaksi — lalu `DocumentNumber::format('SALE', $n, '202610')` → `SALE-202610-000123` (sudah ada; stok awal memakai `OPEN-000001`).
+9. **Stok:** saldo (`inventory_balances`) turunan dari `inventory_movements` (append-only). Stok negatif **dilarang**. Semua perubahan stok lewat `InventoryService` (`receive`, `sell` FEFO, `voidSale`), **wajib di dalam `DB::transaction` pemanggil**; produk dikunci berurutan id. Hitung qty/uang dengan `App\Support\Decimal` (integer), bukan float.
 10. **Migration yang sudah di-merge tidak diedit**; perubahan skema = migration baru.
 11. **Test:** feature test memperluas `Tests\SeededTestCase`; helper `signIn('Admin'|'Kasir', $username)` memakai Sanctum. Setiap fitur wajib punya test (izin, validasi, jalur gagal, audit).
 12. **Format respons:** sukses `{ "data": ... }`, paginasi bawaan Laravel (`data`, `total`, `links`, ...), validasi 422 `{ message, errors }`, 403/404 `{ message }`. Frontend wajib mengirim `Accept: application/json`.
@@ -118,6 +120,8 @@ php artisan test                                     # butuh .env.testing -> DB_
 | GET / POST / PATCH | `/api/suppliers` | `supplier.manage` |
 | GET | `/api/products`, `/api/products/{id}`, `/api/products/by-barcode/{barcode}` | `inventory.view` |
 | POST / PATCH | `/api/products` | `product.create` / `product.update` (harga: `price.change`, status: `product.activate`) |
+
+**Endpoint tambahan (WS-A/WS-B, belum dijalankan; kontrak lengkap di `docs/BACKEND_PROGRESS.md`):** `GET /api/inventory/products/{id}/stock`, `GET /api/inventory/movements`, `POST /api/inventory/opening-balances` · `GET/POST /api/customers`, `GET/PATCH /api/customers/{id}`, `POST /api/customers/{id}/verify`, `PUT|GET /api/customers/{id}/credit-limit(s)` · `GET /api/notifications`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`.
 
 **Berkas penting** (di folder keluaran proyek): `schema_paket1.sql`, `erd_paket1.md`, zip migration, zip tahap1b (seeder/auth/RBAC), zip tahap1c (master data), `SETUP.md`, `SETUP_AUTH_RBAC.md`, `PANDUAN_MASTER_DATA.md`.
 
@@ -177,13 +181,13 @@ php artisan test                                     # butuh .env.testing -> DB_
 | R-09 | Konfirmasi: kredit ditahan selama batas belum diisi | Diterapkan sebagai asumsi |
 | R-11 | Format file migrasi dari aplikasi lama | Ditunda |
 | Q-07/09/10/11/13/14 | Default ASUMSI (lihat dokumen Bagian 13.7) | Perlu konfirmasi klien sebelum UAT |
-| Risiko | Cakupan vs 1 bulan; frontend belum dimulai; kode backend belum diuji di lingkungan penyusun; uji scanner/printer butuh perangkat klien | Kelola lewat pemotongan cakupan (bagian 7) |
+| Risiko | Cakupan vs 1 bulan; kode backend baru belum diuji di lingkungan penyusun; uji scanner/printer butuh perangkat klien | Kelola lewat pemotongan cakupan (bagian 7) |
 
 ---
 
 ## 10. Langkah segera (urutan)
 
-1. Pengguna menjalankan `php artisan test` untuk paket master data; perbaiki bila ada yang gagal. **(blokir semua langkah lain)**
-2. `git init`, commit baseline, tetapkan cabang per workstream.
-3. Sepakati kontrak `InventoryService` dan format nomor dokumen (WS-B jadi prioritas pertama).
+1. ~~Verifikasi test master data~~ — **sudah lolos**.
+2. ~~`git init`, commit baseline, cabang per workstream~~ — **sudah** (root `pos_retail`: backend, frontend, docs).
+3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Pengguna menjalankan `php artisan test` untuk WS-A/WS-B. **Berikutnya:** shift + posting penjualan (WS-D), lalu PR→PO→penerimaan (WS-C).
 4. Mulai paralel: WS-B dan WS-A (backend), WS-F scaffold (frontend).

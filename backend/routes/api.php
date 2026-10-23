@@ -38,3 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('products/{product}', [ProductController::class, 'update'])
         ->whereNumber('product')->middleware('can:product.update');
 });
+
+// Modul lain dipisah per berkas (aturan kerja bersama beberapa agent, handoff bagian 8).
+require __DIR__.'/api/inventory.php';
+require __DIR__.'/api/customers.php';
