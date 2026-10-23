@@ -1,6 +1,6 @@
 import { api } from './client';
 import type {
-  Category, LoginResponse, Me, Paginated, Product, ProductInput, ProductStatus, Supplier,
+  Category, CategoryInput, LoginResponse, Me, Paginated, Product, ProductInput, ProductStatus, Supplier, SupplierInput,
 } from './types';
 
 export const authApi = {
@@ -32,11 +32,21 @@ export const productApi = {
 };
 
 export const categoryApi = {
+  create: (input: CategoryInput) =>
+    api<{ data: Category }>('/categories', { method: 'POST', body: input }).then((r) => r.data),
+  update: (id: number, input: { name?: string; parent_id?: number | null; is_active?: boolean }) =>
+    api<{ data: Category }>(`/categories/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
   list: (activeOnly = false) =>
     api<{ data: Category[] }>('/categories', { query: { active_only: activeOnly ? 1 : undefined } }).then((r) => r.data),
 };
 
 export const supplierApi = {
+  create: (input: SupplierInput) =>
+    api<{ data: Supplier }>('/suppliers', { method: 'POST', body: input }).then((r) => r.data),
+  update: (
+    id: number,
+    input: Partial<Omit<SupplierInput, 'code'>> & { is_active?: boolean },
+  ) => api<{ data: Supplier }>(`/suppliers/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
   list: (f: { q?: string; active_only?: boolean; page?: number; per_page?: number } = {}) =>
     api<Paginated<Supplier>>('/suppliers', { query: { ...f, active_only: f.active_only ? 1 : undefined } }),
 };

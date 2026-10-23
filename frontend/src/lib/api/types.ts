@@ -92,3 +92,17 @@ export interface Supplier {
   default_payment_terms: PaymentTerms | null;
   is_active: boolean;
 }
+
+export interface CategoryInput {
+  name: string;
+  parent_id?: number | null;
+}
+
+export interface SupplierInput {
+  code: string;
+  name: string;
+  contact_name?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  default_payment_terms?: PaymentTerms;
+}

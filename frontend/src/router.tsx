@@ -6,6 +6,8 @@ import { HomeRedirect } from '@/pages/HomeRedirect';
 import { Placeholder } from '@/pages/Placeholder';
 import { NotFound } from '@/pages/NotFound';
 import { ProductsPage } from '@/features/products/ProductsPage';
+import { CategoriesPage } from '@/features/categories/CategoriesPage';
+import { SuppliersPage } from '@/features/suppliers/SuppliersPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -30,11 +32,11 @@ export const router = createBrowserRouter([
           },
           {
             element: <RequirePermission permission="category.manage" />,
-            children: [{ path: 'categories', element: <Placeholder title="Kategori" note="API siap (GET/POST/PATCH /categories)." /> }],
+            children: [{ path: 'categories', element: <CategoriesPage /> }],
           },
           {
             element: <RequirePermission permission="supplier.manage" />,
-            children: [{ path: 'suppliers', element: <Placeholder title="Supplier" note="API siap (GET/POST/PATCH /suppliers)." /> }],
+            children: [{ path: 'suppliers', element: <SuppliersPage /> }],
           },
           { path: '*', element: <NotFound /> },
         ],
