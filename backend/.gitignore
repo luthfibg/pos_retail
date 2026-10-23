@@ -3,8 +3,10 @@
 .env
 .env.backup
 .env.production
+.env.testing
 .phpactor.json
 .phpunit.result.cache
+key.txt
 /.codex
 /.cursor/
 /.idea
