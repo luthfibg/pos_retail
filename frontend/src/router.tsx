@@ -11,6 +11,8 @@ import { SuppliersPage } from '@/features/suppliers/SuppliersPage';
 import { OpeningBalancePage } from '@/features/inventory/OpeningBalancePage';
 import { MovementsPage } from '@/features/inventory/MovementsPage';
 import { CustomersPage } from '@/features/customers/CustomersPage';
+import { ShiftPage } from '@/features/shifts/ShiftPage';
+import { ShiftsAdminPage } from '@/features/shifts/ShiftsAdminPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -24,6 +26,14 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="sales.create" />,
             children: [{ path: 'pos', element: <Placeholder title="Kasir" note="Layar kasir (prioritas minggu 2): scan barcode, keranjang, tunai/kredit karyawan." /> }],
+          },
+          {
+            element: <RequirePermission permission="shift.open" />,
+            children: [{ path: 'shift', element: <ShiftPage /> }],
+          },
+          {
+            element: <RequirePermission permission="shift.review" />,
+            children: [{ path: 'shifts', element: <ShiftsAdminPage /> }],
           },
           {
             element: <RequirePermission permission="reports.view" />,

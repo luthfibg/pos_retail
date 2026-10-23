@@ -1,7 +1,7 @@
 import { api } from './client';
 import type {
   Category, CategoryInput, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
-  OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Supplier, SupplierInput,
+  OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
 } from './types';
 
 export const authApi = {
@@ -92,4 +92,28 @@ export const notificationApi = {
     api<NotificationList>('/notifications', { query: { unread: f.unread ? 1 : undefined, page: f.page, per_page: f.per_page } }),
   read: (id: number) => api<{ data: { id: number; read: boolean } }>(`/notifications/${id}/read`, { method: 'POST' }),
   readAll: () => api<{ data: { marked: number } }>('/notifications/read-all', { method: 'POST' }),
+};
+
+export interface ShiftFilters {
+  status?: ShiftStatus;
+  cashier_id?: number;
+  date_from?: string; // YYYY-MM-DD (WIB)
+  date_to?: string;
+  page?: number;
+  per_page?: number;
+}
+
+export const shiftApi = {
+  /** Shift aktif (open/counting) milik pengguna; data = null bila belum ada. */
+  current: () => api<{ data: Shift | null }>('/shifts/current').then((r) => r.data),
+  get: (id: number) => api<{ data: Shift }>(`/shifts/${id}`).then((r) => r.data),
+  open: (input: { counted_opening_cash?: string }) =>
+    api<{ data: Shift }>('/shifts/open', { method: 'POST', body: input }).then((r) => r.data),
+  startCount: (id: number) =>
+    api<{ data: Shift }>(`/shifts/${id}/start-count`, { method: 'POST' }).then((r) => r.data),
+  close: (id: number, input: { counted_cash: string; variance_note?: string }) =>
+    api<{ data: Shift }>(`/shifts/${id}/close`, { method: 'POST', body: input }).then((r) => r.data),
+  review: (id: number, input: { note?: string }) =>
+    api<{ data: Shift }>(`/shifts/${id}/review`, { method: 'POST', body: input }).then((r) => r.data),
+  list: (f: ShiftFilters = {}) => api<Paginated<Shift>>('/shifts', { query: { ...f } }),
 };

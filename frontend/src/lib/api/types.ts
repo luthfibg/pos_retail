@@ -229,3 +229,37 @@ export interface AppNotification {
 }
 
 export type NotificationList = Paginated<AppNotification> & { unread_count: number };
+
+export type ShiftStatus = 'open' | 'counting' | 'closed' | 'reviewed';
+
+export interface ShiftSummary {
+  cash_sales_count: number;
+  cash_sales_total: Decimal;
+  credit_sales_count: number;
+  credit_sales_total: Decimal;
+  cash_in: Decimal;
+  cash_out: Decimal;
+}
+
+/**
+ * Hitung buta: `expected_cash` dan `variance` bernilai null untuk Kasir selama shift berjalan;
+ * baru terisi setelah ditutup (Admin dengan shift.review selalu melihatnya).
+ */
+export interface Shift {
+  id: number;
+  doc_number: string;
+  register_id: number;
+  cashier_id: number;
+  cashier_name: string;
+  status: ShiftStatus;
+  opening_balance: Decimal;
+  opened_at: string; // UTC
+  closed_at: string | null;
+  summary: ShiftSummary;
+  expected_cash: Decimal | null;
+  counted_cash: Decimal | null;
+  variance: Decimal | null;
+  variance_note: string | null;
+  float_kept: Decimal | null;
+  reviewed_at: string | null;
+}

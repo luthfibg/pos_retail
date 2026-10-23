@@ -7,6 +7,8 @@ export interface NavItem {
 // Satu sumber menu. Item disaring berdasarkan permission dari /auth/me.
 export const NAV_ITEMS: NavItem[] = [
   { to: '/pos', label: 'Kasir', permission: 'sales.create' },
+  { to: '/shift', label: 'Shift Saya', permission: 'shift.open' },
+  { to: '/shifts', label: 'Tinjau Shift', permission: 'shift.review' },
   { to: '/dashboard', label: 'Dashboard', permission: 'reports.view' },
   { to: '/products', label: 'Produk', permission: 'inventory.view' },
   { to: '/categories', label: 'Kategori', permission: 'category.manage' },
