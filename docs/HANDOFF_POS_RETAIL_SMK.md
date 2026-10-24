@@ -26,18 +26,18 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Re-auth persetujuan (`ReauthService`, lockout 5x, penanda self-approval) | Selesai | **Lolos** test |
 | Master data: kategori, supplier, produk (+price_history, barcode otomatis, status stok) | Selesai | **Lolos** test di mesin pengguna |
 | Frontend React + Vite + TypeScript | **Sudah dimulai** oleh pengguna (sedang menyusun CRUD produk) | Belum ditinjau agent ini |
-| Customers (karyawan), verifikasi, batas kredit, notifikasi `customer.limit_needed` | Kode + test selesai | **BELUM dijalankan** |
+| Customers (karyawan), verifikasi, batas kredit, notifikasi `customer.limit_needed` | Selesai | **Lolos** test (24 Okt 2026) |
 | Denah rak | Belum | — |
-| Inventory inti: `InventoryService` (saldo/pergerakan/batch/FEFO/anti-negatif/HPP), stok awal, lihat stok, riwayat pergerakan | Kode + test selesai | **BELUM dijalankan** |
-| Penerimaan barang dari PO (posting menambah stok, selisih/rusak, verifikasi dokumen) | Kode + test selesai | **BELUM dijalankan** |
+| Inventory inti: `InventoryService` (saldo/pergerakan/batch/FEFO/anti-negatif/HPP), stok awal, lihat stok, riwayat pergerakan | Selesai | **Lolos** test (24 Okt 2026) |
+| Penerimaan barang dari PO (posting menambah stok, selisih/rusak, verifikasi dokumen) | Selesai | **Lolos** test (24 Okt 2026) |
 | Transfer antar posisi, adjustment, opname | Belum (tabel ada) | — |
-| Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Kode + test selesai | **BELUM dijalankan** |
-| PR → pemeriksaan Finance → persetujuan Owner (re-auth) → PO (otomatis/konfirmasi) | Kode + test selesai | **BELUM dijalankan** |
+| Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Selesai | **Lolos** test (24 Okt 2026) |
+| PR → pemeriksaan Finance → persetujuan Owner (re-auth) → PO (otomatis/konfirmasi) | Selesai | **Lolos** test (24 Okt 2026) |
 | POS (shift, penjualan, struk, void), setoran/endapan | Belum (tabel ada) | — |
 | Periode tagihan + invoice HRD | Belum (tabel ada) | — |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
-**Penting:** kode backend ditulis tanpa dapat dijalankan di lingkungan penyusun (tidak ada PHP). Yang bertanda "Lolos" sudah dijalankan pengguna. Kode baru berikutnya harus diperlakukan sama: tandai "belum dijalankan" sampai pengguna menjalankan `php artisan test`.
+**Penting:** kode backend ditulis tanpa dapat dijalankan di lingkungan penyusun (tidak ada PHP). Yang bertanda "Lolos" sudah dijalankan pengguna (terakhir 24 Okt 2026: 154 test lulus). Kode baru berikutnya harus diperlakukan sama: tandai "belum dijalankan" sampai pengguna menjalankan `php artisan test`.
 
 ---
 
@@ -123,9 +123,9 @@ php artisan test                                     # butuh .env.testing -> DB_
 | GET | `/api/products`, `/api/products/{id}`, `/api/products/by-barcode/{barcode}` | `inventory.view` |
 | POST / PATCH | `/api/products` | `product.create` / `product.update` (harga: `price.change`, status: `product.activate`) |
 
-**Endpoint tambahan (WS-A/WS-B, belum dijalankan; kontrak lengkap di `docs/BACKEND_PROGRESS.md`):** `GET /api/inventory/products/{id}/stock`, `GET /api/inventory/movements`, `POST /api/inventory/opening-balances` · `GET/POST /api/customers`, `GET/PATCH /api/customers/{id}`, `POST /api/customers/{id}/verify`, `PUT|GET /api/customers/{id}/credit-limit(s)` · `GET /api/notifications`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`.
+**Endpoint tambahan (WS-A/WS-B, lolos test; kontrak lengkap di `docs/BACKEND_PROGRESS.md`):** `GET /api/inventory/products/{id}/stock`, `GET /api/inventory/movements`, `POST /api/inventory/opening-balances` · `GET/POST /api/customers`, `GET/PATCH /api/customers/{id}`, `POST /api/customers/{id}/verify`, `PUT|GET /api/customers/{id}/credit-limit(s)` · `GET /api/notifications`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`.
 
-**Endpoint POS (WS-D, belum dijalankan):** `GET /api/shifts/current`, `POST /api/shifts/open`, `GET /api/shifts/{id}`, `POST /api/shifts/{id}/start-count|close|review`, `GET /api/shifts` · `POST|GET /api/sales`, `GET /api/sales/{id}`, `POST /api/sales/{id}/reprint`.
+**Endpoint POS (WS-D, lolos test):** `GET /api/shifts/current`, `POST /api/shifts/open`, `GET /api/shifts/{id}`, `POST /api/shifts/{id}/start-count|close|review`, `GET /api/shifts` · `POST|GET /api/sales`, `GET /api/sales/{id}`, `POST /api/sales/{id}/reprint`.
 
 **Berkas penting** (di folder keluaran proyek): `schema_paket1.sql`, `erd_paket1.md`, zip migration, zip tahap1b (seeder/auth/RBAC), zip tahap1c (master data), `SETUP.md`, `SETUP_AUTH_RBAC.md`, `PANDUAN_MASTER_DATA.md`.
 

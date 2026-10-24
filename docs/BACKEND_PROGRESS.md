@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan pengguna dan hijau |
+| ✅ Lolos | `php artisan test` sudah dijalankan pengguna dan hijau (terakhir 24 Okt 2026: 154 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -25,7 +25,7 @@
 
 ---
 
-## 1. Inventory 🟡
+## 1. Inventory ✅
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
@@ -85,7 +85,7 @@ Penerimaan barang dari PO, transfer, adjustment/opname, karantina/write-off, den
 
 ---
 
-## 2. Data Karyawan (customers) 🟡
+## 2. Data Karyawan (customers) ✅
 
 Status karyawan: `pending_verification` (input Kasir, hanya tunai) → `active` (diverifikasi Admin) ⇄ `inactive`.
 
@@ -136,7 +136,7 @@ Layar yang bisa dibuat: daftar karyawan + filter status, form tambah (Kasir), an
 
 ---
 
-## 3. Notifikasi 🟡
+## 3. Notifikasi ✅
 
 Notifikasi milik pengguna yang login (tanpa izin khusus; hanya data sendiri).
 
@@ -151,7 +151,7 @@ Tipe saat ini: `customer.limit_needed` (`entity_type: "customer"`) → arahkan k
 
 ---
 
-## 4. Shift Kasir 🟡
+## 4. Shift Kasir ✅
 
 Alur: `open` → `counting` (penjualan baru **diblokir**) → `closed` → `reviewed`. Satu laci, satu shift aktif; Kasir hanya mengelola shift sendiri, Admin (`shift.review`) boleh semua.
 
@@ -182,7 +182,7 @@ Respons shift (`data`):
 
 ---
 
-## 5. Penjualan (POS) 🟡
+## 5. Penjualan (POS) ✅
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
@@ -254,11 +254,11 @@ Pengecualian berhasil → `over_limit: true` pada struk (label "melebihi batas" 
 
 ---
 
-## 6. Pembelian: PR → PO → Penerimaan barang 🟡 (terbaru)
+## 6. Pembelian: PR → PO → Penerimaan barang ✅
 
 Alur bisnis: **Kasir** mengajukan PR → **Finance** memeriksa → **Owner** menyetujui (autentikasi ulang) → **Admin** membuat PO per supplier → PO disetujui → dikirim ke supplier → **Kasir** menerima barang (surat jalan) → **posting** menambah stok → Admin memverifikasi surat jalan/faktur. Paket 1: **tanpa Saldo Pembelian** (pengecekan saldo = Paket 2).
 
-> Status: kode + test ditulis, **belum dijalankan**. Uang/qty tetap string desimal. Waktu UTC. Format sukses `{ "data": ... }`.
+> Status: ✅ lulus test (24 Okt 2026). Uang/qty tetap string desimal. Waktu UTC. Format sukses `{ "data": ... }`.
 
 ### 6.1 Purchase Requisition (PR)
 
@@ -376,7 +376,8 @@ Permintaan buat:
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
-- **2026-10-24** — WS-C: pembelian lengkap — PR (draft, ajukan, periksa Finance, persetujuan Owner dengan autentikasi ulang, tanda swa-persetujuan), PO (dari PR, otomatis/konfirmasi Owner, kirim, batal, tutup), penerimaan barang (posting menambah stok lewat `InventoryService::receive`, selisih/rusak, verifikasi surat jalan + faktur). Status: 🟡 belum dijalankan.
-- **2026-10-23 (2)** — WS-D: shift (buka/hitung/tutup/tinjau, hitung buta, saldo awal = endapan sebelumnya) dan posting penjualan (tunai + kredit, FEFO, diskon Admin, PPN opsional, batas kredit + pengecualian Admin, idempotensi, riwayat, cetak ulang SALINAN). Status: 🟡 belum dijalankan.
-- **2026-10-23** — WS-B: `InventoryService` (saldo, pergerakan, batch, FEFO, anti-negatif, HPP rata-rata bergerak), stok awal, lihat stok per batch, riwayat pergerakan. WS-A: data karyawan (input Kasir, verifikasi dan batas oleh Admin), notifikasi `customer.limit_needed`. Status: 🟡 belum dijalankan.
+- **2026-10-24 (uji)** — Pengguna menjalankan seluruh suite: **154 test lulus (1.080 assertion)**. Semua bagian 1–6 berstatus ✅.
+- **2026-10-24** — WS-C: pembelian lengkap — PR (draft, ajukan, periksa Finance, persetujuan Owner dengan autentikasi ulang, tanda swa-persetujuan), PO (dari PR, otomatis/konfirmasi Owner, kirim, batal, tutup), penerimaan barang (posting menambah stok lewat `InventoryService::receive`, selisih/rusak, verifikasi surat jalan + faktur). Status: ✅ lulus test (24 Okt 2026).
+- **2026-10-23 (2)** — WS-D: shift (buka/hitung/tutup/tinjau, hitung buta, saldo awal = endapan sebelumnya) dan posting penjualan (tunai + kredit, FEFO, diskon Admin, PPN opsional, batas kredit + pengecualian Admin, idempotensi, riwayat, cetak ulang SALINAN). Status: ✅ lulus test (24 Okt 2026).
+- **2026-10-23** — WS-B: `InventoryService` (saldo, pergerakan, batch, FEFO, anti-negatif, HPP rata-rata bergerak), stok awal, lihat stok per batch, riwayat pergerakan. WS-A: data karyawan (input Kasir, verifikasi dan batas oleh Admin), notifikasi `customer.limit_needed`. Status: ✅ lulus test (24 Okt 2026).
 - **sebelumnya** — Auth + RBAC ✅, kategori ✅, supplier ✅, produk (+harga, barcode otomatis, status stok) ✅. Detail kontraknya ada di `HANDOFF_POS_RETAIL_SMK.md` bagian 6.
