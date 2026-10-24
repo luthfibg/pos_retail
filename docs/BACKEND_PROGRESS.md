@@ -177,7 +177,9 @@ Respons shift (`data`):
 - **Hitung buta:** selama shift `open`/`counting`, `expected_cash` dan `variance` bernilai `null` untuk Kasir (hanya Admin melihatnya). Setelah `closed`, keduanya terisi. Jangan tampilkan perkiraan kas di layar hitung kasir.
 - `opening_balance` = endapan shift sebelumnya (0 untuk shift pertama). Gagal membuka shift → 422 `errors.shift` (sudah punya shift / laci sedang dipakai kasir lain, pesan menyebut namanya).
 - Tutup shift: bila selisih ≠ 0, `variance_note` **wajib** (422 `errors.variance_note`). Selisih = terhitung − diharapkan (negatif = kurang).
-- **Sementara:** saat tutup, `float_kept` = seluruh kas terhitung (belum ada modul setoran). Setoran dan endapan ⏳ — jangan buatkan UI setoran dulu.
+- **Tutup shift + setoran (🟡, bagian 7):** `float_kept` kini = endapan menurut kebijakan Admin, dan bila ada yang harus disetor, respons memuat `deposit` (setoran akhir berstatus `draft`). **Tanpa kebijakan aktif perilakunya sama seperti sebelumnya** (seluruh kas jadi endapan, `deposit: null`, `float_flags: ["no_policy"]`).
+- Respons `POST /api/shifts/{id}/close` menambah `float_flags` (array: `no_policy`, `below_minimum`, `nothing_to_deposit`); respons shift mana pun menambah `deposit` (setoran akhir atau `null`) dan `summary.partial_deposits`.
+- `POST /api/shifts/open` ditolak (`errors.shift`) bila setoran akhir shift sebelumnya masih `draft`.
 - Kas masuk/keluar lain (`cash_movements`) ikut dihitung di kas diharapkan, tetapi belum ada endpoint untuk mencatatnya ⏳.
 
 ---
@@ -191,7 +193,7 @@ Respons shift (`data`):
 | GET | `/api/sales/{id}` | `sales.create` | Struk lengkap (item, pembayaran, `receipt`) |
 | POST | `/api/sales/{id}/reprint` | `receipt.reprint` | Cetak ulang: struk sama dengan `receipt.is_copy = true`, `copy_label = "SALINAN"`; tercatat di log cetak + audit |
 
-Void, retur, dan pembatalan struk ⏳ (belum ada).
+Void: lihat bagian 7.2. Retur pelanggan dan credit note ⏳ (Paket 2).
 
 ### POST `/api/sales`
 
@@ -371,11 +373,66 @@ Permintaan buat:
 - Tanpa toleransi kelebihan kiriman; barang yang sudah kedaluwarsa tidak diterima sebagai layak jual.
 - **Belum ada:** penerimaan ke gudang + putaway (setting `warehouse_enabled` aktif ditolak dengan pesan), unggah lampiran surat jalan/foto, retur supplier/klaim barang rusak (Paket 3), pembayaran supplier dan Saldo Pembelian (Paket 2), dokumen koreksi penerimaan terposting.
 
+## 7. Setoran, Endapan, dan Void 🟡
+
+> Status: kode + test (`CashDepositTest` 14, `SaleVoidTest` 6) sudah ditulis, **belum dijalankan**. Bentuk respons bisa sedikit berbeda sampai test hijau.
+
+### 7.1 Kebijakan endapan dan setoran kasir
+
+Endapan = uang yang sengaja tetap di laci dan menjadi saldo awal shift berikutnya. Setoran = kas terhitung − endapan, **dibulatkan ke bawah** ke `rounding_unit` (sisa pembulatan tetap di laci).
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/float-policies` | `float.propose` | Kebijakan aktif: `{ "data": { "petty_cash": {…}\|null, "main_cash": {…}\|null } }` |
+| PUT | `/api/float-policies/{scope}` | `float.configure` (Admin) | Tetapkan versi baru (`scope` = `petty_cash`\|`main_cash`); versi lama dinonaktifkan, tercatat di audit |
+| POST | `/api/shifts/{id}/deposits` | `cash_deposit.create` | **Setoran parsial** tengah shift: `{ "counted_amount": "800000", "note"? }` → Draft |
+| GET | `/api/cash-deposits?status=&kind=&shift_id=&per_page=` | `cash_deposit.create` | Daftar (Kasir: hanya shift sendiri; Finance/Admin: semua) |
+| GET | `/api/cash-deposits/{id}` | idem | Detail |
+| POST | `/api/cash-deposits/{id}/submit` | `cash_deposit.create` | Kasir menyerahkan uang: `draft` → `submitted` |
+| POST | `/api/cash-deposits/{id}/cancel` | idem | Batalkan Draft **parsial** (dokumen dihapus; setoran akhir tidak bisa dibatalkan) |
+| POST | `/api/cash-deposits/{id}/receive` | `cash_deposit.receive` (Admin) | Finance menghitung ulang: `{ "received_amount": "734000", "note"? }` |
+| POST | `/api/cash-deposits/{id}/correct` | `cash_deposit.receive` | Tutup selisih dengan alasan: `{ "reason" }` |
+| GET | `/api/fund-accounts` | `cash_deposit.receive` | Saldo Kas Kecil dan Kas Besar (dari ledger) |
+
+Kebijakan (`PUT` body): `{ "mode": "fixed", "fixed_amount": "500000", "min_amount"?, "max_amount"?, "rounding_unit"?: 1000, "reason"? }` atau `{ "mode": "percent", "percent": "10", "percent_base": "cash_sales_shift"\|"cash_on_hand", … }`. Respons: `{ id, scope, mode, fixed_amount, percent, percent_base, min_amount, max_amount, rounding_unit, effective_from, set_by }`. Kesalahan 422: `errors.fixed_amount` / `errors.percent` / `errors.percent_base` / `errors.min_amount` (min > maks).
+
+Aturan hitung:
+- `fixed`: endapan = nominal. `percent`: endapan = persen × basis (`cash_sales_shift` = total penjualan tunai shift; `cash_on_hand` = kas terhitung). Hasil dijepit ke `min_amount`/`max_amount`.
+- Kas terhitung < `min_amount` → setoran 0, flag `below_minimum`. Kas ≤ endapan → setoran 0, flag `nothing_to_deposit`. **Tanpa kebijakan aktif** → setoran 0, flag `no_policy`, seluruh kas = endapan.
+- **Tutup shift** (`POST /api/shifts/{id}/close`) membuat setoran akhir `kind: "final"` berstatus `draft` bila ada yang disetor; `data.deposit` berisi `{ id, doc_number, status, deposit_amount, float_kept }`. Kasir menekan "Serahkan" (`submit`) → Finance `receive`. Shift berikutnya baru bisa dibuka setelah setoran akhir diserahkan, dan saldo awalnya = `float_kept`.
+- **Setoran parsial** boleh saat shift `open`/`counting`; satu Draft sekaligus; shift tidak bisa ditutup selama ada Draft (`errors.status`). Kas diharapkan baru berkurang setelah parsial **diserahkan** (`summary.partial_deposits`). Tidak ada yang bisa disetor → `errors.counted_amount` (pesan menjelaskan alasannya).
+
+Dokumen setoran (`data`): `{ id, doc_number "DEP-202610-000001", kind "final"\|"partial", shift_id, shift_doc_number, status, counted_amount, float_kept, deposit_amount, received_amount, difference, received_by_name, received_at, note, created_by, created_by_name, created_at }`.
+Status: `draft` → `submitted` → `received` (cocok) atau `discrepancy` (berbeda; `note` **wajib** → `errors.note`) → `corrected` (alasan). Ledger saat `receive`: Kas Kecil −`deposit_amount`, Kas Besar +`received_amount`; `correct` tidak mengubah ledger. Selisih = `received_amount − deposit_amount` (negatif = kurang).
+
+Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + endapan + `float_flags`), tombol "Serahkan setoran", form setoran parsial, antrean "Setoran masuk" untuk Finance/Admin (terima/selisih/koreksi), halaman kebijakan endapan (Admin), kartu saldo Kas Kecil/Kas Besar.
+
+### 7.2 Void penjualan
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| POST | `/api/sales/{id}/void` | `sales.void` (**Admin saja**) | `{ "reason": "salah input" }` (wajib) → struk lengkap dengan `status: "voided"` |
+
+- Efek (atomik): status `voided` (bukan hapus; dokumen `sale_voids` + audit `sale.void`), stok kembali ke **batch asal**, penjualan tunai membalik ledger Kas Kecil, karyawan mendapat kembali sisa batas kredit.
+- **Syarat (422 `errors.status`):** struk harus `posted`; **struk tunai hanya bisa di-void selama shift-nya masih `open`** (uang dikembalikan dari laci yang sama; shift yang sudah ditutup → gunakan retur pelanggan, belum ada); **struk kredit hanya bila belum ditagihkan** (setelah masuk invoice perlu credit note, belum ada). Alasan kosong → `errors.reason`. Kasir → 403.
+- Struk voided: `receipt.is_void = true`, `receipt.void_label = "DIBATALKAN"` (cetak ulang dan layar riwayat harus menampilkannya). Daftar penjualan dapat difilter `?status=voided`.
+- Struk voided tidak dihitung di ringkasan shift, kas diharapkan, maupun pemakaian batas kredit.
+
+### 7.3 ASUMSI dan batasan
+1. Void hanya Admin (Kasir belum diberi kewenangan; menunggu P-12 klien). Tanpa autentikasi ulang tambahan (Admin sudah login).
+2. Void tunai dibatasi shift yang masih terbuka; refund dari shift lain/ditutup menunggu retur pelanggan (Paket 2).
+3. Endapan Kas Besar, setoran bank, dan usulan endapan oleh Kasir (`float_proposals`) belum ada ⏳; saat ini kebijakan hanya ditetapkan Admin.
+4. Kasir tidak bisa mengubah angka endapan atau setoran; sistem yang menghitung dari kebijakan.
+5. Pembulatan mengikuti `rounding_unit` kebijakan (bawaan 1.000), bukan setting `float_rounding_unit`.
+
+---
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, dan `routes/api/pos.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-24 (3)** — WS-D lanjutan: kebijakan endapan berversi, setoran akhir (otomatis saat tutup shift) dan parsial, penerimaan Finance + selisih/koreksi, saldo dana dari ledger; void penjualan (Admin). `ShiftService` kini memanggil `CashDepositService` (respons tutup shift menambah `deposit`/`float_flags`). Status: 🟡 menunggu test (`CashDepositTest`, `SaleVoidTest`).
 - **2026-10-24 (uji)** — Pengguna menjalankan seluruh suite: **154 test lulus (1.080 assertion)**. Semua bagian 1–6 berstatus ✅.
 - **2026-10-24** — WS-C: pembelian lengkap — PR (draft, ajukan, periksa Finance, persetujuan Owner dengan autentikasi ulang, tanda swa-persetujuan), PO (dari PR, otomatis/konfirmasi Owner, kirim, batal, tutup), penerimaan barang (posting menambah stok lewat `InventoryService::receive`, selisih/rusak, verifikasi surat jalan + faktur). Status: ✅ lulus test (24 Okt 2026).
 - **2026-10-23 (2)** — WS-D: shift (buka/hitung/tutup/tinjau, hitung buta, saldo awal = endapan sebelumnya) dan posting penjualan (tunai + kredit, FEFO, diskon Admin, PPN opsional, batas kredit + pengecualian Admin, idempotensi, riwayat, cetak ulang SALINAN). Status: ✅ lulus test (24 Okt 2026).

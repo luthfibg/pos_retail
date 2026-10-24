@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\CashDepositController;
+use App\Http\Controllers\FloatPolicyController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ShiftController;
 use Illuminate\Support\Facades\Route;
@@ -20,4 +22,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('sales', [SaleController::class, 'index'])->middleware('can:sales.create');
     Route::get('sales/{sale}', [SaleController::class, 'show'])->whereNumber('sale')->middleware('can:sales.create');
     Route::post('sales/{sale}/reprint', [SaleController::class, 'reprint'])->whereNumber('sale')->middleware('can:receipt.reprint');
+    Route::post('sales/{sale}/void', [SaleController::class, 'void'])->whereNumber('sale')->middleware('can:sales.void');
+
+    // Setoran kasir (Kas Kecil -> Kas Besar) dan kebijakan endapan
+    Route::post('shifts/{shift}/deposits', [CashDepositController::class, 'storePartial'])->whereNumber('shift')->middleware('can:cash_deposit.create');
+    Route::get('cash-deposits', [CashDepositController::class, 'index'])->middleware('can:cash_deposit.create');
+    Route::get('cash-deposits/{deposit}', [CashDepositController::class, 'show'])->whereNumber('deposit')->middleware('can:cash_deposit.create');
+    Route::post('cash-deposits/{deposit}/submit', [CashDepositController::class, 'submit'])->whereNumber('deposit')->middleware('can:cash_deposit.create');
+    Route::post('cash-deposits/{deposit}/cancel', [CashDepositController::class, 'cancel'])->whereNumber('deposit')->middleware('can:cash_deposit.create');
+    Route::post('cash-deposits/{deposit}/receive', [CashDepositController::class, 'receive'])->whereNumber('deposit')->middleware('can:cash_deposit.receive');
+    Route::post('cash-deposits/{deposit}/correct', [CashDepositController::class, 'correct'])->whereNumber('deposit')->middleware('can:cash_deposit.receive');
+    Route::get('fund-accounts', [CashDepositController::class, 'funds'])->middleware('can:cash_deposit.receive');
+    Route::get('float-policies', [FloatPolicyController::class, 'index'])->middleware('can:float.propose');
+    Route::put('float-policies/{scope}', [FloatPolicyController::class, 'update'])->middleware('can:float.configure');
 });

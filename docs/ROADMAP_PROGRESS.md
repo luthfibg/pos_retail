@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 24 Oktober 2026 (setelah `php artisan test`: **154 lulus, 1.080 assertion**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 24 Oktober 2026 (test terakhir dijalankan: **154 lulus, 1.080 assertion**; void dan setoran/endapan baru ditulis, menunggu test) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
@@ -13,39 +13,40 @@
 
 ## 1. Posisi saat ini
 
-**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 34 tahap — 19 ✅ selesai dan lulus test · 0 🟡 · 15 ⏳ belum.** Seluruh kode yang sudah ditulis kini lulus test; sisa pekerjaan adalah tahap yang belum ditulis.
+**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 34 tahap — 19 ✅ selesai dan lulus test · 2 🟡 kode selesai, menunggu test (void, setoran/endapan) · 13 ⏳ belum.**
 
 | Fase | ✅ | 🟡 | ⏳ | ⏸ |
 |---|---|---|---|---|
 | Fase 0 — Analisis & desain | 2 | 0 | 0 | 0 |
 | Fase 1 — Fondasi backend (tahap 1a–1c) | 7 | 0 | 0 | 0 |
 | Fase 2 — Inventory & karyawan | 4 | 0 | 3 | 0 |
-| Fase 3 — POS & kas | 3 | 0 | 4 | 1 |
+| Fase 3 — POS & kas | 3 | 2 | 2 | 1 |
 | Fase 4 — Pembelian | 3 | 0 | 2 | 0 |
 | Fase 5 — Tagihan HRD | 0 | 0 | 3 | 0 |
 | Fase 6 — Cetak, laporan, dashboard | 0 | 0 | 3 | 0 |
 | Fase 7 — Hardening & UAT | 0 | 0 | 5 | 0 |
 | Fase 8 — Cut-over & go-live | 0 | 0 | 3 | 1 |
 | Di luar Paket 1 (setelah go-live) | 0 | 0 | 0 | 2 |
-| **Total semua fase** | **19** | **0** | **23** | **4** |
+| **Total semua fase** | **19** | **2** | **21** | **4** |
 
-### Aplikasi sekarang sudah bisa apa (semua ✅ — lulus `php artisan test` pada 24 Okt 2026)
+### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test` 24 Okt 2026; 🟡 = ditulis, menunggu test)
 
 - **Masuk dan hak akses:** login/logout, role Admin dan Kasir, izin yang bisa didelegasikan, persetujuan dengan mengetik ulang password pemberi persetujuan. ✅
 - **Master data:** kategori, supplier, produk (harga + riwayat harga, barcode otomatis, status stok). ✅
 - **Stok:** Admin memasukkan stok awal; stok dilihat per batch dengan urutan FEFO dan lencana kedaluwarsa; riwayat pergerakan stok. ✅
 - **Karyawan:** Kasir menambah karyawan (menunggu verifikasi, hanya tunai), Admin memverifikasi dan menetapkan batas kredit, notifikasi ke Admin. ✅
 - **Kasir:** buka shift (hitung buta), jual tunai atau kredit potong gaji (FEFO, diskon, PPN opsional, batas kredit + pengecualian Admin dengan re-auth, anti transaksi ganda), cetak ulang berlabel SALINAN, tutup shift dengan selisih kas, tinjau oleh Admin. ✅
+- **Kas dan koreksi:** kebijakan endapan (tetap/persen, min/maks, pembulatan ke bawah), setoran akhir shift dan setoran parsial tengah shift, Finance menghitung ulang dan menerima (selisih → koreksi), saldo Kas Kecil/Kas Besar dari ledger, void penjualan oleh Admin (stok kembali, kas/kredit dikoreksi). 🟡
 - **Pembelian:** PR → pemeriksaan Finance → persetujuan Owner → PO → kirim → penerimaan barang (stok bertambah, HPP rata-rata), verifikasi surat jalan/faktur. ✅
 
 ### Belum bisa
 
-Void/pembatalan penjualan · setoran dan endapan resmi (saat tutup shift, seluruh kas sementara menjadi endapan) · kas masuk/keluar lain · atur diskon dan PPN lewat layar · transfer, adjustment, opname · denah rak · penerimaan ke gudang · tagihan HRD dan invoice · cetak struk/invoice · dashboard dan laporan · lampiran foto surat jalan.
+Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk tunai dari shift yang sudah ditutup · atur diskon dan PPN lewat layar · transfer, adjustment, opname · denah rak · penerimaan ke gudang · tagihan HRD dan invoice · cetak struk/invoice · dashboard dan laporan · lampiran foto surat jalan.
 
 ### Langkah berikutnya (urut)
 
-1. ~~Pasang paket WS-C dan jalankan seluruh test~~ — **selesai 24 Okt 2026: 154 lulus.** Semua kontrak di `BACKEND_PROGRESS.md` kini boleh dipercaya frontend.
-2. **Void + setoran/endapan** (tahap 3.4–3.5): tanpa ini shift hanya bisa ditutup "sementara" dan koreksi transaksi belum mungkin.
+1. ~~Pasang paket WS-C dan jalankan seluruh test~~ — **selesai 24 Okt 2026: 154 lulus.**
+2. **Jalankan `php artisan test` untuk void dan setoran/endapan** (tahap 3.4–3.5, kelas `SaleVoidTest` dan `CashDepositTest`). Kontrak di `BACKEND_PROGRESS.md` bagian 7; ubah ke ✅ bila hijau.
 3. **Tagihan HRD** (Fase 5): tujuan akhir sistem kredit karyawan; bergantung pada penjualan kredit yang sudah ada.
 4. Kas masuk/keluar lain (3.6) dan pengaturan diskon/PPN lewat layar (3.7).
 5. Adjustment/opname + transfer (2.6–2.7), lalu cetak, dashboard, hardening, UAT (Fase 6–8).
@@ -94,8 +95,8 @@ Void/pembatalan penjualan · setoran dan endapan resmi (saat tutup shift, seluru
 | 3.1 | Shift kasir: buka, hitung buta, tutup, tinjau; saldo awal = endapan sebelumnya | ✅ | ShiftTest |
 | 3.2 | Posting penjualan atomik: tunai + kredit potong gaji, FEFO, diskon, PPN opsional, batas kredit + pengecualian Admin, idempotensi | ✅ | SaleTest |
 | 3.3 | Riwayat penjualan dan cetak ulang berlabel SALINAN | ✅ | SaleTest |
-| 3.4 | Void / pembatalan penjualan (endpoint + aturan; `InventoryService::voidSale` sudah ada) | ⏳ |  |
-| 3.5 | Setoran dan endapan (parsial / final), kebijakan endapan | ⏳ |  |
+| 3.4 | Void / pembatalan penjualan: Admin, stok kembali ke batch asal, kredit hanya bila belum ditagih, tunai hanya selama shift struk masih open | 🟡 | SaleVoidTest (6) |
+| 3.5 | Setoran dan endapan (parsial / final), kebijakan endapan berversi, penerimaan Finance, selisih/koreksi, saldo dana. Usulan endapan Kasir (`float_proposals`) belum | 🟡 | CashDepositTest (14) |
 | 3.6 | Kas masuk / keluar lain (`cash_movements`) | ⏳ |  |
 | 3.7 | Pengaturan diskon dan PPN lewat API/UI (saat ini diisi langsung ke tabel `discounts` / `settings`) | ⏳ |  |
 | 3.8 | Retur pelanggan dan credit note | ⏸ | Paket 2 |
@@ -162,7 +163,8 @@ Void/pembatalan penjualan · setoran dan endapan resmi (saat tutup shift, seluru
 | InventoryServiceTest, OpeningBalanceTest, CustomerTest, NotificationTest | 10 · 9 · 12 · 4 | ✅ | pengguna (24 Okt 2026) |
 | ShiftTest, SaleTest | 7 · 17 | ✅ | pengguna (24 Okt 2026) |
 | PurchaseRequisitionTest, PurchaseOrderTest, GoodsReceiptTest (+ `tests/Concerns/BuildsPurchasing.php`) | 11 · 10 · 11 | ✅ | pengguna (24 Okt 2026) |
-| **Total (20 kelas)** | **154 (1.080 assertion, ±183 dtk)** | ✅ | pengguna (24 Okt 2026) |
+| SaleVoidTest, CashDepositTest | 6 · 14 | 🟡 | menunggu pengguna |
+| **Total saat ini (22 kelas)** | **174** — 154 sudah lulus (1.080 assertion, ±183 dtk), 20 baru menunggu | 🟡 | |
 
 Catatan verifikasi: daftar keluaran yang ditempel menampilkan 152 baris test (dua test SaleTest — diskon terbaik produk/kategori dan PPN eksklusif — tidak tampil), tetapi ringkasan akhirnya "154 passed" sama dengan jumlah seluruh metode `test_*` di kode (154), jadi semuanya lulus. Test terlama: login (±63 dtk pada pemanggilan pertama, hashing password); sisanya di bawah 5 dtk.
 
@@ -172,7 +174,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 ## 4. Untuk agent frontend
 
-**Terbaru (24 Okt 2026): seluruh backend yang sudah ditulis lulus test (154 test).** Termasuk WS-C Pembelian (PR → PO → Penerimaan barang). Kontrak lengkap: `BACKEND_PROGRESS.md` (endpoint, bentuk permintaan/respons, kunci error, notifikasi, urutan layar) — **bentuk respons kini final dan boleh dipercaya**.
+**Terbaru (24 Okt 2026): backend sampai Pembelian lulus test (154 test); setoran/endapan dan void baru ditulis (bagian 7, 🟡 menunggu test).** Dampak ke layar shift yang sedang dibuat: respons **tutup shift** kini memuat `deposit` dan `float_flags`, dan **buka shift** bisa ditolak sampai setoran akhir shift sebelumnya diserahkan (hanya bila Admin sudah menetapkan kebijakan endapan). Kontrak lengkap: `BACKEND_PROGRESS.md` (endpoint, bentuk permintaan/respons, kunci error, notifikasi, urutan layar) — **bentuk respons kini final dan boleh dipercaya**.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|
@@ -183,6 +185,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 | Shift kasir | 4 | ✅ | shifts |
 | Penjualan (POS) | 5 | ✅ | belum ada folder |
 | **Pembelian (PR, PO, penerimaan)** | **6** | ✅ | belum ada folder |
+| **Setoran, endapan, void** | **7** | 🟡 | belum ada folder |
 
 Folder UI dibaca dari struktur `frontend/src/features/` pada zip; **isi layarnya belum saya tinjau**.
 

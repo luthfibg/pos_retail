@@ -33,6 +33,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Transfer antar posisi, adjustment, opname | Belum (tabel ada) | — |
 | Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Selesai | **Lolos** test (24 Okt 2026) |
 | PR → pemeriksaan Finance → persetujuan Owner (re-auth) → PO (otomatis/konfirmasi) | Selesai | **Lolos** test (24 Okt 2026) |
+| Setoran kasir + kebijakan endapan (parsial/final, penerimaan Finance, selisih/koreksi, saldo dana) dan void penjualan | Kode + test selesai | **BELUM dijalankan** |
 | POS (shift, penjualan, struk, void), setoran/endapan | Belum (tabel ada) | — |
 | Periode tagihan + invoice HRD | Belum (tabel ada) | — |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
@@ -126,6 +127,8 @@ php artisan test                                     # butuh .env.testing -> DB_
 **Endpoint tambahan (WS-A/WS-B, lolos test; kontrak lengkap di `docs/BACKEND_PROGRESS.md`):** `GET /api/inventory/products/{id}/stock`, `GET /api/inventory/movements`, `POST /api/inventory/opening-balances` · `GET/POST /api/customers`, `GET/PATCH /api/customers/{id}`, `POST /api/customers/{id}/verify`, `PUT|GET /api/customers/{id}/credit-limit(s)` · `GET /api/notifications`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`.
 
 **Endpoint POS (WS-D, lolos test):** `GET /api/shifts/current`, `POST /api/shifts/open`, `GET /api/shifts/{id}`, `POST /api/shifts/{id}/start-count|close|review`, `GET /api/shifts` · `POST|GET /api/sales`, `GET /api/sales/{id}`, `POST /api/sales/{id}/reprint`.
+
+**Endpoint setoran/endapan/void (belum dijalankan):** `GET /api/float-policies`, `PUT /api/float-policies/{scope}` · `POST /api/shifts/{id}/deposits` · `GET /api/cash-deposits`, `GET /api/cash-deposits/{id}`, `POST /api/cash-deposits/{id}/submit|cancel|receive|correct` · `GET /api/fund-accounts` · `POST /api/sales/{id}/void`. Kontrak: `docs/BACKEND_PROGRESS.md` bagian 7.
 
 **Berkas penting** (di folder keluaran proyek): `schema_paket1.sql`, `erd_paket1.md`, zip migration, zip tahap1b (seeder/auth/RBAC), zip tahap1c (master data), `SETUP.md`, `SETUP_AUTH_RBAC.md`, `PANDUAN_MASTER_DATA.md`.
 

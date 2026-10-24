@@ -18,12 +18,18 @@ use Illuminate\Validation\ValidationException;
  *  - kas diharapkan = saldo awal + penjualan tunai + kas masuk lain - kas keluar (- setoran parsial: modul setoran menyusul)
  *  - hitung buta: selama shift berjalan, kas diharapkan hanya terlihat pemegang shift.review
  *  - selisih != 0 wajib berketerangan
- *  - SEMENTARA (sampai modul setoran/endapan ada): saat tutup, float_kept = kas terhitung (seluruh uang tetap di laci)
+ *  - saat tutup: endapan dan setoran akhir dihitung dari kebijakan endapan (CashDepositService); float_kept = endapan,
+ *    dan dokumen setoran Draft dibuat bila ada yang disetor. Tanpa kebijakan aktif: float_kept = seluruh kas terhitung (tanpa setoran)
+ *  - shift baru tidak dapat dibuka selama setoran akhir shift sebelumnya masih Draft (uangnya belum diserahkan)
+ *  - setoran parsial yang sudah diserahkan mengurangi kas diharapkan
  */
 class ShiftService
 {
-    public function __construct(private AuditLogger $audit, private NumberSequence $sequences)
-    {
+    public function __construct(
+        private AuditLogger $audit,
+        private NumberSequence $sequences,
+        private CashDepositService $deposits,
+    ) {
     }
 
     /** @return array<string, mixed> */
@@ -46,6 +52,12 @@ class ShiftService
                         ? 'Anda masih memiliki shift yang belum ditutup.'
                         : "Shift masih dibuka oleh {$existing->name}. Tutup dulu sebelum membuka shift baru.";
                     throw ValidationException::withMessages(['shift' => [$message]]);
+                }
+
+                $pendingDeposit = DB::table('cash_deposits as d')->join('cash_shifts as s', 's.id', '=', 'd.shift_id')
+                    ->where('s.store_id', $storeId)->where('s.register_id', $register->id)->where('d.kind', 'final')->where('d.status', 'draft')->exists();
+                if ($pendingDeposit) {
+                    throw ValidationException::withMessages(['shift' => ['Setoran shift sebelumnya belum diserahkan. Serahkan setoran terlebih dahulu.']]);
                 }
 
                 $previous = DB::table('cash_shifts')
@@ -117,11 +129,17 @@ class ShiftService
      */
     public function close(User $actor, int $storeId, int $id, string $countedCash, ?string $note, bool $canReview): array
     {
-        DB::transaction(function () use ($actor, $storeId, $id, $countedCash, $note, $canReview) {
+        $floatFlags = [];
+
+        DB::transaction(function () use ($actor, $storeId, $id, $countedCash, $note, $canReview, &$floatFlags) {
             $shift = $this->lockOwned($actor, $storeId, $id, $canReview);
 
             if (! in_array($shift->status, ['open', 'counting'], true)) {
                 throw ValidationException::withMessages(['status' => ['Shift sudah ditutup.']]);
+            }
+
+            if (DB::table('cash_deposits')->where('shift_id', $id)->where('status', 'draft')->exists()) {
+                throw ValidationException::withMessages(['status' => ['Masih ada setoran Draft pada shift ini. Serahkan atau batalkan dulu sebelum menutup shift.']]);
             }
 
             $summary = $this->summary($id, $shift->opening_balance);
@@ -132,15 +150,20 @@ class ShiftService
                 throw ValidationException::withMessages(['variance_note' => ['Selisih kas wajib diberi keterangan.']]);
             }
 
+            $plan = $this->deposits->plan($storeId, $id, $counted);
+
             DB::table('cash_shifts')->where('id', $id)->update([
                 'status' => 'closed',
                 'expected_cash' => Decimal::moneyString($summary['expected_units']),
                 'counted_cash' => Decimal::moneyString($counted),
                 'variance' => Decimal::moneyString($variance),
                 'variance_note' => $variance === 0 ? null : $note,
-                'float_kept' => Decimal::moneyString($counted),   // sementara; lihat catatan kelas
+                'float_kept' => Decimal::moneyString($plan['float']),
                 'closed_at' => $this->now(),
             ]);
+
+            $depositId = $this->deposits->createDraft($actor, $storeId, $shift, $counted, $plan, 'final', null);
+            $floatFlags = $plan['flags'];
 
             $this->audit->log(
                 'shift.close',
@@ -151,6 +174,8 @@ class ShiftService
                     'expected_cash' => Decimal::moneyString($summary['expected_units']),
                     'counted_cash' => Decimal::moneyString($counted),
                     'variance' => Decimal::moneyString($variance),
+                    'float_kept' => Decimal::moneyString($plan['float']),
+                    'deposit_amount' => Decimal::moneyString($plan['deposit']),
                 ],
                 reason: $variance === 0 ? null : $note,
                 storeId: $storeId,
@@ -158,7 +183,7 @@ class ShiftService
             );
         });
 
-        return $this->present($this->row($storeId, $id), $this->canSeeExpected($actor));
+        return $this->present($this->row($storeId, $id), $this->canSeeExpected($actor)) + ['float_flags' => $floatFlags];
     }
 
     /** @return array<string, mixed> */
@@ -226,7 +251,7 @@ class ShiftService
     /**
      * Ringkasan shift. expected_units dalam satuan sen.
      *
-     * @return array{cash_sales_count: int, cash_sales_total: string, credit_sales_count: int, credit_sales_total: string, cash_in: string, cash_out: string, expected_units: int}
+     * @return array{cash_sales_count: int, cash_sales_total: string, credit_sales_count: int, credit_sales_total: string, cash_in: string, cash_out: string, partial_deposits: string, expected_units: int}
      */
     public function summary(int $shiftId, string $openingBalance): array
     {
@@ -235,6 +260,8 @@ class ShiftService
         $moves = DB::table('cash_movements')->where('shift_id', $shiftId)
             ->selectRaw('type, coalesce(sum(amount), 0) as t')->groupBy('type')->pluck('t', 'type');
 
+        $partial = Decimal::money((string) DB::table('cash_deposits')->where('shift_id', $shiftId)->where('kind', 'partial')
+            ->whereIn('status', CashDepositService::HANDED_OVER)->sum('deposit_amount'));
         $cash = Decimal::money((string) ($sales['cash']->t ?? '0'));
         $in = Decimal::money((string) ($moves['in'] ?? '0'));
         $out = Decimal::money((string) ($moves['out'] ?? '0'));
@@ -246,7 +273,8 @@ class ShiftService
             'credit_sales_total' => Decimal::moneyString(Decimal::money((string) ($sales['payroll_credit']->t ?? '0'))),
             'cash_in' => Decimal::moneyString($in),
             'cash_out' => Decimal::moneyString($out),
-            'expected_units' => Decimal::money($openingBalance) + $cash + $in - $out,
+            'partial_deposits' => Decimal::moneyString($partial),
+            'expected_units' => Decimal::money($openingBalance) + $cash + $in - $out - $partial,
         ];
     }
 
@@ -297,7 +325,9 @@ class ShiftService
                 'credit_sales_total' => $summary['credit_sales_total'],
                 'cash_in' => $summary['cash_in'],
                 'cash_out' => $summary['cash_out'],
+                'partial_deposits' => $summary['partial_deposits'],
             ],
+            'deposit' => $this->deposits->finalForShift((int) $row->id),
             'counted_cash' => $row->counted_cash,
             'variance' => $finished || $seeExpected ? $row->variance : null,
             'variance_note' => $row->variance_note,

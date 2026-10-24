@@ -55,6 +55,15 @@ class SaleController extends Controller
         return response()->json(['data' => $found]);
     }
 
+    /** Batalkan penjualan terposting (Admin). */
+    public function void(Request $request, int $sale): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'max:500']]);
+        $user = $request->user();
+
+        return response()->json(['data' => $this->sales->void($user, $this->stores->requireIdFor($user), $sale, $data['reason'])]);
+    }
+
     public function reprint(Request $request, int $sale): JsonResponse
     {
         $user = $request->user();
