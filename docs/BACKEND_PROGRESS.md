@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 23 Oktober 2026 · **Dikerjakan:** WS-B (Inventory inti), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan)
+**Diperbarui:** 24 Oktober 2026 · **Dikerjakan:** WS-B (Inventory inti), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan), **WS-C (Pembelian: PR → PO → Penerimaan barang) — terbaru**
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -254,11 +254,129 @@ Pengecualian berhasil → `over_limit: true` pada struk (label "melebihi batas" 
 
 ---
 
+## 6. Pembelian: PR → PO → Penerimaan barang 🟡 (terbaru)
+
+Alur bisnis: **Kasir** mengajukan PR → **Finance** memeriksa → **Owner** menyetujui (autentikasi ulang) → **Admin** membuat PO per supplier → PO disetujui → dikirim ke supplier → **Kasir** menerima barang (surat jalan) → **posting** menambah stok → Admin memverifikasi surat jalan/faktur. Paket 1: **tanpa Saldo Pembelian** (pengecekan saldo = Paket 2).
+
+> Status: kode + test ditulis, **belum dijalankan**. Uang/qty tetap string desimal. Waktu UTC. Format sukses `{ "data": ... }`.
+
+### 6.1 Purchase Requisition (PR)
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/purchase-requisitions` | `purchase_requisition.create` | Daftar. Kasir hanya melihat PR miliknya; Admin melihat semua. Query: `status`, `q` (awalan nomor), `mine=1`, `per_page` |
+| POST | `/api/purchase-requisitions` | `purchase_requisition.create` | Buat PR **draft** |
+| GET | `/api/purchase-requisitions/{pr}` | `purchase_requisition.create` | Detail + item + riwayat keputusan + PO turunan |
+| PATCH | `/api/purchase-requisitions/{pr}` | `purchase_requisition.create` | Ubah saat `draft`/`returned` (pembuat atau Admin). `items` menggantikan seluruh item |
+| POST | `/api/purchase-requisitions/{pr}/submit` | `purchase_requisition.create` | `draft`/`returned` → `submitted` (notifikasi ke Finance) |
+| POST | `/api/purchase-requisitions/{pr}/finance-check` | `purchase_requisition.finance_check` | `{ "decision": "pass" \| "return", "note": "..." }` — `note` wajib bila `return` |
+| POST | `/api/purchase-requisitions/{pr}/approve` | `purchase_requisition.approve` | Persetujuan Owner: `{ "decision": "approve" \| "reject", "note", "approver_username", "approver_password" }` |
+| POST | `/api/purchase-requisitions/{pr}/cancel` | `purchase_requisition.create` | `{ "reason"? }` — saat `draft`/`returned`/`submitted` (pembuat atau Admin) |
+
+Status PR: `draft` → `submitted` → `finance_checked` → `approved` → `converted` (otomatis saat seluruh item sudah masuk PO) · cabang: `returned` (dikembalikan Finance, **boleh diedit lalu diajukan lagi**), `rejected`, `cancelled`.
+
+Permintaan buat/ubah:
+```json
+{ "reason": "Stok menipis",
+  "items": [ { "product_id": 12, "qty": "10", "est_price": "2500", "note": "merk bebas" } ] }
+```
+`items` 1–100 baris; `qty` > 0 (maks 99999, 3 desimal); `est_price` opsional (maks 2 desimal); produk nonaktif/ganda ditolak. Produk `pending_price` boleh diajukan.
+
+Detail PR (`data`): `id, doc_number ("PR-202610-000001"), status, reason, est_total, requested_by, requester_name, submitted_at, created_at`, `items[]` (`id, product_id, sku, name, unit_name, qty, est_price, note, qty_ordered, qty_remaining` — dua terakhir = berapa sudah/ belum dipesan lewat PO), `approvals[]` (`step: finance_check|owner_auth, decision: approved|returned|rejected, decided_by_name, note, is_self_approval, decided_at`), `purchase_orders[]` (`id, doc_number, status, total`).
+
+Autentikasi ulang Owner: kirim `approver_username` + `approver_password` (diketik pemberi persetujuan sendiri; salah → 422 `errors.approver_password`). Wajib selama setting `approval_reauth_required` aktif (default aktif). Bila pembuat PR = pemberi persetujuan (mode minimalis), diizinkan hanya jika setting `sod_owner_self_approve = allow_with_flag` (default) dan **ditandai** `is_self_approval: true` — tampilkan lencana "disetujui sendiri". Bila diblokir → 422 `errors.approver_username`.
+
+### 6.2 Purchase Order (PO)
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/purchase-orders` | `purchase_order.create` **atau** `goods_receipt.create` | Daftar. Admin: semua. **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
+| GET | `/api/purchase-orders/{po}` | sama | Detail + item + daftar penerimaan |
+| POST | `/api/purchase-orders` | `purchase_order.create` | Buat PO **draft** dari PR `approved` |
+| PATCH | `/api/purchase-orders/{po}` | `purchase_order.create` | Ubah saat `draft` (`pr_id` tidak dapat diubah) |
+| POST | `/api/purchase-orders/{po}/submit` | `purchase_order.create` | `draft` → **otomatis `approved`** bila total PO ≤ total estimasi PR, selain itu `pending_confirmation` |
+| POST | `/api/purchase-orders/{po}/confirm` | `purchase_requisition.approve` | Konfirmasi Owner untuk `pending_confirmation` (`approver_username`, `approver_password`, `note?`) |
+| POST | `/api/purchase-orders/{po}/send` | `purchase_order.send` | `approved` → `sent` |
+| POST | `/api/purchase-orders/{po}/cancel` | `purchase_order.create` | `{ "reason" }` wajib; sebelum ada penerimaan |
+| POST | `/api/purchase-orders/{po}/close` | `purchase_order.create` | `{ "reason" }` wajib; tutup manual PO yang sebagian diterima |
+
+Permintaan buat:
+```json
+{ "pr_id": 5, "supplier_id": 2, "payment_terms": "credit", "order_date": "2026-10-24", "expected_date": "2026-10-30",
+  "items": [ { "product_id": 12, "qty_ordered": "10", "unit_price": "2400" } ] }
+```
+`payment_terms` (`prepaid|credit|cod`) default dari supplier. `order_date` default hari ini (WIB).
+
+Status PO: `draft` → (`pending_confirmation`) → `approved` → `sent` → `partially_received` → `received`; cabang `cancelled`. Status penerimaan terpisah: `receipt_status` = `none|partial|complete`; `payment_status` = `unpaid` (pembayaran = Paket 2).
+
+Aturan: PO **wajib dari PR `approved`**; satu PR boleh dipecah ke beberapa PO (per supplier); qty per produk **kumulatif** tidak boleh melebihi qty PR (422 `errors["items.N.qty_ordered"]` memuat sisa); PR otomatis menjadi `converted` bila semua item sudah tercakup dan kembali `approved` bila PO dibatalkan.
+
+Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_status, payment_terms, pr_id, pr_doc_number, supplier_id, supplier_name, order_date, expected_date, total, created_by_name`, `items[]` (`id` = **`po_item_id`** untuk penerimaan, `product_id, sku, name, unit_name, qty_ordered, qty_received, qty_remaining, unit_price, line_total`), `receipts[]` (`id, doc_number, status, document_status, posted_at`).
+
+### 6.3 Penerimaan barang (Goods Receipt)
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/goods-receipts` | `goods_receipt.create` | Daftar. Kasir: miliknya; Admin: semua. Query: `status`, `document_status`, `po_id`, `q`, `per_page` |
+| POST | `/api/goods-receipts` | `goods_receipt.create` | Buat penerimaan dari PO. `"post": true` = langsung posting |
+| GET | `/api/goods-receipts/{gr}` | `goods_receipt.create` | Detail + baris |
+| POST | `/api/goods-receipts/{gr}/post` | `goods_receipt.create` | **Posting**: stok bertambah, PO diperbarui (atomik) |
+| POST | `/api/goods-receipts/{gr}/cancel` | `goods_receipt.create` | Batalkan penerimaan **draft** |
+| POST | `/api/goods-receipts/{gr}/verify-documents` | `goods_receipt.verify_documents` | Verifikasi surat jalan + faktur (Admin) |
+
+Permintaan buat:
+```json
+{ "po_id": 9, "delivery_note_no": "SJ-001", "invoice_no": "INV-77", "note": null, "post": true,
+  "items": [
+    { "po_item_id": 31, "qty_received": "8", "qty_damaged": "2", "expiry_date": "2027-03-01", "batch_code": "L9", "shelf_position_id": null, "note": null }
+  ] }
+```
+- Satu `po_item_id` boleh muncul di beberapa baris (batch/kadaluarsa berbeda). **Diterima + rusak ≤ sisa pesanan**; melebihi → 422 `errors["items.N.qty_received"]`.
+- Produk `track_expiry` **wajib** `expiry_date` (untuk qty diterima); produk lain **tidak boleh**; tanggal yang sudah lewat ditolak (catat sebagai rusak).
+- Harga beli = harga di PO. `unit_cost` hanya boleh diubah pemegang `goods_receipt.verify_documents` (Kasir mengirim nilai berbeda → 403). Kasir **tidak** menerima `unit_cost`/`price_variance` pada respons (`null`).
+- `qty_damaged` hanya **dicatat** (untuk klaim/retur supplier, Paket 3); tidak menambah stok dan tidak mengurangi sisa pesanan.
+- Respons `data`: `id, doc_number ("GR-…"), po_id, po_doc_number, supplier_name, delivery_note_no, invoice_no, status (draft|posted|cancelled), document_status (pending|verified), received_by_name, posted_at, verified_by_name, verified_at`, `items[]` (`po_item_id, product_id, sku, name, qty_ordered, qty_received, qty_damaged, qty_short, unit_cost, po_unit_price, price_variance, expiry_date, batch_code, shelf_position_id`). `qty_short` = sisa pesanan setelah penerimaan ini (di baris pertama tiap baris PO).
+- Efek posting: batch baru + saldo + pergerakan `receipt` + HPP rata-rata bergerak (lihat Inventory), qty PO terpenuhi, status PO `partially_received`/`received`. Bila ada barang rusak, Admin mendapat notifikasi `goods_receipt.damaged`.
+
+### 6.4 Kunci error yang perlu penanganan khusus (422 `errors.<kunci>`)
+
+| Kunci | Arti | Tindakan UI |
+|---|---|---|
+| `status` | Aksi tidak cocok dengan status dokumen saat ini | Muat ulang dokumen, tampilkan pesan |
+| `approver_password` | Autentikasi ulang kosong/salah/terkunci (5x salah) | Tampilkan di dialog persetujuan, jangan tutup dialog |
+| `approver_username` | Pembuat tidak boleh menyetujui sendiri (setting SoD) | Minta Owner lain |
+| `note` / `reason` | Alasan wajib (kembalikan, tolak, batal, tutup) | Fokus ke kolom alasan |
+| `pr_id` | PR belum `approved` / sudah seluruhnya jadi PO | Muat ulang PR |
+| `items.N.qty_ordered` | Melebihi sisa qty PR | Tampilkan sisa dari pesan; sisa juga ada di `items[].qty_remaining` PR |
+| `po_id` | PO belum/tidak lagi bisa menerima barang, atau **mode gudang aktif (belum didukung)** | Tampilkan pesan |
+| `items.N.qty_received` | Melebihi sisa pesanan / kedua jumlah kosong | Tampilkan sisa dari pesan |
+| `items.N.expiry_date` | Wajib / tidak berlaku / sudah kedaluwarsa | Fokus ke kolom tanggal baris itu |
+| `items` (pada posting) | Penerimaan lain sudah memakai sisa PO | Muat ulang PO dan penerimaan |
+| `delivery_note_no`, `invoice_no`, `document_status` | Verifikasi dokumen belum lengkap / sudah terverifikasi | Tampilkan pesan |
+
+### 6.5 Notifikasi baru (`type`)
+`pr.submitted` (ke Finance), `pr.finance_checked` (ke Owner), `pr.returned` / `pr.approved` / `pr.rejected` (ke pembuat), `pr.ready_for_po` (ke pembuat PO), `po.needs_confirmation` (ke Owner), `po.confirmed`, `goods_receipt.damaged`. Semua memakai `entity_type` (`purchase_requisition|purchase_order|goods_receipt`) + `entity_id` untuk tautan ke dokumen.
+
+### 6.6 Layar yang sudah bisa dibuatkan UI-nya (urutan saran)
+1. **Penerimaan barang (Kasir)** — pilih PO (`GET /api/purchase-orders?receivable=1`) → isi qty/kedaluwarsa/rusak → posting. Ini yang paling berdampak: stok bisa masuk lewat jalur resmi.
+2. **Daftar & form PR (Kasir)** — buat, ubah, ajukan; lencana status; pesan Finance saat `returned`.
+3. **Antrean Finance/Owner (Admin)** — PR `submitted` → periksa; `finance_checked` → dialog persetujuan dengan input username+password.
+4. **PO (Admin)** — buat dari PR yang disetujui (tampilkan `qty_remaining`), ajukan, konfirmasi Owner bila diminta, kirim, tutup/batal.
+5. Verifikasi dokumen penerimaan (Admin).
+
+### 6.7 ASUMSI dan batasan (perlu konfirmasi klien/pengguna)
+- **Q-13:** PO otomatis disetujui bila total PO aktif kumulatif ≤ total estimasi PR (dan estimasi > 0); selain itu perlu konfirmasi Owner. PR tanpa estimasi harga selalu perlu konfirmasi.
+- "Owner" = pemegang `settings.manage`; aturan swa-persetujuan memakai `sod_owner_self_approve` untuk Owner dan `sod_pr_creator_approver` untuk lainnya.
+- Penerimaan dari PO berstatus `approved` (belum diklik "kirim") tetap diizinkan agar operasional tidak tertahan langkah administratif.
+- Tanpa toleransi kelebihan kiriman; barang yang sudah kedaluwarsa tidak diterima sebagai layak jual.
+- **Belum ada:** penerimaan ke gudang + putaway (setting `warehouse_enabled` aktif ditolak dengan pesan), unggah lampiran surat jalan/foto, retur supplier/klaim barang rusak (Paket 3), pembayaran supplier dan Saldo Pembelian (Paket 2), dokumen koreksi penerimaan terposting.
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, dan `routes/api/pos.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-24** — WS-C: pembelian lengkap — PR (draft, ajukan, periksa Finance, persetujuan Owner dengan autentikasi ulang, tanda swa-persetujuan), PO (dari PR, otomatis/konfirmasi Owner, kirim, batal, tutup), penerimaan barang (posting menambah stok lewat `InventoryService::receive`, selisih/rusak, verifikasi surat jalan + faktur). Status: 🟡 belum dijalankan.
 - **2026-10-23 (2)** — WS-D: shift (buka/hitung/tutup/tinjau, hitung buta, saldo awal = endapan sebelumnya) dan posting penjualan (tunai + kredit, FEFO, diskon Admin, PPN opsional, batas kredit + pengecualian Admin, idempotensi, riwayat, cetak ulang SALINAN). Status: 🟡 belum dijalankan.
 - **2026-10-23** — WS-B: `InventoryService` (saldo, pergerakan, batch, FEFO, anti-negatif, HPP rata-rata bergerak), stok awal, lihat stok per batch, riwayat pergerakan. WS-A: data karyawan (input Kasir, verifikasi dan batas oleh Admin), notifikasi `customer.limit_needed`. Status: 🟡 belum dijalankan.
 - **sebelumnya** — Auth + RBAC ✅, kategori ✅, supplier ✅, produk (+harga, barcode otomatis, status stok) ✅. Detail kontraknya ada di `HANDOFF_POS_RETAIL_SMK.md` bagian 6.
