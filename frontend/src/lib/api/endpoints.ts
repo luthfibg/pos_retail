@@ -3,6 +3,7 @@ import type {
   Category, CategoryInput, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
+  Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
 } from './types';
 
 export const authApi = {
@@ -147,4 +148,20 @@ export const saleApi = {
   /** FR-01: belum ada di backend sampai statusnya Selesai (docs/FRONTEND_REQUESTS.md). Hanya-baca. */
   preview: (input: SalePreviewInput, signal?: AbortSignal) =>
     api<{ data: SalePreview }>('/sales/preview', { method: 'POST', body: input, signal }).then((r) => r.data),
+};
+
+export const discountApi = {
+  list: (f: { target_type?: DiscountTarget; active_only?: boolean; page?: number; per_page?: number } = {}) =>
+    api<Paginated<Discount>>('/discounts', { query: { ...f, active_only: f.active_only ? 1 : undefined } }),
+  get: (id: number) => api<{ data: Discount }>(`/discounts/${id}`).then((r) => r.data),
+  create: (input: DiscountInput) =>
+    api<{ data: Discount }>('/discounts', { method: 'POST', body: input }).then((r) => r.data),
+  update: (id: number, input: DiscountUpdate) =>
+    api<{ data: Discount }>(`/discounts/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
+};
+
+export const settingsApi = {
+  vat: () => api<{ data: VatSetting }>('/settings/vat').then((r) => r.data),
+  saveVat: (input: VatInput) =>
+    api<{ data: VatSetting }>('/settings/vat', { method: 'PUT', body: input }).then((r) => r.data),
 };

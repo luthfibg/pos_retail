@@ -415,3 +415,57 @@ export interface SalePreview {
   credit: SalePreviewCredit | null;
   computed_at: string; // UTC
 }
+
+// ---------------------------------------------------------------- diskon dan PPN (Admin)
+
+export type DiscountTarget = 'product' | 'category';
+export type DiscountType = 'percent' | 'amount';
+export type DiscountStatus = 'active' | 'scheduled' | 'expired' | 'inactive';
+
+/** `starts_at`/`ends_at` = batas hari WIB yang disimpan UTC; tampilkan lewat toWibDate. `amount` = potongan per unit. */
+export interface Discount {
+  id: number;
+  name: string;
+  target_type: DiscountTarget;
+  target_id: number;
+  target_name: string | null;
+  discount_type: DiscountType;
+  value: Decimal;
+  starts_at: string;
+  ends_at: string | null;
+  is_active: boolean;
+  status: DiscountStatus;
+}
+
+export interface DiscountInput {
+  name: string;
+  target_type: DiscountTarget;
+  target_id: number;
+  discount_type: DiscountType;
+  value: Decimal;
+  starts_at?: string; // YYYY-MM-DD (WIB); kosong = mulai sekarang
+  ends_at?: string; // YYYY-MM-DD (WIB); kosong = tanpa akhir
+}
+
+/** Target tidak dapat diubah. `starts_at` tidak boleh dikosongkan; `ends_at: null` = tanpa akhir. */
+export interface DiscountUpdate {
+  name?: string;
+  discount_type?: DiscountType;
+  value?: Decimal;
+  starts_at?: string;
+  ends_at?: string | null;
+  is_active?: boolean;
+}
+
+export interface VatSetting {
+  enabled: boolean;
+  rate: Decimal | null;
+  price_includes_tax: boolean | null;
+  effective_from: string | null; // YYYY-MM-DD
+}
+
+export interface VatInput {
+  enabled: boolean;
+  rate?: Decimal;
+  price_includes_tax?: boolean;
+}

@@ -14,6 +14,8 @@ import { CustomersPage } from '@/features/customers/CustomersPage';
 import { ShiftPage } from '@/features/shifts/ShiftPage';
 import { ShiftsAdminPage } from '@/features/shifts/ShiftsAdminPage';
 import { PosPage } from '@/features/sales/PosPage';
+import { DiscountsPage } from '@/features/pricing/DiscountsPage';
+import { VatSettingsPage } from '@/features/pricing/VatSettingsPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -63,6 +65,14 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="inventory.view" />,
             children: [{ path: 'inventory/movements', element: <MovementsPage /> }],
+          },
+          {
+            element: <RequirePermission permission="discount.manage" />,
+            children: [{ path: 'discounts', element: <DiscountsPage /> }],
+          },
+          {
+            element: <RequirePermission permission="settings.manage" />,
+            children: [{ path: 'settings/vat', element: <VatSettingsPage /> }],
           },
           { path: '*', element: <NotFound /> },
         ],

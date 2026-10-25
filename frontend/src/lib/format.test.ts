@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, formatQty, formatRupiah, parseApiTime } from './format';
+import { formatDate, formatDateTime, formatQty, formatRupiah, parseApiTime, toWibDate } from './format';
 
 describe('format', () => {
   it('menampilkan rupiah tanpa desimal bila bulat', () => {
@@ -29,5 +29,17 @@ describe('format', () => {
     expect(formatDate('2027-03-01')).toContain('2027');
     expect(formatDate('2027-03-01')).toMatch(/\b1\b/);
     expect(formatDate(null)).toBe('—');
+  });
+});
+
+describe('toWibDate', () => {
+  it('batas hari WIB: 17:00 UTC adalah tengah malam WIB berikutnya', () => {
+    expect(toWibDate('2026-10-24 17:00:00.000')).toBe('2026-10-25');
+    expect(toWibDate('2026-10-25 16:59:59.999')).toBe('2026-10-25');
+    expect(toWibDate('2026-10-25 03:00:00.000')).toBe('2026-10-25');
+  });
+  it('kosong atau tak terbaca menjadi string kosong', () => {
+    expect(toWibDate(null)).toBe('');
+    expect(toWibDate('bukan tanggal')).toBe('');
   });
 });

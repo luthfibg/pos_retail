@@ -44,3 +44,11 @@ export function formatDate(value: string | null | undefined): string {
   const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
   return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeZone: 'UTC' }).format(d);
 }
+
+/** Tanggal kalender WIB ("YYYY-MM-DD") dari waktu API (UTC). Untuk mengisi <input type="date"> dari batas hari WIB. */
+export function toWibDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = parseApiTime(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Jakarta' }).format(d);
+}
