@@ -373,9 +373,9 @@ Permintaan buat:
 - Tanpa toleransi kelebihan kiriman; barang yang sudah kedaluwarsa tidak diterima sebagai layak jual.
 - **Belum ada:** penerimaan ke gudang + putaway (setting `warehouse_enabled` aktif ditolak dengan pesan), unggah lampiran surat jalan/foto, retur supplier/klaim barang rusak (Paket 3), pembayaran supplier dan Saldo Pembelian (Paket 2), dokumen koreksi penerimaan terposting.
 
-## 7. Setoran, Endapan, dan Void 🟡
+## 7. Setoran, Endapan, dan Void ✅
 
-> Status: kode + test (`CashDepositTest` 14, `SaleVoidTest` 6) sudah ditulis, **belum dijalankan**. Bentuk respons bisa sedikit berbeda sampai test hijau.
+> Status: ✅ lulus `php artisan test` (24 Okt 2026; `CashDepositTest` 14, `SaleVoidTest` 6; total suite 174 lulus). Bentuk respons final dan boleh dipercaya.
 
 ### 7.1 Kebijakan endapan dan setoran kasir
 
@@ -427,11 +427,50 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 
 ---
 
+## 8. Tagihan HRD 🟡
+
+> Status: kode + test (`BillingTest` 10) sudah ditulis, **belum dijalankan**. Seluruhnya **Admin** (Kasir 403). Tidak ada migration/permission baru.
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/billing-periods` | `billing_period.manage` | Daftar periode (terbaru dulu, paginasi) |
+| GET | `/api/billing-periods/current` | `billing_period.manage` | Periode terbuka; `data` = null bila belum ada |
+| POST | `/api/billing-periods` | `billing_period.manage` | Buka periode: `label?`, `scheduled_close_date?` (`YYYY-MM-DD`). 422 `status` bila masih ada yang terbuka |
+| GET | `/api/billing-periods/{id}` | `billing_period.manage` | Detail + `customers[]` (ringkasan tagihan per karyawan) |
+| PATCH | `/api/billing-periods/{id}` | `billing_period.manage` | Ubah `label` / `scheduled_close_date` (tanggal gaji HRD); hanya periode terbuka |
+| POST | `/api/billing-periods/{id}/close` | `billing_period.close` | **Tutup periode** pada hari gaji |
+| POST | `/api/billing-periods/{id}/invoice` | `invoice.generate` | Buat invoice (draft); `bill_to?` (default "HRD") |
+| GET | `/api/invoices?status=&per_page=` | `invoice.generate` | Daftar invoice |
+| GET | `/api/invoices/{id}` | `invoice.generate` | Detail: `customers[]` (per karyawan, berisi `sales[]`) dan `payments[]` |
+| POST | `/api/invoices/{id}/issue` | `invoice.issue` | draft → `issued` |
+| POST | `/api/invoices/{id}/hand-over` | `invoice.issue` | `issued` → `handed_to_hr` (penanda diserahkan ke HRD) |
+| POST | `/api/invoices/{id}/payments` | `invoice.record_payment` | Catat pembayaran HRD: `amount`, `received_on?`, `reference?`, `note?` |
+
+### Perilaku
+- **Tutup periode** mengikat semua struk kredit terposting yang belum terikat ke periode itu, lalu **periode berikutnya otomatis dibuka**; struk kredit baru masuk ke sana. Karena struk terikat tidak lagi dihitung sebagai pemakaian, **sisa batas kredit karyawan pulih** setelah tutup periode. Struk tunai dan struk batal tidak ikut.
+- **Invoice**: satu per periode tertutup, satu baris per struk. Subtotal = jumlah struk. PPN dihitung di invoice hanya bila `vat_enabled` aktif dan tarif lengkap (R-04); bila PPN aktif tapi konfigurasi belum lengkap → 422 `status` dan tidak ada yang berubah. Struk ditandai `billing_status: "invoiced"` dan **tidak dapat di-void lagi** (422 `status`, perlu credit note).
+- **Status invoice**: `draft` → `issued` → `handed_to_hr` → `partially_paid` → `paid`. Pembayaran hanya untuk `issued`/`handed_to_hr`/`partially_paid`; jumlah > 0 dan ≤ `amount_remaining` (422 `amount`). Saat lunas, semua struk menjadi `billing_status: "paid"`.
+- Bentuk invoice: `id, document_no (INV-YYYYMM-000001), billing_period_id, period_label, bill_to, subtotal, tax_rate, tax_amount, total, amount_paid, amount_remaining, status, issued_at, handed_at, created_at`. Semua uang string desimal.
+- Kunci error 422: `status` (urutan/aturan alur), `amount`, `scheduled_close_date`.
+
+### Layar yang bisa dibuat (urut saran, Admin)
+1. Halaman "Periode tagihan": periode terbuka (jumlah struk, total, rincian per karyawan), tombol **Tutup periode** (dengan konfirmasi), ubah tanggal gaji.
+2. Dari periode tertutup: tombol **Buat invoice**, lalu tampilan invoice (per karyawan, total, PPN) siap cetak (data cetak sudah lengkap di respons).
+3. Tombol **Terbitkan** → **Serahkan ke HRD** → **Catat pembayaran** (riwayat pembayaran, sisa tagihan).
+
+### ASUMSI dan batasan
+- Pembayaran HRD boleh sebagian (ASUMSI lama).
+- Invoice draft belum bisa dibatalkan/dibuat ulang; koreksi invoice dan credit note masuk Paket 2.
+- Periode berikutnya dibuka otomatis saat tutup (label default "Periode tanggal-buka"; ubah lewat PATCH).
+- Jika struk kredit tercatat tepat saat periode ditutup, struk itu masuk periode berikutnya (tidak hilang).
+
 ## Perubahan lain yang memengaruhi frontend
-- `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, dan `routes/api/pos.php`; URL lama tidak berubah.
+- `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-24 (4)** — WS-E: Tagihan HRD — periode (buka/ubah/tutup), invoice gabungan per periode dengan rincian per karyawan dan PPN opsional, terbit/serah ke HRD, pembayaran HRD (boleh sebagian). Status: 🟡 menunggu test (`BillingTest`).
+- **2026-10-24 (uji 2)** — Pengguna menjalankan seluruh suite: **174 test lulus (1.333 assertion)**. Bagian 7 (setoran, endapan, void) kini ✅. Tagihan HRD belum ada kode di repo (percobaan sebelumnya terputus).
 - **2026-10-24 (3)** — WS-D lanjutan: kebijakan endapan berversi, setoran akhir (otomatis saat tutup shift) dan parsial, penerimaan Finance + selisih/koreksi, saldo dana dari ledger; void penjualan (Admin). `ShiftService` kini memanggil `CashDepositService` (respons tutup shift menambah `deposit`/`float_flags`). Status: 🟡 menunggu test (`CashDepositTest`, `SaleVoidTest`).
 - **2026-10-24 (uji)** — Pengguna menjalankan seluruh suite: **154 test lulus (1.080 assertion)**. Semua bagian 1–6 berstatus ✅.
 - **2026-10-24** — WS-C: pembelian lengkap — PR (draft, ajukan, periksa Finance, persetujuan Owner dengan autentikasi ulang, tanda swa-persetujuan), PO (dari PR, otomatis/konfirmasi Owner, kirim, batal, tutup), penerimaan barang (posting menambah stok lewat `InventoryService::receive`, selisih/rusak, verifikasi surat jalan + faktur). Status: ✅ lulus test (24 Okt 2026).

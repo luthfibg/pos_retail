@@ -33,12 +33,12 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Transfer antar posisi, adjustment, opname | Belum (tabel ada) | — |
 | Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Selesai | **Lolos** test (24 Okt 2026) |
 | PR → pemeriksaan Finance → persetujuan Owner (re-auth) → PO (otomatis/konfirmasi) | Selesai | **Lolos** test (24 Okt 2026) |
-| Setoran kasir + kebijakan endapan (parsial/final, penerimaan Finance, selisih/koreksi, saldo dana) dan void penjualan | Kode + test selesai | **BELUM dijalankan** |
+| Setoran kasir + kebijakan endapan (parsial/final, penerimaan Finance, selisih/koreksi, saldo dana) dan void penjualan | Selesai | **Lolos** test (24 Okt 2026) |
 | POS (shift, penjualan, struk, void), setoran/endapan | Belum (tabel ada) | — |
-| Periode tagihan + invoice HRD | Belum (tabel ada) | — |
+| Periode tagihan + invoice HRD + pembayaran HRD | Kode + test selesai | **BELUM dijalankan** |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
-**Penting:** kode backend ditulis tanpa dapat dijalankan di lingkungan penyusun (tidak ada PHP). Yang bertanda "Lolos" sudah dijalankan pengguna (terakhir 24 Okt 2026: 154 test lulus). Kode baru berikutnya harus diperlakukan sama: tandai "belum dijalankan" sampai pengguna menjalankan `php artisan test`.
+**Penting:** kode backend ditulis tanpa dapat dijalankan di lingkungan penyusun (tidak ada PHP). Yang bertanda "Lolos" sudah dijalankan pengguna (terakhir 24 Okt 2026: 174 test lulus). Kode baru berikutnya harus diperlakukan sama: tandai "belum dijalankan" sampai pengguna menjalankan `php artisan test`.
 
 ---
 
@@ -197,5 +197,5 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 1. ~~Verifikasi test master data~~ — **sudah lolos**.
 2. ~~`git init`, commit baseline, cabang per workstream~~ — **sudah** (root `pos_retail`: backend, frontend, docs).
-3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Pengguna menjalankan `php artisan test` untuk WS-A/WS-B. WS-D (shift + penjualan) dan WS-C (PR→PO→penerimaan) sudah ditulis dan **menunggu `php artisan test`**. **Berikutnya:** void + setoran/endapan, lalu tagihan HRD (WS-E). Peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
+3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Pengguna menjalankan `php artisan test` untuk WS-A/WS-B. WS-D (shift, penjualan, void, setoran/endapan) dan WS-C (PR→PO→penerimaan) **lolos test (174, 24 Okt 2026)**. Tagihan HRD (WS-E) sudah ditulis (24 Okt 2026) dan **menunggu `php artisan test`** (`BillingTest`). **Berikutnya:** kas masuk/keluar lain (3.6), pengaturan diskon/PPN (3.7), adjustment/opname + transfer. Peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
 4. Mulai paralel: WS-B dan WS-A (backend), WS-F scaffold (frontend).
