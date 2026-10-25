@@ -427,9 +427,9 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 
 ---
 
-## 8. Tagihan HRD 🟡
+## 8. Tagihan HRD ✅
 
-> Status: kode + test (`BillingTest` 10) sudah ditulis, **belum dijalankan**. Seluruhnya **Admin** (Kasir 403). Tidak ada migration/permission baru.
+> Status: ✅ lulus `php artisan test` (25 Okt 2026; `BillingTest` 10, total suite 184). Seluruhnya **Admin** (Kasir 403). Tidak ada migration/permission baru.
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
@@ -464,11 +464,30 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 - Periode berikutnya dibuka otomatis saat tutup (label default "Periode tanggal-buka"; ubah lewat PATCH).
 - Jika struk kredit tercatat tepat saat periode ditutup, struk itu masuk periode berikutnya (tidak hilang).
 
+## 9. Pengaturan Diskon dan PPN 🟡
+
+> Status: kode + test (`PricingSettingsTest` 6) sudah ditulis, **belum dijalankan**. Admin saja (Kasir 403). Tidak ada migration/permission baru.
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/discounts?target_type=&active_only=1&per_page=` | `discount.manage` | Daftar diskon (terbaru dulu) |
+| GET | `/api/discounts/{id}` | `discount.manage` | Detail |
+| POST | `/api/discounts` | `discount.manage` | Buat: `name`, `target_type` (`product`/`category`), `target_id`, `discount_type` (`percent`/`amount`), `value`, `starts_at?`, `ends_at?` |
+| PATCH | `/api/discounts/{id}` | `discount.manage` | Ubah `name`, `discount_type`, `value`, `starts_at`, `ends_at`, `is_active`. Target tidak dapat diubah (422) |
+| GET | `/api/settings/vat` | `settings.manage` | `{ enabled, rate, price_includes_tax, effective_from }` |
+| PUT | `/api/settings/vat` | `settings.manage` | `{ enabled, rate?, price_includes_tax? }`; `rate` dan `price_includes_tax` wajib bila `enabled` true |
+
+- Diskon: tanggal `YYYY-MM-DD` (WIB); mulai = awal hari, berakhir = akhir hari; `starts_at` kosong = mulai sekarang. `value` > 0, maks 2 desimal; persen ≤ 100. Respons memuat `target_name` dan `status` (`active` · `scheduled` · `expired` · `inactive`; tampilkan sebagai teks, bukan hanya warna). Tidak ada hapus; nonaktifkan lewat `is_active`. Di kasir, diskon terbaik yang sedang berlaku dipilih otomatis (produk vs kategori).
+- PPN: default nonaktif. Mengaktifkan wajib mengisi tarif (0–100, 2 desimal) dan "harga sudah termasuk PPN". Perubahan tarif/mode membuat versi baru yang berlaku mulai hari ini (WIB); nilai yang sama tidak membuat versi baru; menonaktifkan tidak menghapus riwayat tarif. PPN aktif tapi konfigurasi tidak lengkap membuat penjualan tunai dan pembuatan invoice ditolak (R-04: tarif/PKP menunggu klien).
+- Layar yang bisa dibuat (Admin): daftar + form diskon (pilih produk/kategori, jenis, nilai, tanggal, aktif/nonaktif) dan halaman pengaturan PPN.
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-25 (2)** — WS-F: pengaturan diskon (CRUD, Admin) dan PPN (saklar + tarif berversi). Status: 🟡 menunggu test (`PricingSettingsTest`).
+- **2026-10-25** — Seluruh suite dijalankan pengguna: **184 test lulus**. Bagian 8 (Tagihan HRD) kini ✅.
 - **2026-10-24 (4)** — WS-E: Tagihan HRD — periode (buka/ubah/tutup), invoice gabungan per periode dengan rincian per karyawan dan PPN opsional, terbit/serah ke HRD, pembayaran HRD (boleh sebagian). Status: 🟡 menunggu test (`BillingTest`).
 - **2026-10-24 (uji 2)** — Pengguna menjalankan seluruh suite: **174 test lulus (1.333 assertion)**. Bagian 7 (setoran, endapan, void) kini ✅. Tagihan HRD belum ada kode di repo (percobaan sebelumnya terputus).
 - **2026-10-24 (3)** — WS-D lanjutan: kebijakan endapan berversi, setoran akhir (otomatis saat tutup shift) dan parsial, penerimaan Finance + selisih/koreksi, saldo dana dari ledger; void penjualan (Admin). `ShiftService` kini memanggil `CashDepositService` (respons tutup shift menambah `deposit`/`float_flags`). Status: 🟡 menunggu test (`CashDepositTest`, `SaleVoidTest`).

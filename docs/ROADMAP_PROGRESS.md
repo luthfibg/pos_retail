@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 24 Oktober 2026 (test terakhir dijalankan: **174 lulus, 1.333 assertion**; Tagihan HRD baru ditulis, 10 test menunggu) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 24 Oktober 2026 (test terakhir dijalankan: **184 lulus**; pengaturan diskon dan PPN baru ditulis, 6 test menunggu) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
@@ -13,23 +13,23 @@
 
 ## 1. Posisi saat ini
 
-**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 34 tahap — 21 ✅ selesai dan lulus test · 3 🟡 kode selesai, menunggu test (Tagihan HRD) · 10 ⏳ belum.**
+**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 34 tahap — 24 ✅ selesai dan lulus test · 1 🟡 kode selesai, menunggu test (3.7) · 9 ⏳ belum.**
 
 | Fase | ✅ | 🟡 | ⏳ | ⏸ |
 |---|---|---|---|---|
 | Fase 0 — Analisis & desain | 2 | 0 | 0 | 0 |
 | Fase 1 — Fondasi backend (tahap 1a–1c) | 7 | 0 | 0 | 0 |
 | Fase 2 — Inventory & karyawan | 4 | 0 | 3 | 0 |
-| Fase 3 — POS & kas | 5 | 0 | 2 | 1 |
+| Fase 3 — POS & kas | 5 | 1 | 1 | 1 |
 | Fase 4 — Pembelian | 3 | 0 | 2 | 0 |
-| Fase 5 — Tagihan HRD | 0 | 3 | 0 | 0 |
+| Fase 5 — Tagihan HRD | 3 | 0 | 0 | 0 |
 | Fase 6 — Cetak, laporan, dashboard | 0 | 0 | 3 | 0 |
 | Fase 7 — Hardening & UAT | 0 | 0 | 5 | 0 |
 | Fase 8 — Cut-over & go-live | 0 | 0 | 3 | 1 |
 | Di luar Paket 1 (setelah go-live) | 0 | 0 | 0 | 2 |
-| **Total semua fase** | **21** | **3** | **18** | **4** |
+| **Total semua fase** | **24** | **1** | **17** | **4** |
 
-### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test` 24 Okt 2026; 🟡 = ditulis, menunggu test)
+### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test` 24 Okt 2026)
 
 - **Masuk dan hak akses:** login/logout, role Admin dan Kasir, izin yang bisa didelegasikan, persetujuan dengan mengetik ulang password pemberi persetujuan. ✅
 - **Master data:** kategori, supplier, produk (harga + riwayat harga, barcode otomatis, status stok). ✅
@@ -39,7 +39,9 @@
 - **Kas dan koreksi:** kebijakan endapan (tetap/persen, min/maks, pembulatan ke bawah), setoran akhir shift dan setoran parsial tengah shift, Finance menghitung ulang dan menerima (selisih → koreksi), saldo Kas Kecil/Kas Besar dari ledger, void penjualan oleh Admin (stok kembali, kas/kredit dikoreksi). ✅
 - **Pembelian:** PR → pemeriksaan Finance → persetujuan Owner → PO → kirim → penerimaan barang (stok bertambah, HPP rata-rata), verifikasi surat jalan/faktur. ✅
 
-- **Tagihan HRD:** Admin membuka/menutup periode tagihan pada hari gaji (struk kredit terikat, periode berikutnya terbuka otomatis), membuat satu invoice gabungan per periode dengan rincian per karyawan (PPN kredit bila dikonfigurasi), menerbitkan, menandai diserahkan ke HRD, dan mencatat pembayaran HRD (boleh sebagian). 🟡
+- **Tagihan HRD:** Admin membuka/menutup periode tagihan pada hari gaji (struk kredit terikat, periode berikutnya terbuka otomatis), membuat satu invoice gabungan per periode dengan rincian per karyawan (PPN kredit bila dikonfigurasi), menerbitkan, menandai diserahkan ke HRD, dan mencatat pembayaran HRD (boleh sebagian). ✅
+
+- **Diskon dan PPN:** Admin membuat/mengubah/menonaktifkan diskon per produk atau kategori (persen/nominal, rentang tanggal) dan mengatur saklar PPN dengan tarif berversi, tanpa menyentuh database. 🟡
 
 ### Belum bisa
 
@@ -49,7 +51,8 @@ Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur 
 
 1. ~~Pasang paket WS-C dan jalankan seluruh test~~ — **selesai 24 Okt 2026: 154 lulus.**
 2. ~~Jalankan `php artisan test` untuk void dan setoran/endapan~~ — **selesai 24 Okt 2026: 174 lulus.**
-3. **Jalankan `php artisan test` untuk Tagihan HRD** (tahap 5.1–5.3, kelas `BillingTest`, 10 test). Kontrak di `BACKEND_PROGRESS.md` bagian 8; ubah ke ✅ bila hijau.
+3. ~~Jalankan test Tagihan HRD~~ — **selesai 25 Okt 2026: 184 lulus.**
+3b. **Jalankan `php artisan test` untuk 3.7** (`PricingSettingsTest`, 6 test). Kontrak di `BACKEND_PROGRESS.md` bagian 9.
 4. Kas masuk/keluar lain (3.6) dan pengaturan diskon/PPN lewat layar (3.7).
 5. Adjustment/opname + transfer (2.6–2.7), lalu cetak, dashboard, hardening, UAT (Fase 6–8).
 
@@ -100,7 +103,7 @@ Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur 
 | 3.4 | Void / pembatalan penjualan: Admin, stok kembali ke batch asal, kredit hanya bila belum ditagih, tunai hanya selama shift struk masih open | ✅ | SaleVoidTest (6) |
 | 3.5 | Setoran dan endapan (parsial / final), kebijakan endapan berversi, penerimaan Finance, selisih/koreksi, saldo dana. Usulan endapan Kasir (`float_proposals`) belum | ✅ | CashDepositTest (14) |
 | 3.6 | Kas masuk / keluar lain (`cash_movements`) | ⏳ |  |
-| 3.7 | Pengaturan diskon dan PPN lewat API/UI (saat ini diisi langsung ke tabel `discounts` / `settings`) | ⏳ |  |
+| 3.7 | Pengaturan diskon dan PPN lewat API (Admin): CRUD diskon + saklar/tarif PPN berversi | 🟡 | PricingSettingsTest |
 | 3.8 | Retur pelanggan dan credit note | ⏸ | Paket 2 |
 
 ### Fase 4 — Pembelian
@@ -117,9 +120,9 @@ Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur 
 
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
-| 5.1 | Periode tagihan: buka / ubah jadwal / tutup periode (struk kredit terikat, periode berikutnya terbuka otomatis) | 🟡 | BillingTest |
-| 5.2 | Invoice gabungan ke HRD + rincian per karyawan (PPN kredit dihitung saat invoice); terbit, serah ke HRD | 🟡 | BillingTest |
-| 5.3 | Catat pembayaran HRD (potong gaji), boleh sebagian | 🟡 | BillingTest |
+| 5.1 | Periode tagihan: buka / ubah jadwal / tutup periode (struk kredit terikat, periode berikutnya terbuka otomatis) | ✅ | BillingTest |
+| 5.2 | Invoice gabungan ke HRD + rincian per karyawan (PPN kredit dihitung saat invoice); terbit, serah ke HRD | ✅ | BillingTest |
+| 5.3 | Catat pembayaran HRD (potong gaji), boleh sebagian | ✅ | BillingTest |
 
 ### Fase 6 — Cetak, laporan, dashboard
 
@@ -166,8 +169,9 @@ Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur 
 | ShiftTest, SaleTest | 7 · 17 | ✅ | pengguna (24 Okt 2026) |
 | PurchaseRequisitionTest, PurchaseOrderTest, GoodsReceiptTest (+ `tests/Concerns/BuildsPurchasing.php`) | 11 · 10 · 11 | ✅ | pengguna (24 Okt 2026) |
 | SaleVoidTest, CashDepositTest | 6 · 14 | ✅ | pengguna (24 Okt 2026) |
-| BillingTest | 10 | 🟡 | menunggu pengguna |
-| **Total saat ini (23 kelas)** | **184** — 174 sudah lulus (1.333 assertion, ±133 dtk), 10 baru menunggu | 🟡 | |
+| BillingTest | 10 | ✅ | pengguna (25 Okt 2026) |
+| PricingSettingsTest | 6 | 🟡 | menunggu pengguna |
+| **Total saat ini (24 kelas)** | **190** — 184 lulus, 6 baru menunggu | 🟡 | |
 
 Catatan verifikasi: daftar keluaran yang ditempel menampilkan 152 baris test (dua test SaleTest — diskon terbaik produk/kategori dan PPN eksklusif — tidak tampil), tetapi ringkasan akhirnya "154 passed" sama dengan jumlah seluruh metode `test_*` di kode (154), jadi semuanya lulus. Test terlama: login (±63 dtk pada pemanggilan pertama, hashing password); sisanya di bawah 5 dtk.
 
@@ -189,7 +193,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 | Penjualan (POS) | 5 | ✅ | belum ada folder |
 | **Pembelian (PR, PO, penerimaan)** | **6** | ✅ | belum ada folder |
 | Setoran, endapan, void | 7 | ✅ | belum ada folder |
-| **Tagihan HRD (periode, invoice, pembayaran)** | **8** | 🟡 | belum ada folder |
+| Tagihan HRD (periode, invoice, pembayaran) | 8 | ✅ | belum ada folder |
 
 Folder UI dibaca dari struktur `frontend/src/features/` pada zip; **isi layarnya belum saya tinjau**.
 

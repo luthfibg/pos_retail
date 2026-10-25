@@ -35,7 +35,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | PR → pemeriksaan Finance → persetujuan Owner (re-auth) → PO (otomatis/konfirmasi) | Selesai | **Lolos** test (24 Okt 2026) |
 | Setoran kasir + kebijakan endapan (parsial/final, penerimaan Finance, selisih/koreksi, saldo dana) dan void penjualan | Selesai | **Lolos** test (24 Okt 2026) |
 | POS (shift, penjualan, struk, void), setoran/endapan | Belum (tabel ada) | — |
-| Periode tagihan + invoice HRD + pembayaran HRD | Kode + test selesai | **BELUM dijalankan** |
+| Periode tagihan + invoice HRD + pembayaran HRD | Selesai | **Lolos** test (25 Okt 2026) |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
 **Penting:** kode backend ditulis tanpa dapat dijalankan di lingkungan penyusun (tidak ada PHP). Yang bertanda "Lolos" sudah dijalankan pengguna (terakhir 24 Okt 2026: 174 test lulus). Kode baru berikutnya harus diperlakukan sama: tandai "belum dijalankan" sampai pengguna menjalankan `php artisan test`.
@@ -197,5 +197,5 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 1. ~~Verifikasi test master data~~ — **sudah lolos**.
 2. ~~`git init`, commit baseline, cabang per workstream~~ — **sudah** (root `pos_retail`: backend, frontend, docs).
-3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Pengguna menjalankan `php artisan test` untuk WS-A/WS-B. WS-D (shift, penjualan, void, setoran/endapan) dan WS-C (PR→PO→penerimaan) **lolos test (174, 24 Okt 2026)**. Tagihan HRD (WS-E) sudah ditulis (24 Okt 2026) dan **menunggu `php artisan test`** (`BillingTest`). **Berikutnya:** kas masuk/keluar lain (3.6), pengaturan diskon/PPN (3.7), adjustment/opname + transfer. Peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
+3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Pengguna menjalankan `php artisan test` untuk WS-A/WS-B. WS-D (shift, penjualan, void, setoran/endapan) dan WS-C (PR→PO→penerimaan) **lolos test (174, 24 Okt 2026)**. Tagihan HRD (WS-E) **lolos test (184, 25 Okt 2026)**. Pengaturan diskon dan PPN (3.7) sudah ditulis dan **menunggu `php artisan test`** (`PricingSettingsTest`). **Berikutnya:** kas masuk/keluar lain (3.6), manajemen pengguna, adjustment/opname + transfer. Peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
 4. Mulai paralel: WS-B dan WS-A (backend), WS-F scaffold (frontend).
