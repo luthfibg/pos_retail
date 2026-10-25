@@ -232,6 +232,18 @@ export type NotificationList = Paginated<AppNotification> & { unread_count: numb
 
 export type ShiftStatus = 'open' | 'counting' | 'closed' | 'reviewed';
 
+export type FloatFlag = 'no_policy' | 'below_minimum' | 'nothing_to_deposit';
+export type DepositStatus = 'draft' | 'submitted' | 'received' | 'discrepancy' | 'corrected';
+
+/** Setoran akhir shift (kind=final). Dibuat otomatis saat tutup shift bila ada yang harus disetor. */
+export interface ShiftDeposit {
+  id: number;
+  doc_number: string;
+  status: DepositStatus;
+  deposit_amount: Decimal;
+  float_kept: Decimal;
+}
+
 export interface ShiftSummary {
   cash_sales_count: number;
   cash_sales_total: Decimal;
@@ -239,6 +251,8 @@ export interface ShiftSummary {
   credit_sales_total: Decimal;
   cash_in: Decimal;
   cash_out: Decimal;
+  /** Setoran parsial yang sudah diserahkan; mengurangi kas diharapkan. */
+  partial_deposits: Decimal;
 }
 
 /**
@@ -262,4 +276,142 @@ export interface Shift {
   variance_note: string | null;
   float_kept: Decimal | null;
   reviewed_at: string | null;
+  /** Setoran akhir (null bila belum ada / tidak ada yang disetor). Shift berikutnya baru bisa dibuka setelah status bukan `draft`. */
+  deposit: ShiftDeposit | null;
+  /** Hanya pada respons `POST /shifts/{id}/close`. */
+  float_flags?: FloatFlag[];
+}
+
+// ---------------------------------------------------------------- penjualan (POS)
+
+export type PaymentMode = 'cash' | 'payroll_credit';
+export type SaleStatus = 'posted' | 'voided';
+export type BillingStatus = 'not_applicable' | 'unbilled' | 'invoiced' | 'paid';
+
+export interface SaleItemInput {
+  product_id: number;
+  qty: Decimal;
+}
+
+/** Diketik Admin sendiri di dialog; jangan pernah disimpan di state yang bertahan. */
+export interface CreditExceptionInput {
+  approver_username: string;
+  approver_password: string;
+  note: string;
+}
+
+/** `idempotency_key` (UUID) ada di BODY, bukan header. Satu kunci per keranjang. */
+export interface SaleInput {
+  idempotency_key: string;
+  payment_mode: PaymentMode;
+  customer_id?: number | null;
+  amount_tendered?: Decimal;
+  credit_exception?: CreditExceptionInput;
+  items: SaleItemInput[];
+}
+
+export interface SaleLine {
+  id: number;
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  qty: Decimal;
+  unit_price: Decimal;
+  discount_amount: Decimal;
+  line_total: Decimal;
+}
+
+export interface SalePayment {
+  method: 'cash';
+  amount_tendered: Decimal;
+  change_given: Decimal;
+  amount_applied: Decimal;
+}
+
+export interface SaleReceiptInfo {
+  store_name: string | null;
+  is_copy: boolean;
+  copy_label: string | null;
+  note: string | null;
+  is_void: boolean;
+  void_label: string | null;
+}
+
+/** Bentuk baris pada `GET /sales` (tanpa item). */
+export interface SaleSummary {
+  id: number;
+  doc_number: string;
+  shift_id: number;
+  cashier_id: number;
+  cashier_name: string | null;
+  customer_id: number | null;
+  customer_name: string | null;
+  customer_no: string | null;
+  payment_mode: PaymentMode;
+  subtotal: Decimal;
+  discount_total: Decimal;
+  tax_rate: Decimal | null;
+  tax_amount: Decimal;
+  total: Decimal;
+  status: SaleStatus;
+  billing_status: BillingStatus;
+  over_limit: boolean;
+  posted_at: string | null; // UTC
+}
+
+/** Struk lengkap (`POST /sales`, `GET /sales/{id}`, reprint, void). */
+export interface Sale extends SaleSummary {
+  items: SaleLine[];
+  payment: SalePayment | null;
+  receipt: SaleReceiptInfo;
+}
+
+/** 201 = struk baru; 200 + `replayed: true` = permintaan ulang dengan kunci yang sama (struk lama, tidak ganda). */
+export interface PostSaleResponse {
+  data: Sale;
+  replayed: boolean;
+}
+
+// ---- KONTRAK DIUSULKAN (docs/FRONTEND_REQUESTS.md FR-01). Belum ada di backend sampai statusnya Selesai.
+
+export interface SalePreviewInput {
+  payment_mode: PaymentMode;
+  customer_id?: number | null;
+  items: SaleItemInput[];
+}
+
+export interface SalePreviewLine {
+  index: number;
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  qty: Decimal;
+  unit_price: Decimal;
+  gross: Decimal;
+  discount_amount: Decimal;
+  discount_name: string | null;
+  line_total: Decimal;
+  stock_available: Decimal;
+  stock_sufficient: boolean;
+}
+
+export interface SalePreviewCredit {
+  customer_id: number;
+  remaining_before: Decimal;
+  remaining_after: Decimal;
+  exceeds_limit: boolean;
+}
+
+export interface SalePreview {
+  payment_mode: PaymentMode;
+  lines: SalePreviewLine[];
+  subtotal: Decimal;
+  discount_total: Decimal;
+  tax_rate: Decimal | null;
+  tax_amount: Decimal;
+  total: Decimal;
+  credit: SalePreviewCredit | null;
+  computed_at: string; // UTC
 }

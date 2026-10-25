@@ -2,6 +2,7 @@ import { api } from './client';
 import type {
   Category, CategoryInput, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
+  PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
 } from './types';
 
 export const authApi = {
@@ -116,4 +117,34 @@ export const shiftApi = {
   review: (id: number, input: { note?: string }) =>
     api<{ data: Shift }>(`/shifts/${id}/review`, { method: 'POST', body: input }).then((r) => r.data),
   list: (f: ShiftFilters = {}) => api<Paginated<Shift>>('/shifts', { query: { ...f } }),
+};
+
+export interface SaleFilters {
+  q?: string; // awalan nomor struk
+  shift_id?: number;
+  customer_id?: number;
+  status?: SaleStatus;
+  payment_mode?: PaymentMode;
+  date_from?: string; // YYYY-MM-DD (WIB)
+  date_to?: string;
+  page?: number;
+  per_page?: number;
+}
+
+export const saleApi = {
+  /**
+   * Posting penjualan. `idempotency_key` ada di BODY (bukan header) dan dibuat sekali per keranjang;
+   * kirim ulang kunci yang SAMA bila hasil tidak diketahui (jaringan putus). 201 = baru, 200 + replayed = ulangan.
+   */
+  post: (input: SaleInput) => api<PostSaleResponse>('/sales', { method: 'POST', body: input }),
+  list: (f: SaleFilters = {}) => api<Paginated<SaleSummary>>('/sales', { query: { ...f } }),
+  get: (id: number) => api<{ data: Sale }>(`/sales/${id}`).then((r) => r.data),
+  /** Struk sama dengan receipt.is_copy = true (SALINAN); tercatat di log cetak. */
+  reprint: (id: number) => api<{ data: Sale }>(`/sales/${id}/reprint`, { method: 'POST' }).then((r) => r.data),
+  /** Admin saja (sales.void). Alasan wajib. */
+  void: (id: number, reason: string) =>
+    api<{ data: Sale }>(`/sales/${id}/void`, { method: 'POST', body: { reason } }).then((r) => r.data),
+  /** FR-01: belum ada di backend sampai statusnya Selesai (docs/FRONTEND_REQUESTS.md). Hanya-baca. */
+  preview: (input: SalePreviewInput, signal?: AbortSignal) =>
+    api<{ data: SalePreview }>('/sales/preview', { method: 'POST', body: input, signal }).then((r) => r.data),
 };

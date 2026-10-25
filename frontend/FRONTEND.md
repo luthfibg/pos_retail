@@ -23,6 +23,7 @@ Backend harus jalan (`php artisan serve`). Login memakai akun hasil `php artisan
 2. Semua request `Accept: application/json` (sudah di `api()`).
 3. Permission di UI hanya untuk menyembunyikan menu/tombol; validasi sebenarnya di backend (tangani 403/422).
 4. Respons: sukses `{data}`, paginasi Laravel, 422 `{message, errors}`.
-5. Posting transaksi (penjualan, setoran) wajib cegah klik ganda; siapkan header `Idempotency-Key` bila backend menyediakannya.
+5. Posting transaksi (penjualan, setoran) wajib cegah klik ganda. Penjualan memakai `idempotency_key` (UUID) di **body**, dibuat sekali per keranjang dan dikirim ulang apa adanya bila hasil tidak diketahui (bukan header).
 6. Tambah endpoint baru: tipe di `types.ts` → fungsi di `endpoints.ts` → hook/layar di `features/`.
 7. Status stok memakai `stock_status` dari backend; jangan hitung ulang di klien.
+8. Kebutuhan yang belum dipenuhi kontrak API ditulis di `docs/FRONTEND_REQUESTS.md` untuk agent backend; jangan menghitung ulang aturan bisnis (harga, diskon, PPN) di klien sebagai gantinya. `src/lib/money.ts` (bilangan bulat, tanpa float) hanya untuk tampilan dan validasi.

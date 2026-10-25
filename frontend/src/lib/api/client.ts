@@ -38,7 +38,7 @@ interface RequestOptions {
   query?: Query;
   body?: unknown;
   signal?: AbortSignal;
-  /** Header tambahan, mis. Idempotency-Key untuk posting transaksi. */
+  /** Header tambahan. (Kunci idempotensi penjualan dikirim di body `idempotency_key`, bukan header.) */
   headers?: Record<string, string>;
 }
 

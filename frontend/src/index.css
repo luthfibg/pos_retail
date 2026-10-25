@@ -9,4 +9,6 @@ body { @apply bg-slate-50 text-slate-900 antialiased; }
 
 @media print {
   .no-print { display: none !important; }
+  body { background: white; }
+  .receipt { border: 0 !important; max-width: none !important; }
 }
