@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 26 Oktober 2026 · **Test terbaru:** `php artisan test` — **200 lulus (1.729 assertions)** · **Dikerjakan:** WS-B (Inventory inti), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 26 Oktober 2026 · **Test terbaru:** `php artisan test` — **204 lulus (1.764 assertions)** · **Dikerjakan:** WS-B (Inventory inti), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan pengguna dan hijau (terakhir 26 Okt 2026: 200 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 26 Okt 2026: 204 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -427,6 +427,28 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 
 ---
 
+### 7.4 Kas masuk/keluar nonpenjualan ✅
+
+> Status: ✅ `CashMovementTest` 4 lulus; seluruh suite 204 test (1.764 assertions) lulus pada 26 Okt 2026. Tidak ada migration; ditambahkan permission `cash_movement.create`. Untuk database yang sudah ada, jalankan `php artisan db:seed --class=PermissionSeeder` agar permission baru diberikan ke role sistem.
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/shifts/{id}/cash-movements?per_page=` | `cash_movement.create` | Daftar pergerakan kas shift, terbaru dulu; Kasir hanya shift sendiri, Admin semua |
+| POST | `/api/shifts/{id}/cash-movements` | `cash_movement.create` | Catat kas masuk/keluar nonpenjualan pada shift aktif |
+
+Permintaan:
+```json
+{ "type": "in", "amount": "50000", "reason": "Tambahan modal" }
+```
+- `type`: `in` atau `out`; `amount` wajib positif, maksimal 2 desimal; `reason` wajib (maks. 255 karakter).
+- Kasir hanya dapat menulis dan melihat pergerakan pada shift sendiri; Admin (pemegang `shift.review`) dapat mengelola shift mana pun. Shift harus berstatus `open`; saat mulai hitung atau setelah ditutup, pencatatan ditolak dengan 422 `status`.
+- Satu transaksi atomik membuat `cash_movements`, entri ledger Kas Kecil (`cash_movement_in` positif / `cash_movement_out` negatif), dan audit `cash_movement.create`. Jumlah tampil sebagai string desimal.
+- Respons item: `id, shift_id, type, amount, reason, created_by, created_by_name, created_at`. Daftar berpaginasi dengan bentuk Laravel standar.
+- Kas masuk/keluar masuk dalam perhitungan kas yang diharapkan saat tutup shift. Tidak ada operasi hapus/koreksi; bila salah, koreksi lewat pencatatan kas berlawanan dengan keterangan yang menjelaskan.
+
+### Layar yang bisa dibuat
+Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan daftar riwayat pergerakan kas; setelah pencatatan, muat ulang ringkasan shift. Tangani 403/404/422 mengikuti konvensi umum.
+
 ## 8. Tagihan HRD ✅
 
 > Status: ✅ lulus `php artisan test` (25 Okt 2026; `BillingTest` 10, total suite 184). Seluruhnya **Admin** (Kasir 403). Tidak ada migration/permission baru.
@@ -507,6 +529,7 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-26** — Tahap 3.6 (kas masuk/keluar nonpenjualan) ditambahkan: API pencatatan dan riwayat per shift, pembatasan akses pemilik shift, update ledger Kas Kecil, dan audit. **204 test lulus (1.764 assertions)**; bagian 7.4 kini ✅.
 - **2026-10-26** — Pengguna menjalankan seluruh suite: **200 test lulus (1.729 assertions)**. Bagian 10 (Manajemen Pengguna) kini ✅.
 - **2026-10-25 (4)** — WS-G: manajemen pengguna (CRUD, aktif/nonaktif, reset sandi, ganti sandi sendiri). Status: 🟡 menunggu test (`UserManagementTest`).
 - **2026-10-25 (3)** — Suite dijalankan pengguna: **190 test lulus**. Bagian 9 (diskon dan PPN) kini ✅.

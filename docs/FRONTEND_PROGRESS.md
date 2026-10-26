@@ -56,6 +56,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 
 | Modul | Bagian | Status | Isi layar yang bisa dibuat |
 |---|---|---|---|
+| Kas masuk/keluar nonpenjualan | 7.4 | ⏳ | Form kas masuk/keluar dan riwayat pada shift aktif; backend sudah tersedia di `BACKEND_PROGRESS.md` |
 | Penyerahan setoran akhir (Kasir) | 7.1 | ✅ | Hasil tutup shift menampilkan nilai setoran/endapan/flag, serahkan setoran Draft, pulihkan setoran Draft setelah reload, dan tahan buka shift baru sampai setoran diserahkan |
 | Fitur setoran/endapan lainnya | 7.1 | ⏳ | Setoran parsial; Admin: kebijakan endapan; Finance/Admin: antrean setoran masuk (terima/selisih/koreksi) dan saldo Kas Kecil/Besar |
 | Riwayat penjualan | 5, 7.2 | ⏳ | Daftar + filter, detail, **cetak ulang SALINAN**, **void** (Admin) |

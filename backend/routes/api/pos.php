@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CashDepositController;
+use App\Http\Controllers\CashMovementController;
 use App\Http\Controllers\FloatPolicyController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ShiftController;
@@ -16,6 +17,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('shifts/{shift}/start-count', [ShiftController::class, 'startCount'])->whereNumber('shift')->middleware('can:shift.close');
     Route::post('shifts/{shift}/close', [ShiftController::class, 'close'])->whereNumber('shift')->middleware('can:shift.close');
     Route::post('shifts/{shift}/review', [ShiftController::class, 'review'])->whereNumber('shift')->middleware('can:shift.review');
+    Route::get('shifts/{shift}/cash-movements', [CashMovementController::class, 'index'])
+        ->whereNumber('shift')->middleware('can:cash_movement.create');
+    Route::post('shifts/{shift}/cash-movements', [CashMovementController::class, 'store'])
+        ->whereNumber('shift')->middleware('can:cash_movement.create');
 
     // Penjualan. Kasir hanya melihat struknya sendiri; Admin (shift.review) melihat semua.
     Route::post('sales', [SaleController::class, 'store'])->middleware('can:sales.create');
