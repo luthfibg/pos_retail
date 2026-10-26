@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 24 Oktober 2026 (test terakhir dijalankan: **190 lulus**, termasuk pengaturan diskon dan PPN: 190 lulus) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 26 Oktober 2026 (test terakhir dijalankan: **200 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
@@ -13,12 +13,12 @@
 
 ## 1. Posisi saat ini
 
-**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 35 tahap — 25 ✅ selesai dan lulus test · 1 🟡 kode selesai, menunggu test (1.8 manajemen pengguna) · 9 ⏳ belum.**
+**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 35 tahap — 26 ✅ selesai dan lulus test · 0 🟡 menunggu test · 9 ⏳ belum.**
 
 | Fase | ✅ | 🟡 | ⏳ | ⏸ |
 |---|---|---|---|---|
 | Fase 0 — Analisis & desain | 2 | 0 | 0 | 0 |
-| Fase 1 — Fondasi backend (tahap 1a–1c) | 7 | 1 | 0 | 0 |
+| Fase 1 — Fondasi backend (tahap 1a–1c) | 8 | 0 | 0 | 0 |
 | Fase 2 — Inventory & karyawan | 4 | 0 | 3 | 0 |
 | Fase 3 — POS & kas | 6 | 0 | 1 | 1 |
 | Fase 4 — Pembelian | 3 | 0 | 2 | 0 |
@@ -27,9 +27,9 @@
 | Fase 7 — Hardening & UAT | 0 | 0 | 5 | 0 |
 | Fase 8 — Cut-over & go-live | 0 | 0 | 3 | 1 |
 | Di luar Paket 1 (setelah go-live) | 0 | 0 | 0 | 2 |
-| **Total semua fase** | **25** | **1** | **17** | **4** |
+| **Total semua fase** | **26** | **0** | **17** | **4** |
 
-### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test` 24 Okt 2026)
+### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test`, terakhir 26 Okt 2026)
 
 - **Masuk dan hak akses:** login/logout, role Admin dan Kasir, izin yang bisa didelegasikan, persetujuan dengan mengetik ulang password pemberi persetujuan. ✅
 - **Master data:** kategori, supplier, produk (harga + riwayat harga, barcode otomatis, status stok). ✅
@@ -41,12 +41,12 @@
 
 - **Tagihan HRD:** Admin membuka/menutup periode tagihan pada hari gaji (struk kredit terikat, periode berikutnya terbuka otomatis), membuat satu invoice gabungan per periode dengan rincian per karyawan (PPN kredit bila dikonfigurasi), menerbitkan, menandai diserahkan ke HRD, dan mencatat pembayaran HRD (boleh sebagian). ✅
 
-- **Manajemen pengguna:** Admin menambah akun Kasir/Admin, mengubah nama/email/role, menonaktifkan/mengaktifkan, dan mereset sandi (sesi lama diakhiri) tanpa menyentuh database; setiap pengguna dapat mengganti sandinya sendiri. 🟡
+- **Manajemen pengguna:** Admin menambah akun Kasir/Admin, mengubah nama/email/role, menonaktifkan/mengaktifkan, dan mereset sandi (sesi lama diakhiri) tanpa menyentuh database; setiap pengguna dapat mengganti sandinya sendiri. ✅
 - **Diskon dan PPN:** Admin membuat/mengubah/menonaktifkan diskon per produk atau kategori (persen/nominal, rentang tanggal) dan mengatur saklar PPN dengan tarif berversi, tanpa menyentuh database. ✅
 
 ### Belum bisa
 
-Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk tunai dari shift yang sudah ditutup · atur diskon dan PPN lewat layar · transfer, adjustment, opname · denah rak · penerimaan ke gudang · cetak struk/invoice · koreksi/pembatalan invoice dan credit note · dashboard dan laporan · lampiran foto surat jalan.
+Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk tunai dari shift yang sudah ditutup · transfer, adjustment, opname · denah rak · penerimaan ke gudang · penyempurnaan cetak thermal 58/80 mm dan cetak invoice · koreksi/pembatalan invoice dan credit note · dashboard dan laporan · lampiran foto surat jalan.
 
 ### Langkah berikutnya (urut)
 
@@ -54,9 +54,9 @@ Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur 
 2. ~~Jalankan `php artisan test` untuk void dan setoran/endapan~~ — **selesai 24 Okt 2026: 174 lulus.**
 3. ~~Jalankan test Tagihan HRD~~ — **selesai 25 Okt 2026: 184 lulus.**
 3b. ~~Jalankan test 3.7~~ — **selesai 25 Okt 2026: 190 lulus.**
-3c. **Jalankan `php artisan test` untuk 1.8** (`UserManagementTest`, 10 test). Kontrak di `BACKEND_PROGRESS.md` bagian 10.
-4. Kas masuk/keluar lain (3.6) dan pengaturan diskon/PPN lewat layar (3.7).
-5. Adjustment/opname + transfer (2.6–2.7), lalu cetak, dashboard, hardening, UAT (Fase 6–8).
+3c. ~~Jalankan `php artisan test` untuk 1.8~~ — **selesai 26 Okt 2026: seluruh 200 test lulus.**
+4. Kas masuk/keluar lain (3.6).
+5. Adjustment/opname + transfer (2.6–2.7), lalu cetak, dashboard, hardening, UAT (Fase 6–8). Sisa layar frontend yang sudah punya kontrak backend dicatat di `FRONTEND_PROGRESS.md`; pengaturan Diskon/PPN sudah dibuat dan test-nya lulus.
 
 **Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → UI adjustment/opname → transfer antar-rak → UI langkah pemeriksaan Finance (jadikan satu tombol Admin) → dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 
@@ -82,7 +82,7 @@ Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur 
 | 1.5 | Master data — kategori | ✅ | CategoryTest |
 | 1.6 | Master data — supplier | ✅ | SupplierTest |
 | 1.7 | Master data — produk (riwayat harga, barcode otomatis, status stok) | ✅ | ProductTest |
-| 1.8 | Manajemen pengguna (Admin): tambah Kasir/Admin, ubah, aktif/nonaktif, reset sandi; ganti sandi sendiri | 🟡 | UserManagementTest |
+| 1.8 | Manajemen pengguna (Admin): tambah Kasir/Admin, ubah, aktif/nonaktif, reset sandi; ganti sandi sendiri | ✅ | UserManagementTest |
 
 ### Fase 2 — Inventory & karyawan
 
@@ -174,10 +174,10 @@ Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur 
 | SaleVoidTest, CashDepositTest | 6 · 14 | ✅ | pengguna (24 Okt 2026) |
 | BillingTest | 10 | ✅ | pengguna (25 Okt 2026) |
 | PricingSettingsTest | 6 | ✅ | pengguna (25 Okt 2026) |
-| UserManagementTest | 10 | 🟡 | menunggu pengguna |
-| **Total saat ini (25 kelas)** | **200** — 190 lulus, 10 baru menunggu | 🟡 | |
+| UserManagementTest | 10 | ✅ | pengguna (26 Okt 2026) |
+| **Total saat ini (25 kelas)** | **200** — 200 lulus | ✅ | pengguna (26 Okt 2026) |
 
-Catatan verifikasi: daftar keluaran yang ditempel menampilkan 152 baris test (dua test SaleTest — diskon terbaik produk/kategori dan PPN eksklusif — tidak tampil), tetapi ringkasan akhirnya "154 passed" sama dengan jumlah seluruh metode `test_*` di kode (154), jadi semuanya lulus. Test terlama: login (±63 dtk pada pemanggilan pertama, hashing password); sisanya di bawah 5 dtk.
+Verifikasi terbaru: pada 26 Okt 2026 pengguna menjalankan `php artisan test`; seluruh 200 test lulus (1.729 assertions, ±96 detik).
 
 Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceiptTest` (satu kelas). Test memakai database `pos_retail_test`; `tests/TestCase.php` menolak berjalan di database yang namanya tidak berakhiran `_test`. Kegagalan paling mungkin: salah ketik nama kolom atau perbedaan format respons kecil — kirim keluaran lengkapnya ke agent yang menulis kodenya.
 

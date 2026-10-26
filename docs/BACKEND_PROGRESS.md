@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 24 Oktober 2026 · **Dikerjakan:** WS-B (Inventory inti), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan), **WS-C (Pembelian: PR → PO → Penerimaan barang) — terbaru**
+**Diperbarui:** 26 Oktober 2026 · **Test terbaru:** `php artisan test` — **200 lulus (1.729 assertions)** · **Dikerjakan:** WS-B (Inventory inti), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan pengguna dan hijau (terakhir 24 Okt 2026: 154 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan pengguna dan hijau (terakhir 26 Okt 2026: 200 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -481,9 +481,9 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 - PPN: default nonaktif. Mengaktifkan wajib mengisi tarif (0–100, 2 desimal) dan "harga sudah termasuk PPN". Perubahan tarif/mode membuat versi baru yang berlaku mulai hari ini (WIB); nilai yang sama tidak membuat versi baru; menonaktifkan tidak menghapus riwayat tarif. PPN aktif tapi konfigurasi tidak lengkap membuat penjualan tunai dan pembuatan invoice ditolak (R-04: tarif/PKP menunggu klien).
 - Layar yang bisa dibuat (Admin): daftar + form diskon (pilih produk/kategori, jenis, nilai, tanggal, aktif/nonaktif) dan halaman pengaturan PPN.
 
-## 10. Manajemen Pengguna 🟡
+## 10. Manajemen Pengguna ✅
 
-> Status: kode + test (`UserManagementTest` 10) sudah ditulis, **belum dijalankan**. Tidak ada migration/permission baru (`user.manage` sudah ada). Role ditentukan oleh `user_roles`, bukan username.
+> Status: **lulus `php artisan test` pada 26 Okt 2026** (`UserManagementTest` 10; seluruh suite 200 test, 1.729 assertions). Tidak ada migration/permission baru (`user.manage` sudah ada). Role ditentukan oleh `user_roles`, bukan username.
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
@@ -507,6 +507,7 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-26** — Pengguna menjalankan seluruh suite: **200 test lulus (1.729 assertions)**. Bagian 10 (Manajemen Pengguna) kini ✅.
 - **2026-10-25 (4)** — WS-G: manajemen pengguna (CRUD, aktif/nonaktif, reset sandi, ganti sandi sendiri). Status: 🟡 menunggu test (`UserManagementTest`).
 - **2026-10-25 (3)** — Suite dijalankan pengguna: **190 test lulus**. Bagian 9 (diskon dan PPN) kini ✅.
 - **2026-10-25 (2)** — WS-F: pengaturan diskon (CRUD, Admin) dan PPN (saklar + tarif berversi). Status: 🟡 menunggu test (`PricingSettingsTest`).

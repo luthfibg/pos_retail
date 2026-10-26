@@ -25,7 +25,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | RBAC: role + override per pengguna, `Gate::before`, `can:<permission>` | Selesai | **Lolos** test |
 | Re-auth persetujuan (`ReauthService`, lockout 5x, penanda self-approval) | Selesai | **Lolos** test |
 | Master data: kategori, supplier, produk (+price_history, barcode otomatis, status stok) | Selesai | **Lolos** test di mesin pengguna |
-| Frontend React + Vite + TypeScript | **Sudah dimulai** oleh pengguna (sedang menyusun CRUD produk) | Belum ditinjau agent ini |
+| Frontend React + Vite + TypeScript | Implementasi berjalan; POS, master data, inventory, pelanggan, shift, Diskon dan PPN sudah tersedia | `npm run typecheck` dan 102 test lulus (26 Okt 2026); lihat `docs/FRONTEND_PROGRESS.md` |
 | Customers (karyawan), verifikasi, batas kredit, notifikasi `customer.limit_needed` | Selesai | **Lolos** test (24 Okt 2026) |
 | Denah rak | Belum | — |
 | Inventory inti: `InventoryService` (saldo/pergerakan/batch/FEFO/anti-negatif/HPP), stok awal, lihat stok, riwayat pergerakan | Selesai | **Lolos** test (24 Okt 2026) |
@@ -34,11 +34,13 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Selesai | **Lolos** test (24 Okt 2026) |
 | PR → pemeriksaan Finance → persetujuan Owner (re-auth) → PO (otomatis/konfirmasi) | Selesai | **Lolos** test (24 Okt 2026) |
 | Setoran kasir + kebijakan endapan (parsial/final, penerimaan Finance, selisih/koreksi, saldo dana) dan void penjualan | Selesai | **Lolos** test (24 Okt 2026) |
-| POS (shift, penjualan, struk, void), setoran/endapan | Belum (tabel ada) | — |
+| Manajemen pengguna (CRUD akun, aktif/nonaktif, reset/ganti sandi) | Selesai | **Lolos** test (`UserManagementTest`, 26 Okt 2026) |
+| Frontend: POS dan pengaturan diskon/PPN | Sudah dibuat | Test frontend lulus; lihat `docs/FRONTEND_PROGRESS.md` |
+| Frontend: setoran/endapan, riwayat penjualan, pembelian, tagihan HRD, manajemen pengguna | Belum lengkap | Backlog frontend; kontrak backend tersedia |
 | Periode tagihan + invoice HRD + pembayaran HRD | Selesai | **Lolos** test (25 Okt 2026) |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
-**Penting:** kode backend ditulis tanpa dapat dijalankan di lingkungan penyusun (tidak ada PHP). Yang bertanda "Lolos" sudah dijalankan pengguna (terakhir 24 Okt 2026: 174 test lulus). Kode baru berikutnya harus diperlakukan sama: tandai "belum dijalankan" sampai pengguna menjalankan `php artisan test`.
+**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai pengguna menjalankan `php artisan test`. Suite terakhir dijalankan pengguna pada 26 Okt 2026: **200 test lulus (1.729 assertions)**.
 
 ---
 
@@ -197,5 +199,5 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 1. ~~Verifikasi test master data~~ — **sudah lolos**.
 2. ~~`git init`, commit baseline, cabang per workstream~~ — **sudah** (root `pos_retail`: backend, frontend, docs).
-3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Pengguna menjalankan `php artisan test` untuk WS-A/WS-B. WS-D (shift, penjualan, void, setoran/endapan) dan WS-C (PR→PO→penerimaan) **lolos test (174, 24 Okt 2026)**. Tagihan HRD (WS-E) **lolos test (184, 25 Okt 2026)**. Pengaturan diskon dan PPN (3.7) **lolos test (190, 25 Okt 2026)**. Manajemen pengguna (1.8) sudah ditulis dan **menunggu `php artisan test`** (`UserManagementTest`). **Berikutnya:** kas masuk/keluar lain (3.6), adjustment/opname + transfer. Peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
+3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Seluruh tahap backend yang telah ditulis, termasuk WS-G Manajemen Pengguna (1.8), sudah lulus suite **200 test pada 26 Okt 2026**. **Berikutnya:** kas masuk/keluar lain (3.6), adjustment/opname + transfer. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
 4. Mulai paralel: WS-B dan WS-A (backend), WS-F scaffold (frontend).

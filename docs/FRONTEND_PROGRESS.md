@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres frontend.** Setiap pekerjaan frontend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), seperti `BACKEND_PROGRESS.md` untuk backend. Agent frontend baru cukup membaca berkas ini + `BACKEND_PROGRESS.md` (kontrak) + `HANDOFF_POS_RETAIL_SMK.md` (aturan) + `frontend/FRONTEND.md` (struktur dan konvensi). Kebutuhan yang belum dipenuhi kontrak API ditulis di `FRONTEND_REQUESTS.md` untuk agent backend.
 
-**Diperbarui:** 25 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, **pengaturan diskon dan PPN — terbaru**)
+**Diperbarui:** 26 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN)
 
 ## Cara membaca status
 
@@ -47,8 +47,8 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/customers` | Karyawan: daftar, tambah, verifikasi, batas kredit, riwayat batas | `customer.select` | 2 | ✅ | Tautan dari notifikasi: `?open=ID` |
 | `/inventory/opening` | Stok Awal (Admin) | `inventory.adjust.approve` | 1 | ✅ | |
 | `/inventory/movements` | Riwayat Stok | `inventory.view` | 1 | ✅ | |
-| `/discounts` | **Diskon** (Admin): daftar + filter, tambah, ubah, aktif/nonaktif | `discount.manage` | 9 | 🟡 | Kontrak bagian 9 backend masih 🟡 (`PricingSettingsTest` belum dikonfirmasi) |
-| `/settings/vat` | **Pengaturan PPN** (Admin): saklar, tarif, harga termasuk/tidak, dialog konfirmasi | `settings.manage` | 9 | 🟡 | R-04 (tarif/PKP) menunggu klien; ada peringatan di layar |
+| `/discounts` | **Diskon** (Admin): daftar + filter, tambah, ubah, aktif/nonaktif | `discount.manage` | 9 | ✅ | Test frontend dan backend terkonfirmasi lulus |
+| `/settings/vat` | **Pengaturan PPN** (Admin): saklar, tarif, harga termasuk/tidak, dialog konfirmasi | `settings.manage` | 9 | ✅ | Test frontend dan backend lulus; keputusan bisnis R-04 tetap menunggu klien |
 | (lonceng di sidebar) | Notifikasi: polling 60 dtk, tandai terbaca | login | 3 | ✅ | Bug "lonceng kosong" pernah dilaporkan; belum diverifikasi ulang |
 | `/dashboard` | Dashboard | `reports.view` | — | ⛔ | Placeholder; backend belum punya endpoint laporan (ROADMAP 6.3) |
 
@@ -61,6 +61,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Penerimaan barang | 6.3 | ⏳ | Pilih PO `receivable=1` → qty/rusak/kedaluwarsa → posting; verifikasi dokumen (Admin) |
 | PR dan PO | 6.1, 6.2 | ⏳ | Form/daftar PR (Kasir); antrean Finance/Owner dengan re-auth; PO dari PR (Admin) |
 | Tagihan HRD | 8 | ⏳ | Periode tagihan (tutup periode, ubah tanggal gaji), buat invoice, terbit → serah ke HRD → catat pembayaran, tampilan cetak invoice |
+| Manajemen pengguna | 10 | ⏳ | Daftar/cari/filter; tambah/ubah role; aktif/nonaktif; reset sandi; ganti sandi sendiri |
 | Adjustment, opname, transfer, denah rak | — | ⛔ | Backend belum ada |
 
 ## 2. Kode bersama (fondasi)
@@ -84,9 +85,9 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Fondasi dan master data | `format`, `productForm`, `supplierForm`, `tree` | 9 · 10 · 7 · 3 | ✅ |
 | Inventory dan karyawan | `openingForm`, `movementLabels`, `customerForm`, `creditState`, `notificationLink` | 6 · 2 · 8 · 2 · 3 | ✅ |
 | Shift dan kasir | `shiftLogic`, `money`, `cartLogic` | 4 · 6 · 21 | ✅ (hijau dikonfirmasi pengguna 25 Okt 2026; jumlah dihitung dari kode: 81 test sebelum tahap diskon/PPN) |
-| Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | 🟡 menunggu pengguna menjalankan `npm test` (total seharusnya **102**) |
+| Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Jumlah dihitung dari kode test. Di lingkungan agent, seluruh 102 test lolos lewat harness lokal dan `tsc` bersih untuk modul logika serta komponen penjualan/diskon/PPN (komponen React diperiksa dengan tipe tiruan, bukan tipe React sebenarnya), jadi `npm run typecheck` pengguna tetap yang menentukan.
+Pada 26 Okt 2026, pengguna menjalankan `npm run typecheck` (lulus) dan `npm test` (**102 lulus, 14 berkas**). Test otomatis mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser.
 
 ## 4. Celah dan catatan yang diketahui
 
@@ -102,16 +103,17 @@ Jumlah dihitung dari kode test. Di lingkungan agent, seluruh 102 test lolos lewa
 ## 5. Tahap berikutnya (urut, usulan agent)
 
 1. **Setoran dan endapan** (bagian 7): hasil tutup shift + Serahkan setoran (Kasir), kebijakan endapan (Admin), antrean setoran masuk dan saldo dana (Finance/Admin). Menutup celah nomor 1.
-2. **Riwayat penjualan**: daftar, detail, cetak ulang SALINAN, void Admin. Menutup celah nomor 3.
-3. **Penerimaan barang** oleh Kasir (jalur resmi stok masuk), lalu PR/PO.
-4. **Tagihan HRD** (Admin).
-5. Dashboard setelah backend menyediakan laporan.
+2. **Manajemen pengguna**: UI Admin untuk mengelola akun dan ganti sandi. Backend bagian 10 sudah lulus test; frontend belum dibuat.
+3. **Riwayat penjualan**: daftar, detail, cetak ulang SALINAN, void Admin. Menutup celah nomor 3.
+4. **Penerimaan barang** oleh Kasir (jalur resmi stok masuk), lalu PR/PO.
+5. **Tagihan HRD** (Admin).
+6. Dashboard setelah backend menyediakan laporan.
 
 Jika jadwal mundur, yang tidak boleh dipotong: layar kasir, setoran + endapan, tagihan HRD (HANDOFF bagian 7).
 
 ## 6. Permintaan ke backend
 
-Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). Selain itu frontend menunggu konfirmasi test untuk bagian 9 `BACKEND_PROGRESS.md` (diskon/PPN) sebelum menandai layarnya ✅.
+Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). Backend bagian 9 (diskon/PPN) dan bagian 10 (manajemen pengguna) sudah lulus test; UI manajemen pengguna masih belum dibuat.
 
 ## 7. Cara memperbarui berkas ini
 
@@ -122,6 +124,7 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 
 ## Riwayat
 
+- **2026-10-26** — Pengguna menjalankan `npm run typecheck` (lulus), `npm test` (**102 lulus**) dan backend `php artisan test` (**200 lulus**). Diskon/PPN dikonfirmasi ✅; backend manajemen pengguna dikonfirmasi ✅, UI-nya masuk backlog.
 - **2026-10-25 (2)** — F#2: pengaturan harga untuk Admin: **Diskon** (`/discounts`, daftar + filter + form tambah/ubah, target produk atau kategori, jenis persen/nominal per unit, tanggal WIB) dan **Pengaturan PPN** (`/settings/vat`, dengan konfirmasi dan peringatan R-04); `toWibDate`; menu "Diskon" dan "Pengaturan PPN". Status: 🟡 menunggu `npm test` pengguna dan test backend bagian 9.
 - **2026-10-25** — F#2: **layar kasir** (`/pos`): pencarian/scan, keranjang, tunai dan kredit potong gaji, pratinjau server (siap pakai, menunggu FR-01), pengecualian kredit Admin, struk cetak, kunci idempotensi dan penguncian saat hasil tidak diketahui; `lib/money.ts`; tipe `Sale`/`Shift` baru; `FRONTEND_REQUESTS.md` dengan FR-01. Status: ✅ diuji manual dan test hijau (pengguna, 25 Okt 2026).
 - **sebelumnya (F#1)** — Fondasi (Vite + React 19 + TS + TanStack Query + Tailwind v4), auth/guard, produk, kategori, supplier, stok awal, riwayat stok, karyawan + notifikasi, shift kasir dan tinjau shift. Status: ✅.
