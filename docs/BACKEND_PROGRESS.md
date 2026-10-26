@@ -464,9 +464,9 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 - Periode berikutnya dibuka otomatis saat tutup (label default "Periode tanggal-buka"; ubah lewat PATCH).
 - Jika struk kredit tercatat tepat saat periode ditutup, struk itu masuk periode berikutnya (tidak hilang).
 
-## 9. Pengaturan Diskon dan PPN 🟡
+## 9. Pengaturan Diskon dan PPN ✅
 
-> Status: kode + test (`PricingSettingsTest` 6) sudah ditulis, **belum dijalankan**. Admin saja (Kasir 403). Tidak ada migration/permission baru.
+> Status: ✅ lulus `php artisan test` (25 Okt 2026; `PricingSettingsTest` 6, total suite 190). Admin saja (Kasir 403). Tidak ada migration/permission baru.
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
@@ -481,11 +481,34 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 - PPN: default nonaktif. Mengaktifkan wajib mengisi tarif (0–100, 2 desimal) dan "harga sudah termasuk PPN". Perubahan tarif/mode membuat versi baru yang berlaku mulai hari ini (WIB); nilai yang sama tidak membuat versi baru; menonaktifkan tidak menghapus riwayat tarif. PPN aktif tapi konfigurasi tidak lengkap membuat penjualan tunai dan pembuatan invoice ditolak (R-04: tarif/PKP menunggu klien).
 - Layar yang bisa dibuat (Admin): daftar + form diskon (pilih produk/kategori, jenis, nilai, tanggal, aktif/nonaktif) dan halaman pengaturan PPN.
 
+## 10. Manajemen Pengguna 🟡
+
+> Status: kode + test (`UserManagementTest` 10) sudah ditulis, **belum dijalankan**. Tidak ada migration/permission baru (`user.manage` sudah ada). Role ditentukan oleh `user_roles`, bukan username.
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/users?q=&status=active\|inactive&role=&per_page=` | `user.manage` | Daftar pengguna toko aktif (urut nama) |
+| GET | `/api/users/{id}` | `user.manage` | Detail |
+| POST | `/api/users` | `user.manage` | Tambah: `name`, `username`, `email?`, `password` (min 8), `role` (nama role) |
+| PATCH | `/api/users/{id}` | `user.manage` | Ubah `name`, `email`, `is_active`, `role`. `username` dan `password` dilarang (422) |
+| POST | `/api/users/{id}/reset-password` | `user.manage` | `{ "password": "..." }` (min 8); semua sesi pengguna itu diakhiri |
+| GET | `/api/roles` | `user.manage` | Daftar role untuk dropdown: `id, name, description, is_system` |
+| POST | `/api/auth/change-password` | login (tanpa izin khusus) | `{ current_password, password }`; sesi lain akun itu diakhiri, sesi sekarang tetap |
+
+- Bentuk pengguna: `{ id, name, username, email, is_active, roles: ["Kasir"], last_login_at }`. Sandi/hash tidak pernah dikembalikan maupun dicatat di audit log.
+- `username`: huruf/angka/`. _ -` maks 60, unik tanpa membedakan huruf besar/kecil. `email` opsional dan unik.
+- Aturan 422: akun sendiri tidak boleh dinonaktifkan atau diubah role-nya (`is_active` / `role`); toko harus punya minimal satu Admin aktif (`is_active` / `role`); sandi baru wajib beda dari sandi lama (`password`); sandi saat ini salah (`current_password`).
+- Menonaktifkan pengguna mencabut semua token aktifnya dan login ditolak. Pengguna tidak dihapus.
+- Satu role per pengguna per toko lewat API ini (mengganti role = menimpa).
+- Layar yang bisa dibuat: daftar pengguna (cari, filter role/status), dialog tambah/ubah (dropdown dari `/api/roles`), tombol aktif/nonaktif, dialog reset sandi (Admin), dan menu "Ganti sandi" untuk semua pengguna.
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-25 (4)** — WS-G: manajemen pengguna (CRUD, aktif/nonaktif, reset sandi, ganti sandi sendiri). Status: 🟡 menunggu test (`UserManagementTest`).
+- **2026-10-25 (3)** — Suite dijalankan pengguna: **190 test lulus**. Bagian 9 (diskon dan PPN) kini ✅.
 - **2026-10-25 (2)** — WS-F: pengaturan diskon (CRUD, Admin) dan PPN (saklar + tarif berversi). Status: 🟡 menunggu test (`PricingSettingsTest`).
 - **2026-10-25** — Seluruh suite dijalankan pengguna: **184 test lulus**. Bagian 8 (Tagihan HRD) kini ✅.
 - **2026-10-24 (4)** — WS-E: Tagihan HRD — periode (buka/ubah/tutup), invoice gabungan per periode dengan rincian per karyawan dan PPN opsional, terbit/serah ke HRD, pembayaran HRD (boleh sebagian). Status: 🟡 menunggu test (`BillingTest`).
