@@ -52,11 +52,12 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | (lonceng di sidebar) | Notifikasi: polling 60 dtk, tandai terbaca | login | 3 | ✅ | Bug "lonceng kosong" pernah dilaporkan; belum diverifikasi ulang |
 | `/dashboard` | Dashboard | `reports.view` | — | ⛔ | Placeholder; backend belum punya endpoint laporan (ROADMAP 6.3) |
 
-### Belum ada layarnya (backend sudah siap ✅ kecuali dicatat)
+### Backlog frontend (backend sudah siap ✅ kecuali dicatat)
 
 | Modul | Bagian | Status | Isi layar yang bisa dibuat |
 |---|---|---|---|
-| Setoran dan endapan | 7 | ⏳ | Hasil tutup shift (`deposit`, `float_flags`), tombol **Serahkan setoran**, setoran parsial; Admin: kebijakan endapan; Finance/Admin: antrean setoran masuk (terima/selisih/koreksi), saldo Kas Kecil/Besar |
+| Penyerahan setoran akhir (Kasir) | 7.1 | ✅ | Hasil tutup shift menampilkan nilai setoran/endapan/flag, serahkan setoran Draft, pulihkan setoran Draft setelah reload, dan tahan buka shift baru sampai setoran diserahkan |
+| Fitur setoran/endapan lainnya | 7.1 | ⏳ | Setoran parsial; Admin: kebijakan endapan; Finance/Admin: antrean setoran masuk (terima/selisih/koreksi) dan saldo Kas Kecil/Besar |
 | Riwayat penjualan | 5, 7.2 | ⏳ | Daftar + filter, detail, **cetak ulang SALINAN**, **void** (Admin) |
 | Penerimaan barang | 6.3 | ⏳ | Pilih PO `receivable=1` → qty/rusak/kedaluwarsa → posting; verifikasi dokumen (Admin) |
 | PR dan PO | 6.1, 6.2 | ⏳ | Form/daftar PR (Kasir); antrean Finance/Owner dengan re-auth; PO dari PR (Admin) |
@@ -84,14 +85,14 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|---|---|
 | Fondasi dan master data | `format`, `productForm`, `supplierForm`, `tree` | 9 · 10 · 7 · 3 | ✅ |
 | Inventory dan karyawan | `openingForm`, `movementLabels`, `customerForm`, `creditState`, `notificationLink` | 6 · 2 · 8 · 2 · 3 | ✅ |
-| Shift dan kasir | `shiftLogic`, `money`, `cartLogic` | 4 · 6 · 21 | ✅ (hijau dikonfirmasi pengguna 25 Okt 2026; jumlah dihitung dari kode: 81 test sebelum tahap diskon/PPN) |
+| Shift dan kasir | `shiftLogic`, `money`, `cartLogic` | 6 · 6 · 21 | ✅ |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 26 Okt 2026, pengguna menjalankan `npm run typecheck` (lulus) dan `npm test` (**102 lulus, 14 berkas**). Test otomatis mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser.
+Pada 26 Okt 2026, `npm run typecheck`, `npm test` (**104 lulus, 14 berkas**) dan `npm run build` lulus. Test otomatis mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser.
 
 ## 4. Celah dan catatan yang diketahui
 
-1. **Setoran tanpa layar:** begitu Admin menetapkan kebijakan endapan (API `PUT /api/float-policies/{scope}`; belum ada layarnya), Kasir yang menutup shift mendapat setoran akhir `draft` dan **tidak bisa membuka shift baru** sebelum menyerahkannya, padahal UI belum punya tombolnya. Tanpa kebijakan aktif perilakunya sama seperti sebelumnya. Tipe `Shift.deposit`, `float_flags`, dan `summary.partial_deposits` sudah ada di `types.ts`. **Ini prasyarat go-live.**
+1. **Setoran akhir:** Kasir kini dapat melihat dan menyerahkan setoran akhir Draft dari layar Shift; setoran tertunda tetap dapat ditemukan setelah halaman dimuat ulang dan shift baru ditahan sampai diserahkan. Tanpa kebijakan endapan aktif, backend tidak membuat setoran akhir. Setoran parsial, layar kebijakan Admin, antrean penerimaan Finance, dan saldo dana belum dibuat. **Fitur kas lengkap tetap prasyarat go-live.**
 2. **Pratinjau penjualan (FR-01) ⛔:** tanpa `POST /api/sales/preview`, kasir tidak melihat total resmi sebelum memproses (diskon dan PPN baru tampak di struk). Layar sudah siap memakainya dan akan berpindah otomatis begitu endpoint ada.
 3. **Hasil transaksi tidak diketahui:** bila jaringan putus saat posting, keranjang dikunci dan hanya bisa kirim ulang dengan kunci yang sama. Bila tab ditutup sebelum itu, struk mungkin tersimpan tetapi tidak terlihat; **riwayat penjualan** (⏳) menutup celah ini.
 4. **Cetak struk:** memakai `window.print` dan lebar kecil di layar; penyesuaian kertas thermal 58/80 mm dan uji printer/scanner di perangkat klien belum dilakukan (ROADMAP 6.1, 7.4).
@@ -102,7 +103,7 @@ Pada 26 Okt 2026, pengguna menjalankan `npm run typecheck` (lulus) dan `npm test
 
 ## 5. Tahap berikutnya (urut, usulan agent)
 
-1. **Setoran dan endapan** (bagian 7): hasil tutup shift + Serahkan setoran (Kasir), kebijakan endapan (Admin), antrean setoran masuk dan saldo dana (Finance/Admin). Menutup celah nomor 1.
+1. **Lanjutkan setoran dan endapan** (bagian 7): setoran akhir Kasir selesai; berikutnya setoran parsial, kebijakan endapan (Admin), antrean setoran masuk dan saldo dana (Finance/Admin).
 2. **Manajemen pengguna**: UI Admin untuk mengelola akun dan ganti sandi. Backend bagian 10 sudah lulus test; frontend belum dibuat.
 3. **Riwayat penjualan**: daftar, detail, cetak ulang SALINAN, void Admin. Menutup celah nomor 3.
 4. **Penerimaan barang** oleh Kasir (jalur resmi stok masuk), lalu PR/PO.
@@ -124,6 +125,7 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 
 ## Riwayat
 
+- **2026-10-26** — Tahap frontend setoran akhir Kasir: layar Shift menampilkan setoran/endapan dan flag tutup shift, konfirmasi penyerahan ke Finance, pencarian setoran Draft final setelah reload, serta mencegah buka shift baru sampai setoran diserahkan. `npm run typecheck`, `npm test` (**104 lulus**) dan `npm run build` lulus. Setoran parsial, kebijakan endapan, dan penerimaan Finance belum dikerjakan.
 - **2026-10-26** — Pengguna menjalankan `npm run typecheck` (lulus), `npm test` (**102 lulus**) dan backend `php artisan test` (**200 lulus**). Diskon/PPN dikonfirmasi ✅; backend manajemen pengguna dikonfirmasi ✅, UI-nya masuk backlog.
 - **2026-10-25 (2)** — F#2: pengaturan harga untuk Admin: **Diskon** (`/discounts`, daftar + filter + form tambah/ubah, target produk atau kategori, jenis persen/nominal per unit, tanggal WIB) dan **Pengaturan PPN** (`/settings/vat`, dengan konfirmasi dan peringatan R-04); `toWibDate`; menu "Diskon" dan "Pengaturan PPN". Status: 🟡 menunggu `npm test` pengguna dan test backend bagian 9.
 - **2026-10-25** — F#2: **layar kasir** (`/pos`): pencarian/scan, keranjang, tunai dan kredit potong gaji, pratinjau server (siap pakai, menunggu FR-01), pengecualian kredit Admin, struk cetak, kunci idempotensi dan penguncian saat hasil tidak diketahui; `lib/money.ts`; tipe `Sale`/`Shift` baru; `FRONTEND_REQUESTS.md` dengan FR-01. Status: ✅ diuji manual dan test hijau (pengguna, 25 Okt 2026).

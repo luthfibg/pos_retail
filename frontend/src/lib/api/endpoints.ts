@@ -1,6 +1,6 @@
 import { api } from './client';
 import type {
-  Category, CategoryInput, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
+  Category, CategoryInput, CashDeposit, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
@@ -118,6 +118,14 @@ export const shiftApi = {
   review: (id: number, input: { note?: string }) =>
     api<{ data: Shift }>(`/shifts/${id}/review`, { method: 'POST', body: input }).then((r) => r.data),
   list: (f: ShiftFilters = {}) => api<Paginated<Shift>>('/shifts', { query: { ...f } }),
+};
+
+export const cashDepositApi = {
+  list: (f: { status?: DepositStatus; kind?: DepositKind; shift_id?: number; per_page?: number } = {}) =>
+    api<Paginated<CashDeposit>>('/cash-deposits', { query: { ...f } }),
+  get: (id: number) => api<{ data: CashDeposit }>(`/cash-deposits/${id}`).then((r) => r.data),
+  submit: (id: number) =>
+    api<{ data: CashDeposit }>(`/cash-deposits/${id}/submit`, { method: 'POST' }).then((r) => r.data),
 };
 
 export interface SaleFilters {

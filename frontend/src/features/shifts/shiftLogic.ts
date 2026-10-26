@@ -1,4 +1,4 @@
-import type { Decimal, ShiftStatus } from '@/lib/api/types';
+import type { Decimal, DepositStatus, ShiftStatus } from '@/lib/api/types';
 
 export const SHIFT_STATUS_LABEL: Record<ShiftStatus, string> = {
   open: 'Berjalan',
@@ -42,3 +42,7 @@ export const VARIANCE_CLS: Record<VarianceKind, string> = {
 
 /** Shift yang masih bisa menerima penjualan hanya yang berstatus open. */
 export const canSell = (status: ShiftStatus | undefined): boolean => status === 'open';
+
+/** Setoran akhir Draft harus diserahkan sebelum Kasir dapat membuka shift berikutnya. */
+export const canOpenNextShift = (depositStatus: DepositStatus | null | undefined): boolean =>
+  depositStatus !== 'draft';

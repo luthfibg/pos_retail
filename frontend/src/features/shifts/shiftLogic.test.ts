@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canSell, varianceKind } from './shiftLogic';
+import { canOpenNextShift, canSell, varianceKind } from './shiftLogic';
 
 describe('varianceKind', () => {
   it('nol dalam berbagai bentuk', () => {
@@ -24,5 +24,17 @@ describe('canSell', () => {
     expect(canSell('counting')).toBe(false);
     expect(canSell('closed')).toBe(false);
     expect(canSell(undefined)).toBe(false);
+  });
+});
+
+describe('canOpenNextShift', () => {
+  it('mencegah buka shift selama setoran akhir masih Draft', () => {
+    expect(canOpenNextShift('draft')).toBe(false);
+  });
+
+  it('mengizinkan buka shift setelah setoran diserahkan atau tidak ada setoran', () => {
+    expect(canOpenNextShift('submitted')).toBe(true);
+    expect(canOpenNextShift(null)).toBe(true);
+    expect(canOpenNextShift(undefined)).toBe(true);
   });
 });

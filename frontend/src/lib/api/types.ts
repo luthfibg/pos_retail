@@ -234,6 +234,27 @@ export type ShiftStatus = 'open' | 'counting' | 'closed' | 'reviewed';
 
 export type FloatFlag = 'no_policy' | 'below_minimum' | 'nothing_to_deposit';
 export type DepositStatus = 'draft' | 'submitted' | 'received' | 'discrepancy' | 'corrected';
+export type DepositKind = 'partial' | 'final';
+
+export interface CashDeposit {
+  id: number;
+  doc_number: string;
+  kind: DepositKind;
+  shift_id: number;
+  shift_doc_number: string;
+  status: DepositStatus;
+  counted_amount: Decimal;
+  float_kept: Decimal;
+  deposit_amount: Decimal;
+  received_amount: Decimal | null;
+  difference: Decimal | null;
+  received_by_name: string | null;
+  received_at: string | null;
+  note: string | null;
+  created_by: number;
+  created_by_name: string;
+  created_at: string;
+}
 
 /** Setoran akhir shift (kind=final). Dibuat otomatis saat tutup shift bila ada yang harus disetor. */
 export interface ShiftDeposit {

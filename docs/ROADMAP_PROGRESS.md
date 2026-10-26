@@ -56,7 +56,7 @@ Kas masuk/keluar lain · usulan endapan oleh Kasir (`float_proposals`) · retur 
 3b. ~~Jalankan test 3.7~~ — **selesai 25 Okt 2026: 190 lulus.**
 3c. ~~Jalankan `php artisan test` untuk 1.8~~ — **selesai 26 Okt 2026: seluruh 200 test lulus.**
 4. Kas masuk/keluar lain (3.6).
-5. Adjustment/opname + transfer (2.6–2.7), lalu cetak, dashboard, hardening, UAT (Fase 6–8). Sisa layar frontend yang sudah punya kontrak backend dicatat di `FRONTEND_PROGRESS.md`; pengaturan Diskon/PPN sudah dibuat dan test-nya lulus.
+5. Adjustment/opname + transfer (2.6–2.7), lalu cetak, dashboard, hardening, UAT (Fase 6–8). Backlog UI dan tahap yang sudah selesai dicatat di `FRONTEND_PROGRESS.md`; tahap penyerahan setoran akhir sudah dibuat, sementara setoran parsial, kebijakan endapan, dan antrean Finance masih belum dikerjakan.
 
 **Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → UI adjustment/opname → transfer antar-rak → UI langkah pemeriksaan Finance (jadikan satu tombol Admin) → dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 
