@@ -265,6 +265,48 @@ export interface ShiftDeposit {
   float_kept: Decimal;
 }
 
+export type FloatPolicyScope = 'petty_cash' | 'main_cash';
+export type FloatPolicyMode = 'fixed' | 'percent';
+export type FloatPolicyPercentBase = 'cash_sales_shift' | 'cash_on_hand';
+
+export interface FloatPolicy {
+  id: number;
+  scope: FloatPolicyScope;
+  mode: FloatPolicyMode;
+  fixed_amount: Decimal | null;
+  percent: Decimal | null;
+  percent_base: FloatPolicyPercentBase | null;
+  min_amount: Decimal | null;
+  max_amount: Decimal | null;
+  rounding_unit: number;
+  effective_from: string;
+  set_by: number;
+}
+
+export interface FloatPolicies {
+  petty_cash: FloatPolicy | null;
+  main_cash: FloatPolicy | null;
+}
+
+export type FloatPolicyInput =
+  | {
+      mode: 'fixed';
+      fixed_amount: Decimal;
+      min_amount?: Decimal;
+      max_amount?: Decimal;
+      rounding_unit?: number;
+      reason?: string;
+    }
+  | {
+      mode: 'percent';
+      percent: Decimal;
+      percent_base: FloatPolicyPercentBase;
+      min_amount?: Decimal;
+      max_amount?: Decimal;
+      rounding_unit?: number;
+      reason?: string;
+    };
+
 export interface ShiftSummary {
   cash_sales_count: number;
   cash_sales_total: Decimal;

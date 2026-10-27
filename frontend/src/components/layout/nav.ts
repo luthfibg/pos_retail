@@ -18,4 +18,5 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/inventory/movements', label: 'Riwayat Stok', permission: 'inventory.view' },
   { to: '/discounts', label: 'Diskon', permission: 'discount.manage' },
   { to: '/settings/vat', label: 'Pengaturan PPN', permission: 'settings.manage' },
+  { to: '/settings/float-policy', label: 'Kebijakan Endapan', permission: 'float.configure' },
 ];

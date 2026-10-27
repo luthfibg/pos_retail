@@ -1,7 +1,7 @@
 import { api } from './client';
 import type {
   Category, CategoryInput, CashDeposit, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
-  OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
+  FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
 } from './types';
@@ -126,6 +126,12 @@ export const cashDepositApi = {
   get: (id: number) => api<{ data: CashDeposit }>(`/cash-deposits/${id}`).then((r) => r.data),
   submit: (id: number) =>
     api<{ data: CashDeposit }>(`/cash-deposits/${id}/submit`, { method: 'POST' }).then((r) => r.data),
+};
+
+export const floatPolicyApi = {
+  list: () => api<{ data: FloatPolicies }>('/float-policies').then((r) => r.data),
+  update: (scope: FloatPolicyScope, input: FloatPolicyInput) =>
+    api<{ data: FloatPolicies['petty_cash'] }>('/float-policies/' + scope, { method: 'PUT', body: input }).then((r) => r.data),
 };
 
 export interface SaleFilters {
