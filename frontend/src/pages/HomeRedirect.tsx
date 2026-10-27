@@ -1,12 +1,12 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { NAV_ITEMS } from '@/components/layout/nav';
+import { getVisibleNavGroups } from '@/components/layout/nav';
 
 /** Halaman awal mengikuti kewenangan: Kasir -> /pos, Admin -> dashboard, dst. */
 export function HomeRedirect() {
   const { can } = useAuth();
-  const first = NAV_ITEMS.find((i) =>
-    Array.isArray(i.permission) ? i.permission.some(can) : can(i.permission),
-  );
-  return <Navigate to={first?.to ?? '/products'} replace />;
+  const isAdmin = can('shift.review');
+  const items = getVisibleNavGroups(can, isAdmin).flatMap((group) => group.items);
+  const preferred = items.find((item) => item.to === (isAdmin ? '/dashboard' : '/pos'));
+  return <Navigate to={preferred?.to ?? items[0]?.to ?? '/products'} replace />;
 }
