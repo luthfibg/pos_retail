@@ -4,6 +4,7 @@ import type {
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
+  GoodsReceipt, GoodsReceiptItemInput, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderSummary,
 } from './types';
 
 export const authApi = {
@@ -52,6 +53,32 @@ export const supplierApi = {
   ) => api<{ data: Supplier }>(`/suppliers/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
   list: (f: { q?: string; active_only?: boolean; page?: number; per_page?: number } = {}) =>
     api<Paginated<Supplier>>('/suppliers', { query: { ...f, active_only: f.active_only ? 1 : undefined } }),
+};
+
+export const purchaseOrderApi = {
+  receivable: (f: { q?: string; page?: number; per_page?: number } = {}) =>
+    api<Paginated<PurchaseOrderSummary>>('/purchase-orders', { query: { ...f, receivable: 1 } }),
+  get: (id: number) => api<{ data: PurchaseOrder }>(`/purchase-orders/${id}`).then((r) => r.data),
+};
+
+export const goodsReceiptApi = {
+  list: (f: { q?: string; page?: number; per_page?: number } = {}) =>
+    api<Paginated<GoodsReceiptSummary>>('/goods-receipts', { query: { ...f } }),
+  get: (id: number) => api<{ data: GoodsReceipt }>(`/goods-receipts/${id}`).then((r) => r.data),
+  create: (input: {
+    po_id: number;
+    delivery_note_no?: string;
+    invoice_no?: string;
+    note?: string;
+    post?: boolean;
+    items: GoodsReceiptItemInput[];
+  }) => api<{ data: GoodsReceipt }>('/goods-receipts', { method: 'POST', body: input }).then((r) => r.data),
+  post: (id: number) =>
+    api<{ data: GoodsReceipt }>(`/goods-receipts/${id}/post`, { method: 'POST' }).then((r) => r.data),
+  cancel: (id: number, reason?: string) =>
+    api<{ data: GoodsReceipt }>(`/goods-receipts/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }).then((r) => r.data),
+  verifyDocuments: (id: number, input: { delivery_note_no: string; invoice_no: string }) =>
+    api<{ data: GoodsReceipt }>(`/goods-receipts/${id}/verify-documents`, { method: 'POST', body: input }).then((r) => r.data),
 };
 
 export interface MovementFilters {

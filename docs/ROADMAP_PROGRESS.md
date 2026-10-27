@@ -61,17 +61,18 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 
 ### Tahap frontend berjalan
 
-**Riwayat penjualan** adalah tahap frontend aktif berikutnya setelah pengguna menguji pembuatan Draft setoran parsial Kasir sesuai ekspektasi. Backend telah menyediakan daftar, detail, cetak ulang, dan void pada `BACKEND_PROGRESS.md` bagian 5 dan 7.2. UI setoran parsial/Finance sudah diimplementasikan; verifikasi Finance dan aksi lainnya tetap menunggu pengguna.
+**Penerimaan barang** adalah tahap frontend aktif setelah pengguna mengonfirmasi uji klik Riwayat Penjualan berjalan lancar (27 Okt 2026). Backend menyediakan daftar PO yang dapat diterima, pembuatan/posting penerimaan, pembatalan Draft, dan verifikasi dokumen pada `BACKEND_PROGRESS.md` bagian 6.2–6.3.
 
 Cakupan satu tahap:
-- Kasir membuat setoran parsial saat shift `open`/`counting`, melihat status dan riwayat setoran sendiri, menyerahkan setoran, atau membatalkan hanya Draft parsial.
-- Finance/Admin memakai antrean setoran masuk untuk memeriksa detail, mencatat jumlah yang diterima, menangani selisih dengan catatan wajib, serta mengoreksi selisih dengan alasan.
-- Tampilkan saldo Kas Kecil dan Kas Besar dari endpoint dana; akses antrean, penerimaan/koreksi, dan saldo mengikuti `cash_deposit.receive`.
-- Pertahankan jumlah sebagai string desimal dan konfirmasi tindakan finansial; cegah penutupan shift ketika masih ada setoran parsial Draft. Setoran akhir yang sudah dibuat sistem tidak dapat dibatalkan.
+- Kasir memilih PO `receivable=1`, mencatat jumlah diterima dan rusak, metadata batch/kedaluwarsa, lalu menyimpan penerimaan Draft.
+- Posting Draft menambah stok layak jual dan memperbarui sisa/status PO secara atomik; qty rusak hanya dicatat dan tidak menambah stok.
+- Satu baris PO dapat dipecah menjadi beberapa batch; tanggal kedaluwarsa wajib untuk produk yang melacak expiry, dan tidak berlaku untuk produk lain.
+- Draft dapat dibatalkan sebelum posting; Admin dengan `goods_receipt.verify_documents` memverifikasi nomor surat jalan dan faktur setelah posting.
+- Jumlah tetap sebagai string desimal dan divalidasi tanpa float di UI; backend tetap otoritatif atas status PO, batas qty, permission, dan posting.
 
-**Mengapa ini didahulukan:** menuntaskan kontrol kas yang sudah sebagian tersedia, tanpa menunggu backend baru, serta mengurangi risiko operasional sebelum UAT. Setelah tahap ini, prioritas frontend berikutnya adalah riwayat penjualan (termasuk cetak ulang/void sesuai batas shift dan status tagihan), lalu penerimaan barang dan PR/PO. UI transfer stok (backend tahap 2.6 sudah siap) dan manajemen pengguna juga dapat dikerjakan dari kontrak yang ada; adjustment/opname tetap menunggu backend tahap 2.7.
+**Mengapa ini didahulukan:** jalur resmi stok masuk sudah tersedia di backend dan harus bisa dipakai operasional sebelum PR/PO dibuka lebih luas. Tahap berikutnya setelah ini adalah PR dan PO. Uji antrean/penerimaan Finance serta serah/batal setoran kas tetap belum dikonfirmasi; UI-nya sudah ada dan tetap menjadi sisa verifikasi terpisah. UI transfer stok (backend tahap 2.6 sudah siap) dan manajemen pengguna juga dapat dikerjakan dari kontrak yang ada; adjustment/opname tetap menunggu backend tahap 2.7.
 
-Status implementasi frontend: riwayat penjualan di `/sales` sudah tersedia dengan filter, detail, cetak ulang SALINAN, serta void Admin yang mengikuti batas shift terbuka dan status tagihan kredit. `npm run typecheck`, `npm test` (**121 lulus**) dan `npm run build` lulus; menunggu uji klik pengguna. Pembuatan Draft parsial sudah diuji pengguna; uji antrean Finance masih menunggu.
+Status implementasi frontend: pengguna mengonfirmasi uji klik Riwayat Penjualan `/sales` lancar. Halaman `/goods-receipts` kini tersedia dengan PO receivable, riwayat GR, input diterima/rusak, batch/kedaluwarsa (termasuk pemecahan baris batch), simpan/post/batalkan Draft, dan verifikasi surat jalan/faktur oleh Admin. `npm run typecheck`, `npm test` (**126 lulus, 19 berkas**) dan `npm run build` lulus; uji klik penerimaan barang menunggu pengguna.
 
 **Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → UI adjustment/opname → transfer antar-rak → UI langkah pemeriksaan Finance (jadikan satu tombol Admin) → dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 

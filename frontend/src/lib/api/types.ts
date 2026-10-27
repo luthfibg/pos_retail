@@ -371,6 +371,117 @@ export interface Shift {
 // ---------------------------------------------------------------- penjualan (POS)
 
 export type PaymentMode = 'cash' | 'payroll_credit';
+export type PurchaseOrderStatus =
+  | 'draft'
+  | 'pending_confirmation'
+  | 'approved'
+  | 'sent'
+  | 'partially_received'
+  | 'received'
+  | 'cancelled';
+
+export interface PurchaseOrderSummary {
+  id: number;
+  doc_number: string;
+  status: PurchaseOrderStatus;
+  receipt_status: 'none' | 'partial' | 'complete';
+  payment_status: string;
+  payment_terms: 'prepaid' | 'credit' | 'cod';
+  pr_id: number;
+  pr_doc_number: string;
+  supplier_id: number;
+  supplier_name: string;
+  order_date: string;
+  expected_date: string | null;
+  total: Decimal | null;
+  created_at: string;
+}
+
+export interface PurchaseOrderItem {
+  id: number;
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  qty_ordered: Decimal;
+  qty_received: Decimal;
+  qty_remaining: Decimal;
+  unit_price: Decimal | null;
+  line_total: Decimal | null;
+}
+
+export interface PurchaseOrder extends PurchaseOrderSummary {
+  created_by: number;
+  created_by_name: string;
+  items: PurchaseOrderItem[];
+  receipts: Array<{
+    id: number;
+    doc_number: string;
+    status: GoodsReceiptStatus;
+    document_status: GoodsReceiptDocumentStatus;
+    posted_at: string | null;
+  }>;
+}
+
+export type GoodsReceiptStatus = 'draft' | 'checked' | 'posted' | 'cancelled';
+export type GoodsReceiptDocumentStatus = 'pending' | 'verified';
+
+export interface GoodsReceiptSummary {
+  id: number;
+  doc_number: string;
+  po_id: number;
+  po_doc_number: string;
+  supplier_name: string;
+  status: GoodsReceiptStatus;
+  document_status: GoodsReceiptDocumentStatus;
+  received_by_name: string;
+  posted_at: string | null;
+  created_at: string;
+}
+
+export interface GoodsReceiptItem {
+  id: number;
+  po_item_id: number;
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  qty_ordered: Decimal;
+  qty_received: Decimal;
+  qty_damaged: Decimal;
+  qty_short: Decimal;
+  unit_cost: Decimal | null;
+  po_unit_price: Decimal | null;
+  price_variance: Decimal | null;
+  expiry_date: string | null;
+  batch_code: string | null;
+  shelf_position_id: number | null;
+  note: string | null;
+}
+
+export interface GoodsReceipt extends GoodsReceiptSummary {
+  po_doc_number: string;
+  supplier_id: number;
+  delivery_note_no: string | null;
+  invoice_no: string | null;
+  receiving_location_id: number;
+  received_by: number;
+  verified_by: number | null;
+  verified_by_name: string | null;
+  verified_at: string | null;
+  note: string | null;
+  items: GoodsReceiptItem[];
+}
+
+export interface GoodsReceiptItemInput {
+  po_item_id: number;
+  qty_received: Decimal;
+  qty_damaged?: Decimal;
+  expiry_date?: string | null;
+  batch_code?: string | null;
+  note?: string | null;
+}
+
 export type SaleStatus = 'posted' | 'voided';
 export type BillingStatus = 'not_applicable' | 'unbilled' | 'invoiced' | 'paid';
 

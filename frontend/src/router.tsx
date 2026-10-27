@@ -20,6 +20,7 @@ const FloatPolicyPage = lazy(() => import('@/features/shifts/FloatPolicyPage').t
 const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module) => ({ default: module.ShiftPage })));
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
+const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<div className="p-6 text-slate-500">Memuat layar…</div>}>{children}</Suspense>;
@@ -80,6 +81,10 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="inventory.view" />,
             children: [{ path: 'inventory/movements', element: <MovementsPage /> }],
+          },
+          {
+            element: <RequirePermission permission="goods_receipt.create" />,
+            children: [{ path: 'goods-receipts', element: <LazyPage><GoodsReceiptsPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="discount.manage" />,

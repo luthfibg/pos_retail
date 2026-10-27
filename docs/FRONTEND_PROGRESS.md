@@ -42,7 +42,8 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/shift` | Shift Saya: buka, mulai hitung, tutup (hitung buta), catat kas masuk/keluar, setoran parsial dan serahkan setoran akhir | `shift.open`, `cash_deposit.create`, `cash_movement.create` | 4, 7 | 🟡 | UI parsial baru dibuat; menunggu verifikasi browser |
 | `/shifts` | Tinjau Shift (Admin) | `shift.review` | 4 | ✅ | |
 | `/cash-deposits` | Setoran Masuk: antrean, penerimaan Finance, koreksi selisih, saldo Kas Kecil/Besar | `cash_deposit.receive` | 7.1 | 🟡 | UI baru dibuat; menunggu verifikasi browser |
-| `/sales` | Riwayat Penjualan: daftar/filter, detail struk, cetak SALINAN, void sesuai izin/status shift/tagihan | `sales.create`, `receipt.reprint`, `sales.void` | 5, 7.2 | 🟡 | Implementasi dan test otomatis tersedia; menunggu verifikasi browser |
+| `/sales` | Riwayat Penjualan: daftar/filter, detail struk, cetak SALINAN, void sesuai izin/status shift/tagihan | `sales.create`, `receipt.reprint`, `sales.void` | 5, 7.2 | ✅ | Pengguna mengonfirmasi uji klik berjalan lancar (27 Okt 2026) |
+| `/goods-receipts` | Penerimaan barang: PO receivable, qty diterima/rusak, batch/kedaluwarsa, Draft/posting, verifikasi dokumen Admin | `goods_receipt.create`, `goods_receipt.verify_documents` | 6.3 | 🟡 | Implementasi dan test logika tersedia; menunggu verifikasi browser |
 | `/products` | Produk: daftar, form, stok per batch (FEFO) | `inventory.view` | HANDOFF 6, 1 | ✅ | HPP hanya tampil untuk Admin |
 | `/categories` | Kategori (pohon) | `category.manage` | HANDOFF 6 | ✅ | |
 | `/suppliers` | Supplier | `supplier.manage` | HANDOFF 6 | ✅ | |
@@ -63,8 +64,8 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Penyerahan setoran akhir (Kasir) | 7.1 | ✅ | Hasil tutup shift menampilkan nilai setoran/endapan/flag, serahkan setoran Draft, pulihkan setoran Draft setelah reload, dan tahan buka shift baru sampai setoran diserahkan |
 | Fitur setoran/endapan lainnya | 7.1 | 🟡 | Pengguna telah menguji pembuatan Draft setoran parsial Kasir dan mengonfirmasi hasil sesuai ekspektasi. Uji serah/batal Draft, blokir tutup shift, antrean/penerimaan Finance, koreksi selisih, dan saldo dana masih menunggu |
 | Transfer stok antarposisi / putaway | 1 | ⏳ | Backend tahap 2.6 siap; UI daftar, buat draft, detail, posting, dan pembatalan draft belum dibuat |
-| Riwayat penjualan | 5, 7.2 | 🟡 | Implementasi aktif di `/sales`: daftar + filter, detail, **cetak ulang SALINAN**, **void** Admin; menunggu verifikasi browser |
-| Penerimaan barang | 6.3 | ⏳ | Pilih PO `receivable=1` → qty/rusak/kedaluwarsa → posting; verifikasi dokumen (Admin) |
+| Riwayat penjualan | 5, 7.2 | ✅ | `/sales`: daftar + filter, detail, **cetak ulang SALINAN**, **void** Admin; pengguna mengonfirmasi uji klik berjalan lancar |
+| Penerimaan barang | 6.3 | 🟡 | Tahap aktif `/goods-receipts`: pilih PO `receivable=1`, catat diterima/rusak, pecah batch, validasi kedaluwarsa, simpan Draft, posting, batalkan Draft, dan verifikasi surat jalan/faktur (Admin); menunggu uji klik |
 | PR dan PO | 6.1, 6.2 | ⏳ | Form/daftar PR (Kasir); antrean Finance/Owner dengan re-auth; PO dari PR (Admin) |
 | Tagihan HRD | 8 | ⏳ | Periode tagihan (tutup periode, ubah tanggal gaji), buat invoice, terbit → serah ke HRD → catat pembayaran, tampilan cetak invoice |
 | Manajemen pengguna | 10 | ⏳ | Daftar/cari/filter; tambah/ubah role; aktif/nonaktif; reset sandi; ganti sandi sendiri |
@@ -76,7 +77,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|
 | `lib/api/client.ts` | `fetch` + Bearer + `ApiError` (`status`, `errors`, `firstError()`); 401 pada sesi berjalan memicu keluar |
 | `lib/api/types.ts` | Kontrak API (satu-satunya sumber tipe) |
-| `lib/api/endpoints.ts` | Fungsi per modul: `authApi`, `productApi`, `categoryApi`, `supplierApi`, `inventoryApi`, `customerApi`, `notificationApi`, `shiftApi`, `cashDepositApi`, `saleApi`, `discountApi`, `settingsApi` |
+| `lib/api/endpoints.ts` | Fungsi per modul: `authApi`, `productApi`, `categoryApi`, `supplierApi`, `purchaseOrderApi`, `goodsReceiptApi`, `inventoryApi`, `customerApi`, `notificationApi`, `shiftApi`, `cashDepositApi`, `saleApi`, `discountApi`, `settingsApi` |
 | `lib/format.ts` | `formatRupiah`, `formatQty`, `formatDateTime` (WIB), `formatDate`, `toWibDate` |
 | `lib/money.ts` | Aritmetika uang/qty berbasis bigint untuk **tampilan dan validasi** (bukan keputusan transaksi) |
 | `components/layout/nav.ts` | Satu sumber menu + izin; `AppLayout` menyaring per izin |
@@ -92,9 +93,10 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Inventory dan karyawan | `openingForm`, `movementLabels`, `customerForm`, `creditState`, `notificationLink` | 6 · 2 · 8 · 2 · 3 | ✅ |
 | Shift dan kasir | `shiftLogic`, `money`, `cartLogic` | 6 · 6 · 21 | ✅ |
 | Riwayat penjualan | `saleHistoryLogic` | 3 | ✅ |
+| Penerimaan barang | `goodsReceiptForm` | 5 | ✅ |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**121 lulus, 18 berkas**) dan `npm run build` lulus. Test otomatis mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan dan pembuatan Draft setoran parsial berjalan sesuai ekspektasi.
+Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**126 lulus, 19 berkas**) dan `npm run build` lulus setelah tahap penerimaan barang. Test otomatis mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan berjalan sesuai ekspektasi.
 
 ## 4. Celah dan catatan yang diketahui
 
@@ -109,13 +111,15 @@ Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**121 lulus, 18 berkas**) dan
 
 ## 5. Tahap berikutnya (urut, usulan agent)
 
-1. **Sedang dikerjakan: riwayat penjualan** (bagian 5 dan 7.2): daftar/filter, detail, cetak ulang SALINAN dan void Admin; menunggu uji klik pengguna.
-2. **Setoran parsial dan penerimaan Finance** (bagian 7.1): pembuatan Draft parsial telah diuji pengguna; serah/batal, blokir tutup shift, penerimaan Finance, koreksi dan saldo dana masih perlu verifikasi.
-3. **Penerimaan barang** oleh Kasir (jalur resmi stok masuk), lalu PR/PO.
+1. ✅ **Riwayat penjualan** (bagian 5 dan 7.2): pengguna telah menguji daftar/filter, detail, cetak ulang SALINAN, dan void Admin; uji klik berjalan lancar pada 27 Okt 2026.
+2. **Sedang dikerjakan: penerimaan barang** (bagian 6.3): daftar PO receivable, detail kuantitas diterima/rusak dan batch/kedaluwarsa, Draft/posting/pembatalan Draft, serta verifikasi dokumen Admin. Menunggu uji klik pengguna.
+3. **PR dan PO** (bagian 6.1 dan 6.2), setelah alur penerimaan barang.
 4. **Tagihan HRD** (Admin).
 5. **Manajemen pengguna**: UI Admin untuk mengelola akun dan ganti sandi. Backend bagian 10 sudah lulus test.
 6. Transfer stok antarposisi (backend tahap 2.6 sudah tersedia).
 7. Dashboard setelah backend menyediakan laporan.
+
+Verifikasi tindakan setoran parsial dan Finance tetap belum dikonfirmasi pengguna; hal ini dicatat sebagai sisa uji untuk tahap kas, bukan perubahan cakupan pada tahap penerimaan barang.
 
 Jika jadwal mundur, yang tidak boleh dipotong: layar kasir, setoran + endapan, tagihan HRD (HANDOFF bagian 7).
 
@@ -131,6 +135,9 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 4. Jangan menandai ✅ sebelum pengguna menjalankan test (aturan kerja HANDOFF bagian 8 butir 5, berlaku juga untuk frontend).
 
 ## Riwayat
+
+- **2026-10-27** — Tahap frontend penerimaan barang: halaman `/goods-receipts` menampilkan PO yang dapat diterima dan riwayat GR; Kasir dapat mencatat qty diterima/rusak, batch, tanggal kedaluwarsa, serta menyimpan Draft; Draft dapat diposting atau dibatalkan; Admin dengan `goods_receipt.verify_documents` dapat memverifikasi nomor surat jalan dan faktur. Form mendukung beberapa batch untuk satu baris PO dan memakai aritmetika qty `bigint` untuk validasi batas sisa. `npm run typecheck`, `npm test` (**126 lulus, 19 berkas**) dan `npm run build` lulus; uji klik pengguna masih menunggu.
+- **2026-10-27** — Pengguna mengonfirmasi uji klik Riwayat Penjualan berjalan lancar. Status `/sales` diubah menjadi ✅.
 
 - **2026-10-27** — Pengguna menguji pembuatan Draft setoran parsial Kasir dan menyatakan hasil sesuai ekspektasi. Uji tindakan setoran lainnya dan Finance masih belum dikonfirmasi.
 - **2026-10-27** — Tahap frontend setoran parsial dan penerimaan Finance: Kasir dapat membuat, menyerahkan, melihat riwayat, dan membatalkan hanya Draft parsial; penutupan shift tertahan selama Draft masih ada. Halaman `/cash-deposits` menyediakan antrean/status, detail, penerimaan dengan catatan wajib bila selisih, koreksi beralasan, dan saldo dana. `npm run typecheck`, `npm test` (**118 lulus**) dan `npm run build` lulus; UI menunggu uji klik pengguna.
