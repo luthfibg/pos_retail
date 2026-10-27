@@ -104,6 +104,30 @@ class StockAdjustmentTest extends SeededTestCase
         $this->assertSame($cashier->id, (int) DB::table('stock_adjustments')->where('id', $id)->value('requested_by'));
     }
 
+    public function test_approver_can_view_adjustment_queue_without_request_permission(): void
+    {
+        $fixture = $this->stockFixture();
+        $this->signIn('Kasir', 'kasir-adjust-queue');
+        $id = (int) $this->postJson('/api/inventory/adjustments', $this->payload($fixture, '7'))
+            ->assertCreated()->json('data.id');
+        $this->postJson("/api/inventory/adjustments/{$id}/request")->assertOk();
+
+        $approver = $this->approver('adjust-reviewer');
+        $storeId = $this->storeId();
+        DB::table('user_permissions')->insert([
+            'user_id' => $approver->id,
+            'permission_id' => DB::table('permissions')->where('code', 'inventory.adjust.request')->value('id'),
+            'store_id' => $storeId,
+            'effect' => 'deny',
+        ]);
+        app(\App\Services\PermissionResolver::class)->flush();
+
+        $this->getJson('/api/inventory/adjustments?status=requested')
+            ->assertOk()->assertJsonPath('data.0.id', $id);
+        $this->getJson("/api/inventory/adjustments/{$id}")
+            ->assertOk()->assertJsonPath('data.id', $id);
+    }
+
     public function test_positive_opname_adjustment_adds_sellable_stock_without_reauth(): void
     {
         $fixture = $this->stockFixture();

@@ -186,6 +186,57 @@ export interface OpeningBalanceResult {
   items: { product_id: number; batch_id: number; qty: Decimal }[];
 }
 
+export type StockAdjustmentReason = 'opname' | 'loss' | 'damage' | 'expired' | 'other';
+export type StockAdjustmentStatus = 'draft' | 'requested' | 'posted' | 'rejected' | 'cancelled';
+
+export interface StockAdjustmentSummary {
+  id: number;
+  doc_number: string;
+  reason: StockAdjustmentReason;
+  status: StockAdjustmentStatus;
+  requested_by: number;
+  requested_by_name: string;
+  approved_by: number | null;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  reauth_at: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface StockAdjustmentItem {
+  id: number;
+  product_id: number;
+  sku: string;
+  product_name: string;
+  batch_id: number | null;
+  batch_code: string | null;
+  expiry_date: string | null;
+  location_id: number;
+  location_name: string;
+  shelf_position_id: number | null;
+  shelf_position: string | null;
+  qty_before: Decimal;
+  qty_counted: Decimal;
+  qty_diff: Decimal;
+}
+
+export interface StockAdjustment extends StockAdjustmentSummary {
+  items: StockAdjustmentItem[];
+}
+
+export interface StockAdjustmentInput {
+  reason: StockAdjustmentReason;
+  note?: string;
+  items: Array<{
+    product_id: number;
+    batch_id?: number;
+    location_id: number;
+    shelf_position_id?: number;
+    qty_counted: Decimal;
+  }>;
+}
+
 export type CustomerStatus = 'pending_verification' | 'active' | 'inactive';
 export type CreditState = 'not_verified' | 'limit_not_set' | 'available' | 'exhausted' | 'inactive';
 

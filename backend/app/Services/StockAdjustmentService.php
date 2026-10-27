@@ -23,6 +23,8 @@ class StockAdjustmentService
     /** @param array<string, mixed> $filters */
     public function search(User $user, int $storeId, array $filters, int $perPage): LengthAwarePaginator
     {
+        $this->assertCanView($user, $storeId);
+
         $query = $this->headerQuery($storeId)->orderByDesc('a.id');
         if (! $this->permissions->allows($user, 'inventory.adjust.approve', $storeId)) {
             $query->where('a.requested_by', $user->id);
@@ -43,6 +45,8 @@ class StockAdjustmentService
     /** @return array<string, mixed>|null */
     public function find(User $user, int $storeId, int $id): ?array
     {
+        $this->assertCanView($user, $storeId);
+
         $header = $this->headerQuery($storeId)->where('a.id', $id)->first();
         if ($header === null || (
             ! $this->permissions->allows($user, 'inventory.adjust.approve', $storeId)
@@ -394,6 +398,16 @@ class StockAdjustmentService
             && ! $this->permissions->allows($actor, 'inventory.adjust.approve', $storeId)) {
             abort(404, 'Adjustment stok tidak ditemukan.');
         }
+    }
+
+    private function assertCanView(User $user, int $storeId): void
+    {
+        abort_unless(
+            $this->permissions->allows($user, 'inventory.adjust.request', $storeId)
+                || $this->permissions->allows($user, 'inventory.adjust.approve', $storeId),
+            403,
+            'Anda tidak memiliki izin untuk melihat adjustment stok.',
+        );
     }
 
     private function lock(int $storeId, int $id): object

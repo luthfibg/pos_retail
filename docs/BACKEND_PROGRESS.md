@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **222 lulus (1.946 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **223 lulus (1.953 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 222 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 223 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -37,9 +37,9 @@
 | GET | `/api/inventory/transfers/{id}` | `stock_transfer.create` | Detail draft/posted/cancelled |
 | POST | `/api/inventory/transfers/{id}/post` | `stock_transfer.create` | Posting atomik dan memindahkan saldo |
 | POST | `/api/inventory/transfers/{id}/cancel` | `stock_transfer.create` | Batalkan draft (opsional `reason`) |
-| GET | `/api/inventory/adjustments` | `inventory.adjust.request` | Daftar adjustment/opname yang diizinkan untuk pengguna |
+| GET | `/api/inventory/adjustments` | `inventory.adjust.request` atau `inventory.adjust.approve` | Daftar adjustment/opname yang diizinkan; approver dapat melihat antrean |
 | POST | `/api/inventory/adjustments` | `inventory.adjust.request` | Buat draft adjustment/opname dengan snapshot saldo |
-| GET | `/api/inventory/adjustments/{id}` | `inventory.adjust.request` | Detail dokumen |
+| GET | `/api/inventory/adjustments/{id}` | `inventory.adjust.request` atau `inventory.adjust.approve` | Detail dokumen |
 | POST | `/api/inventory/adjustments/{id}/request` | `inventory.adjust.request` | Ajukan draft untuk persetujuan |
 | POST | `/api/inventory/adjustments/{id}/approve` | `inventory.adjust.approve` | Setujui dan posting atomik, atau tolak dengan alasan |
 | POST | `/api/inventory/adjustments/{id}/cancel` | `inventory.adjust.request` | Batalkan draft/permintaan sebelum posting |
@@ -116,7 +116,7 @@ Semua endpoint transfer memakai permission `stock_transfer.create` (role Kasir/A
 
 ### Adjustment dan opname (tahap 2.7) ✅
 
-Semua endpoint memakai permission `inventory.adjust.request`, kecuali approve/reject yang memakai `inventory.adjust.approve`. Kasir hanya dapat melihat dokumen yang dia ajukan; pemegang permission approve dapat melihat semua dokumen di tokonya.
+Endpoint baca memakai permission `inventory.adjust.request` atau `inventory.adjust.approve`; pemohon hanya dapat melihat dokumen yang dia ajukan, sedangkan pemegang permission approve dapat membaca antrean dan detail dokumen di tokonya. Mutasi tetap memakai permission khusus: create/request/cancel menggunakan `inventory.adjust.request`, approve/reject menggunakan `inventory.adjust.approve`.
 
 `POST /api/inventory/adjustments` menerima draft:
 ```json
@@ -590,8 +590,9 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-27** — Akses baca adjustment diselaraskan untuk role approver: pemegang `inventory.adjust.approve` dapat membaca antrean dan detail tanpa `inventory.adjust.request`; test akses ditambahkan. `StockAdjustmentTest`: **9 lulus**; suite `php artisan test`: **223 lulus (1.953 assertions)**.
 - **2026-10-27** — Akses baca alur purchasing diselaraskan untuk konfigurasi role terpisah: Finance/Owner/Purchasing dapat membaca antrean PR sesuai permission; pemegang `purchase_requisition.approve`/`purchase_order.send` dapat membaca PO yang perlu diproses; pemegang `purchase_order.create` dapat membaca supplier untuk membuat PO. Test akses ditambahkan. `php artisan test`: **222 lulus (1.946 assertions)**.
-- **2026-10-27** — Tahap 2.7 (adjustment/opname) ditambahkan: draft dan snapshot stok, pengajuan, persetujuan/re-auth kondisional, penolakan/pembatalan, pemeriksaan snapshot untuk mencegah posting hitung-stok kedaluwarsa, movement dan audit atomik. `StockAdjustmentTest` 8 test (85 assertions); seluruh suite **218 test lulus (1.922 assertions)**; bagian 1 kini ✅.
+- **2026-10-27** — Tahap 2.7 (adjustment/opname) ditambahkan: draft dan snapshot stok, pengajuan, persetujuan/re-auth kondisional, penolakan/pembatalan, pemeriksaan snapshot untuk mencegah posting hitung-stok kedaluwarsa, movement dan audit atomik. Implementasi awal `StockAdjustmentTest` memiliki 8 test (85 assertions); suite saat itu **218 test lulus (1.922 assertions)**; bagian 1 kini ✅.
 - **2026-10-27** — Tahap 2.6 (transfer stok) ditambahkan: draft, validasi posisi/lokasi dan setting gudang, posting saldo atomik dengan pasangan movement, pembatalan draft, dan audit. **210 test lulus (1.837 assertions)**; bagian 1 kini ✅.
 - **2026-10-26** — Tahap 3.6 (kas masuk/keluar nonpenjualan) ditambahkan: API pencatatan dan riwayat per shift, pembatasan akses pemilik shift, update ledger Kas Kecil, dan audit. **204 test lulus (1.764 assertions)**; bagian 7.4 kini ✅.
 - **2026-10-26** — Pengguna menjalankan seluruh suite: **200 test lulus (1.729 assertions)**. Bagian 10 (Manajemen Pengguna) kini ✅.

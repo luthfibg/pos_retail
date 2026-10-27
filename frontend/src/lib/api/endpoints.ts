@@ -6,6 +6,7 @@ import type {
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
   GoodsReceipt, GoodsReceiptItemInput, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
   PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
+  StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
 } from './types';
 
 export const authApi = {
@@ -146,6 +147,30 @@ export const inventoryApi = {
   movements: (f: MovementFilters = {}) => api<Paginated<Movement>>('/inventory/movements', { query: { ...f } }),
   openingBalance: (input: OpeningBalanceInput) =>
     api<{ data: OpeningBalanceResult }>('/inventory/opening-balances', { method: 'POST', body: input }).then((r) => r.data),
+  adjustments: (f: {
+    status?: StockAdjustmentStatus;
+    reason?: StockAdjustmentReason;
+    q?: string;
+    page?: number;
+    per_page?: number;
+  } = {}) => api<Paginated<StockAdjustmentSummary>>('/inventory/adjustments', { query: { ...f } }),
+  adjustment: (id: number) =>
+    api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}`).then((r) => r.data),
+  createAdjustment: (input: StockAdjustmentInput) =>
+    api<{ data: StockAdjustment }>('/inventory/adjustments', { method: 'POST', body: input }).then((r) => r.data),
+  requestAdjustment: (id: number) =>
+    api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}/request`, { method: 'POST' }).then((r) => r.data),
+  approveAdjustment: (id: number, input: {
+    decision: 'approve' | 'reject';
+    note?: string;
+    approver_username?: string;
+    approver_password?: string;
+  }) => api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}/approve`, { method: 'POST', body: input }).then((r) => r.data),
+  cancelAdjustment: (id: number, reason?: string) =>
+    api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}/cancel`, {
+      method: 'POST',
+      body: reason ? { reason } : {},
+    }).then((r) => r.data),
 };
 
 export const customerApi = {

@@ -17,12 +17,11 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
         ->middleware('can:inventory.adjust.approve');
 
     // Adjustment dan opname; perubahan saldo terjadi setelah persetujuan.
-    Route::get('adjustments', [StockAdjustmentController::class, 'index'])
-        ->middleware('can:inventory.adjust.request');
+    Route::get('adjustments', [StockAdjustmentController::class, 'index']);
     Route::post('adjustments', [StockAdjustmentController::class, 'store'])
         ->middleware('can:inventory.adjust.request');
     Route::get('adjustments/{adjustment}', [StockAdjustmentController::class, 'show'])
-        ->whereNumber('adjustment')->middleware('can:inventory.adjust.request');
+        ->whereNumber('adjustment');
     Route::post('adjustments/{adjustment}/request', [StockAdjustmentController::class, 'request'])
         ->whereNumber('adjustment')->middleware('can:inventory.adjust.request');
     Route::post('adjustments/{adjustment}/approve', [StockAdjustmentController::class, 'approve'])
