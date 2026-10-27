@@ -364,10 +364,15 @@ function GoodsReceiptDetailDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentError, setAttachmentError] = useState('');
+  const attachmentInput = useRef<HTMLInputElement>(null);
   const [deliveryNoteNo, setDeliveryNoteNo] = useState('');
   const [invoiceNo, setInvoiceNo] = useState('');
   const [confirmAction, setConfirmAction] = useState<'post' | 'cancel' | 'verify' | null>(null);
   const detail = useQuery({ queryKey: ['goods-receipt', receiptId], queryFn: () => goodsReceiptApi.get(receiptId) });
+  const receipt = detail.data;
+  const attachmentsOpen = receipt !== undefined && receipt.status !== 'cancelled' && receipt.document_status !== 'verified';
 
   useEffect(() => {
     setDeliveryNoteNo(detail.data?.delivery_note_no ?? '');
@@ -391,11 +396,38 @@ function GoodsReceiptDetailDialog({
     onSuccess: refresh,
     onError: () => setConfirmAction(null),
   });
-  const mutationError = post.error ?? cancel.error ?? verify.error;
-  const receipt = detail.data;
+  const upload = useMutation({
+    mutationFn: () => {
+      if (!attachmentFile) throw new Error('Pilih berkas lampiran terlebih dahulu.');
+      return goodsReceiptApi.uploadAttachment(receiptId, attachmentFile);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['goods-receipt', receiptId] });
+      setAttachmentFile(null);
+      setAttachmentError('');
+      if (attachmentInput.current) attachmentInput.current.value = '';
+    },
+  });
+  const download = useMutation({
+    mutationFn: (attachmentId: number) => goodsReceiptApi.downloadAttachment(receiptId, attachmentId),
+    onSuccess: (blob, attachmentId) => {
+      const attachment = receipt?.attachments.find((item) => item.id === attachmentId);
+      if (!attachment) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.original_name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+  });
+  const mutationError = post.error ?? cancel.error ?? verify.error ?? upload.error ?? download.error;
+  const saving = post.isPending || cancel.isPending || verify.isPending || upload.isPending || download.isPending;
 
   return (
-    <Modal title="Detail penerimaan" onClose={() => !(post.isPending || cancel.isPending || verify.isPending) && onClose()}>
+    <Modal title="Detail penerimaan" onClose={() => !saving && onClose()}>
       {detail.isLoading ? <p className="p-5 text-sm text-slate-500">Memuat detail penerimaan…</p> : detail.error ? (
         <div className="space-y-3 p-5"><ErrorNotice error={detail.error} /></div>
       ) : receipt ? (
@@ -435,7 +467,62 @@ function GoodsReceiptDetailDialog({
           </div>
           {receipt.note && <p className="rounded-md bg-slate-50 p-3 text-sm">Catatan: {receipt.note}</p>}
 
-          {receipt.status === 'draft' && (
+            <section className="space-y-3 rounded-md border border-slate-200 p-3">
+              <div>
+                <h3 className="text-sm font-semibold">Lampiran dokumen</h3>
+                <p className="mt-1 text-xs text-slate-500">JPEG, PNG, WebP, atau PDF; maksimum 10 MB per berkas. Berkas disimpan privat.</p>
+              </div>
+              {receipt.attachments.length > 0 ? (
+                <ul className="divide-y divide-slate-100 rounded-md border border-slate-100">
+                  {receipt.attachments.map((attachment) => (
+                    <li key={attachment.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <div className="break-all font-medium">{attachment.original_name}</div>
+                        <div className="text-xs text-slate-500">
+                          {attachment.mime_type} · {(attachment.size_bytes / 1024 / 1024).toFixed(2)} MB · {attachment.uploaded_by_name} · {formatDateTime(attachment.created_at)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={download.isPending}
+                        onClick={() => download.mutate(attachment.id)}
+                        className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-xs disabled:opacity-60"
+                      >
+                        {download.isPending && download.variables === attachment.id ? 'Mengunduh…' : 'Unduh'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-sm text-slate-500">Belum ada lampiran.</p>}
+              {attachmentsOpen && (
+                <div className="flex flex-wrap items-end gap-2">
+                  <Field label="Tambah lampiran">
+                    <input
+                      ref={attachmentInput}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      className={`${inputCls} max-w-md`}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        setAttachmentError(file && file.size > 10 * 1024 * 1024 ? 'Ukuran berkas maksimal 10 MB.' : '');
+                        setAttachmentFile(file && file.size <= 10 * 1024 * 1024 ? file : null);
+                      }}
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    disabled={!attachmentFile || Boolean(attachmentError) || upload.isPending}
+                    onClick={() => upload.mutate()}
+                    className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {upload.isPending ? 'Mengunggah…' : 'Unggah'}
+                  </button>
+                </div>
+              )}
+              {attachmentError && <p role="alert" className="text-xs text-red-700">{attachmentError}</p>}
+            </section>
+
+            {receipt.status === 'draft' && (
             <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
               <p className="text-sm">Draft belum mengubah stok. Posting akan menambahkan jumlah diterima ke stok, memperbarui sisa PO, dan tidak memasukkan jumlah rusak ke stok.</p>
               {confirmAction === 'post' ? (

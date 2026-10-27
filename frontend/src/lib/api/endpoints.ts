@@ -1,12 +1,13 @@
-import { api } from './client';
+import { api, apiDownload } from './client';
 import type {
   Category, CategoryInput, CashDeposit, CashMovement, CashMovementType, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
-  GoodsReceipt, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
+  GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
   PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
+  StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
 } from './types';
 
 export const authApi = {
@@ -118,6 +119,16 @@ export const goodsReceiptApi = {
   list: (f: { q?: string; page?: number; per_page?: number } = {}) =>
     api<Paginated<GoodsReceiptSummary>>('/goods-receipts', { query: { ...f } }),
   get: (id: number) => api<{ data: GoodsReceipt }>(`/goods-receipts/${id}`).then((r) => r.data),
+  uploadAttachment: (id: number, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return api<{ data: GoodsReceiptAttachment }>(`/goods-receipts/${id}/attachments`, {
+      method: 'POST',
+      body,
+    }).then((r) => r.data);
+  },
+  downloadAttachment: (receiptId: number, attachmentId: number) =>
+    apiDownload(`/goods-receipts/${receiptId}/attachments/${attachmentId}`),
   create: (input: {
     po_id: number;
     receiving_location_id?: number;
@@ -171,6 +182,23 @@ export const inventoryApi = {
   }) => api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}/approve`, { method: 'POST', body: input }).then((r) => r.data),
   cancelAdjustment: (id: number, reason?: string) =>
     api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}/cancel`, {
+      method: 'POST',
+      body: reason ? { reason } : {},
+    }).then((r) => r.data),
+  transfers: (f: {
+    status?: StockTransferStatus;
+    q?: string;
+    page?: number;
+    per_page?: number;
+  } = {}) => api<Paginated<StockTransferSummary>>('/inventory/transfers', { query: { ...f } }),
+  transfer: (id: number) =>
+    api<{ data: StockTransfer }>(`/inventory/transfers/${id}`).then((r) => r.data),
+  createTransfer: (input: StockTransferInput) =>
+    api<{ data: StockTransfer }>('/inventory/transfers', { method: 'POST', body: input }).then((r) => r.data),
+  postTransfer: (id: number) =>
+    api<{ data: StockTransfer }>(`/inventory/transfers/${id}/post`, { method: 'POST' }).then((r) => r.data),
+  cancelTransfer: (id: number, reason?: string) =>
+    api<{ data: StockTransfer }>(`/inventory/transfers/${id}/cancel`, {
       method: 'POST',
       body: reason ? { reason } : {},
     }).then((r) => r.data),

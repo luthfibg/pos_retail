@@ -65,13 +65,13 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 
 ### Tahap frontend terbaru
 
-Tahap terbaru adalah UI Adjustment & Opname. `/inventory/adjustments` mendukung pencatatan hitung fisik dari snapshot saldo sellable per batch/lokasi, pengajuan dan pembatalan, serta persetujuan/penolakan dengan re-auth untuk alasan loss/expired. Approver dapat membaca antrean dan detail tanpa permission request. Typecheck, seluruh 141 test frontend, build produksi, serta 228 test backend (2.019 assertions) lulus; uji klik pengguna masih menunggu.
+Tahap terbaru mencakup UI Transfer Stok `/inventory/transfers` (daftar/filter, Draft dari saldo sellable per batch/posisi, detail, posting, pembatalan) dan lampiran privat di detail `/goods-receipts` (unggah/unduh JPEG, PNG, WebP, PDF). Backend belum menyediakan katalog posisi rak, jadi posisi tujuan transfer dapat diisi sebagai ID opsional; transfer antar lokasi tetap berfungsi tanpa posisi tujuan. Typecheck, 149 test frontend, dan build produksi lulus; uji klik pengguna masih menunggu.
 
 Tahap PR/PO sebelumnya menutup gap alur pembelian yang hanya mencakup penerimaan PO yang sudah tersedia. `/purchase-requisitions` mendukung Kasir membuat/mengubah/mengajukan PR; Finance memeriksa dan mengembalikan dengan catatan; Owner menyetujui/menolak dengan autentikasi ulang; dan Purchasing membuat PO per supplier, mengajukan, melakukan konfirmasi Owner bila nilai PO memerlukan persetujuan, serta menandai PO dikirim.
 
 Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga dapat dipakai pada model Admin gabungan maupun konfigurasi Kasir/Finance/Purchasing/Owner terpisah. Akses GET PR backend juga mendukung permission pengelolaan tanpa mewajibkan permission `purchase_requisition.create`. `npm run typecheck`, `npm test` (130 test), `npm run build`, dan `php artisan test` (222 test saat tahap tersebut) lulus. Uji klik tahap Admin PR/PO belum dikonfirmasi.
 
-**Langkah frontend berikutnya:** UI adjustment/opname sudah diimplementasikan; menunggu uji klik pengguna. Tahap frontend berikutnya yang direkomendasikan adalah transfer stok antarposisi/putaway (backend 2.6 sudah siap), lalu Tagihan HRD dan Manajemen Pengguna. `/goods-receipts` tetap menunggu uji klik. Penyelesaian penerimaan barang dan Tagihan HRD tetap penting untuk go-live.
+**Langkah frontend berikutnya:** uji klik Transfer Stok, lampiran Penerimaan Barang, dan Adjustment/Opname. Sesudahnya, lanjutkan Tagihan HRD dan Manajemen Pengguna; `/goods-receipts` tetap menunggu uji klik. Penyelesaian penerimaan barang dan Tagihan HRD tetap penting untuk go-live.
 
 **Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → transfer antar-rak → dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 

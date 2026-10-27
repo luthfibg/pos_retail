@@ -11,6 +11,7 @@
 |---|---|---|---|---|
 | FR-01 | Pratinjau penjualan (`POST /api/sales/preview`) | Tinggi (layar kasir) | **Diminta** | 25 Okt 2026 |
 | FR-02 | Izin Finance untuk daftar/detail setoran | Tinggi (antrean setoran) | **Diminta** | 27 Okt 2026 |
+| FR-03 | Katalog lokasi dan posisi rak untuk transfer stok | Sedang (transfer/putaway) | **Diminta** | 27 Okt 2026 |
 
 ---
 
@@ -115,3 +116,28 @@ Bila lebih mudah, nama rute boleh diubah (mis. `POST /api/sales/quote`); kabari 
 Route `GET /api/cash-deposits` dan `GET /api/cash-deposits/{id}` saat ini memakai middleware `can:cash_deposit.create`, sedangkan halaman antrean Finance/Admin dan saldo dana seharusnya dapat digunakan pemegang `cash_deposit.receive`. `POST receive`, `POST correct`, dan `GET /api/fund-accounts` sudah memakai `cash_deposit.receive`. Akibatnya akun Finance yang hanya diberi izin menerima setoran akan mendapat 403 saat mengambil antrean/detail.
 
 Mohon izinkan `cash_deposit.receive` untuk daftar dan detail setoran, sambil mempertahankan `cash_deposit.create` untuk Kasir. Otorisasi data tetap mengikuti aturan service: Kasir hanya melihat setoran shift sendiri, Finance/Admin dengan `cash_deposit.receive` dapat melihat semua. Tambahkan test Finance yang hanya memiliki permission `cash_deposit.receive` untuk daftar, detail, penerimaan, koreksi, dan saldo; pastikan Kasir tidak dapat melihat setoran milik shift lain.
+
+---
+
+## FR-03 — Katalog lokasi dan posisi rak untuk transfer stok
+
+**Status:** Diminta · **Prioritas:** Sedang · **Dibutuhkan oleh:** `/inventory/transfers` · **Perubahan skema:** tidak ada.
+
+UI transfer membutuhkan daftar lokasi aktif yang boleh dipakai sebagai asal/tujuan dan daftar posisi rak aktif untuk lokasi tujuan. Kontrak yang ada hanya menyediakan `GET /api/goods-receipts/receiving-locations`, yang mensyaratkan `goods_receipt.create`, sedangkan transfer memakai `stock_transfer.create`. Endpoint itu juga tidak menyediakan posisi rak, sehingga UI transfer saat ini memakai ID posisi tujuan opsional (tidak praktis untuk putaway).
+
+Mohon sediakan endpoint baca dengan izin `stock_transfer.create`, misalnya `GET /api/inventory/transfer-options`, yang mengembalikan:
+
+```json
+{
+  "data": {
+    "locations": [
+      { "id": 1, "type": "store_floor", "name": "Area Toko" }
+    ],
+    "positions": [
+      { "id": 3, "location_id": 1, "shelf_id": 2, "shelf_code": "A1", "shelf_name": "Rak A", "level": 1, "slot": 2 }
+    ]
+  }
+}
+```
+
+Hanya sertakan lokasi aktif pada toko pengguna. Bila `warehouse_enabled=false`, gudang tidak disertakan; posisi hanya dari rak/posisi aktif pada lokasi yang disertakan. Pastikan pengguna dengan `stock_transfer.create` saja dapat mengakses endpoint ini tanpa `goods_receipt.create`; tambahkan test otorisasi dan penyaringan lokasi/rak nonaktif.

@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres frontend.** Setiap pekerjaan frontend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), seperti `BACKEND_PROGRESS.md` untuk backend. Agent frontend baru cukup membaca berkas ini + `BACKEND_PROGRESS.md` (kontrak) + `HANDOFF_POS_RETAIL_SMK.md` (aturan) + `frontend/FRONTEND.md` (struktur dan konvensi). Kebutuhan yang belum dipenuhi kontrak API ditulis di `FRONTEND_REQUESTS.md` untuk agent backend.
 
-**Diperbarui:** 27 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang, alur PR/PO, dan adjustment/opname
+**Diperbarui:** 27 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang dan lampiran privat, alur PR/PO, adjustment/opname, transfer stok
 
 ## Cara membaca status
 
@@ -44,7 +44,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/shifts` | Tinjau Shift (Admin) | `shift.review` | 4 | ✅ | |
 | `/cash-deposits` | Setoran Masuk: antrean, penerimaan Finance, koreksi selisih, saldo Kas Kecil/Besar | `cash_deposit.receive` | 7.1 | 🟡 | UI baru dibuat; menunggu verifikasi browser |
 | `/sales` | Riwayat Penjualan: daftar/filter, detail struk, cetak SALINAN, void sesuai izin/status shift/tagihan | `sales.create`, `receipt.reprint`, `sales.void` | 5, 7.2 | ✅ | Pengguna mengonfirmasi uji klik berjalan lancar (27 Okt 2026) |
-| `/goods-receipts` | Penerimaan barang: PO receivable, qty diterima/rusak, batch/kedaluwarsa, Draft/posting, verifikasi dokumen Admin | `goods_receipt.create`, `goods_receipt.verify_documents` | 6.3, 4.4 | 🟡 | Backend mendukung pemilih lokasi (`GET /api/goods-receipts/receiving-locations`) dan posisi rak; UI pemilih lokasi/putaway belum dibuat; menunggu verifikasi browser |
+| `/goods-receipts` | Penerimaan barang: PO receivable, qty diterima/rusak, batch/kedaluwarsa, Draft/posting, lampiran privat, verifikasi dokumen Admin | `goods_receipt.create`, `goods_receipt.verify_documents` | 6.3, 4.4–4.5 | 🟡 | Upload/unduh lampiran JPEG/PNG/WebP/PDF tersedia pada detail GR; menunggu verifikasi browser. UI pemilih lokasi/putaway belum dibuat |
 | `/purchase-requisitions` | Permintaan Pembelian: Kasir mengelola PR sendiri; Finance memeriksa; Owner menyetujui; Purchasing membuat, mengajukan, mengonfirmasi, dan mengirim PO | `purchase_requisition.create`, `purchase_requisition.finance_check`, `purchase_requisition.approve`, `purchase_order.create`, `purchase_order.send` | 6.1–6.2 | 🟡 | Aksi mengikuti permission, bukan nama role; menunggu uji klik Admin PR/PO |
 | `/products` | Produk: daftar, form, stok per batch (FEFO) | `inventory.view` | HANDOFF 6, 1 | ✅ | HPP hanya tampil untuk Admin |
 | `/categories` | Kategori (pohon) | `category.manage` | HANDOFF 6 | ✅ | |
@@ -52,6 +52,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/customers` | Karyawan: daftar, tambah, verifikasi, batas kredit, riwayat batas | `customer.select` | 2 | ✅ | Tautan dari notifikasi: `?open=ID` |
 | `/inventory/opening` | Stok Awal (Admin) | `inventory.adjust.approve` | 1 | ✅ | |
 | `/inventory/movements` | Riwayat Stok | `inventory.view` | 1 | ✅ | |
+| `/inventory/transfers` | Transfer antar lokasi/posisi: Draft, detail, posting, pembatalan | `stock_transfer.create` | 1 | 🟡 | Implementasi awal tersedia; katalog posisi rak belum tersedia di API sehingga ID posisi tujuan diisi opsional; menunggu uji klik |
 | `/inventory/adjustments` | Adjustment & Opname: Draft snapshot, pengajuan, approval/rejection dan posting | `inventory.adjust.request`, `inventory.adjust.approve` | 2.7 | 🟡 | Implementasi dan test logika tersedia; menunggu uji klik |
 | `/discounts` | **Diskon** (Admin): daftar + filter, tambah, ubah, aktif/nonaktif | `discount.manage` | 9 | ✅ | Test frontend dan backend terkonfirmasi lulus |
 | `/settings/vat` | **Pengaturan PPN** (Admin): saklar, tarif, harga termasuk/tidak, dialog konfirmasi | `settings.manage` | 9 | ✅ | Test frontend dan backend lulus; keputusan bisnis R-04 tetap menunggu klien |
@@ -66,10 +67,10 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Kas masuk/keluar nonpenjualan | 7.4 | ✅ | Form kas masuk/keluar berkonfirmasi dan riwayat berpaginasi di halaman Shift; perubahan kas hanya saat shift aktif. Otomatisasi frontend lulus dan pengguna sudah menguji alur klik tanpa kendala |
 | Penyerahan setoran akhir (Kasir) | 7.1 | ✅ | Hasil tutup shift menampilkan nilai setoran/endapan/flag, serahkan setoran Draft, pulihkan setoran Draft setelah reload, dan tahan buka shift baru sampai setoran diserahkan |
 | Fitur setoran/endapan lainnya | 7.1 | 🟡 | Pengguna telah menguji pembuatan Draft setoran parsial Kasir dan mengonfirmasi hasil sesuai ekspektasi. Uji serah/batal Draft, blokir tutup shift, antrean/penerimaan Finance, koreksi selisih, dan saldo dana masih menunggu |
-| Transfer stok antarposisi / putaway | 1 | ⏳ | Backend tahap 2.6 siap; UI daftar, buat draft, detail, posting, dan pembatalan draft belum dibuat |
+| Transfer stok antarposisi / putaway | 1 | 🟡 | `/inventory/transfers`: daftar/filter, buat Draft dari saldo sellable, detail, posting, dan pembatalan Draft. Katalog posisi rak belum tersedia di API; input ID posisi tujuan opsional |
 | Adjustment dan opname | 2.7 | 🟡 | `/inventory/adjustments`: buat Draft snapshot saldo sellable, ajukan, batalkan, antrean/detail, approve/reject, re-auth untuk loss/expired, dan posting atomik. Backend mengizinkan approver membaca antrean/detail tanpa permission request. Menunggu uji klik; belum ada sesi opname terpisah |
 | Riwayat penjualan | 5, 7.2 | ✅ | `/sales`: daftar + filter, detail, **cetak ulang SALINAN**, **void** Admin; pengguna mengonfirmasi uji klik berjalan lancar |
-| Penerimaan barang | 6.3 | 🟡 | Tahap aktif `/goods-receipts`: pilih PO `receivable=1`, catat diterima/rusak, pecah batch, validasi kedaluwarsa, simpan Draft, posting, batalkan Draft, dan verifikasi surat jalan/faktur (Admin); menunggu uji klik |
+| Penerimaan barang | 6.3 | 🟡 | `/goods-receipts`: pilih PO `receivable=1`, catat diterima/rusak, pecah batch, validasi kedaluwarsa, simpan Draft, posting, batalkan Draft, unggah/unduh lampiran privat, dan verifikasi surat jalan/faktur (Admin); menunggu uji klik |
 | PR/PO | 6.1, 6.2 | 🟡 | PR Kasir dan Admin: alur Finance/Owner serta PO per supplier tersedia; menunggu uji klik. |
 | Tagihan HRD | 8 | ⏳ | Periode tagihan (tutup periode, ubah tanggal gaji), buat invoice, terbit → serah ke HRD → catat pembayaran, tampilan cetak invoice |
 | Manajemen pengguna | 10 | ⏳ | Daftar/cari/filter; tambah/ubah role; aktif/nonaktif; reset sandi; ganti sandi sendiri |
@@ -100,9 +101,10 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Penerimaan barang | `goodsReceiptForm` | 5 | ✅ |
 | PR/PO | `purchaseRequisitionForm` | 4 | ✅ |
 | Adjustment & Opname | `adjustmentForm` | 4 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
+| Transfer stok | `transferForm` | 5 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 27 Okt 2026, setelah tahap Adjustment & Opname, `npm run typecheck`, `npm test` (**141 lulus, 22 berkas**) dan `npm run build` lulus. `php artisan test` (**223 lulus, 1.953 assertions**) juga lulus. Test otomatis frontend mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan. Penerimaan barang, alur Admin PR/PO, dan Adjustment & Opname menunggu uji klik.
+Pada 27 Okt 2026, setelah tahap Transfer Stok dan Lampiran Penerimaan, `npm run typecheck`, `npm test` (**149 lulus, 24 berkas**) dan `npm run build` lulus; backend terakhir **228 test (2.019 assertions)**. Test otomatis frontend mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan. Penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
 
 ## 4. Celah dan catatan yang diketahui
 
@@ -121,7 +123,7 @@ Pada 27 Okt 2026, setelah tahap Adjustment & Opname, `npm run typecheck`, `npm t
 2. ✅ **PR/PO** (bagian 6.1–6.2): Kasir membuat/mengajukan PR; Finance dapat meloloskan atau mengembalikan dengan catatan; Owner dapat menyetujui/menolak dengan autentikasi ulang; Purchasing membuat PO per supplier, mengajukan, mengonfirmasi jika butuh Owner, dan menandai PO dikirim. Mendukung role gabungan maupun role terpisah lewat permission. Implementasi dan test lulus; menunggu uji klik pengguna.
 3. **Adjustment/opname** (bagian 1, backend 2.7 sudah selesai): draft snapshot, pengajuan, approval/rejection, re-auth untuk loss/expired, posting atomik.
 4. **Tagihan HRD** (Admin); diperlukan untuk menutup siklus penjualan kredit dan tidak boleh terlewat sebelum UAT.
-5. **Transfer stok** (backend 2.6 sudah siap), kemudian **manajemen pengguna** dan dashboard setelah endpoint laporan tersedia.
+5. **Transfer stok** (backend 2.6 sudah siap): UI `/inventory/transfers` tersedia; uji klik menunggu. Berikutnya **Tagihan HRD** dan **manajemen pengguna**; dashboard menunggu endpoint laporan.
 
 Verifikasi tindakan setoran parsial/Finance dan layar penerimaan barang tetap belum dikonfirmasi pengguna; ini adalah sisa uji UI yang sudah ada, bukan fitur backend yang belum tersedia.
 
@@ -140,6 +142,8 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 
 ## Riwayat
 
+- **2026-10-27** — Lampiran privat pada detail `/goods-receipts`: unggah JPEG/PNG/WebP/PDF maksimal 10 MB per berkas, tampilkan metadata, dan unduh melalui endpoint privat dengan Bearer token. Upload ditutup untuk GR batal atau sudah diverifikasi; API menangani multipart tanpa merusak request JSON yang ada. Typecheck, 149 test frontend, dan build lulus; menunggu verifikasi browser.
+- **2026-10-27** — UI Transfer Stok `/inventory/transfers`: daftar/filter dokumen, pembuatan Draft dari saldo sellable per batch/posisi, detail, posting atomik, dan pembatalan Draft dengan alasan opsional. Katalog posisi tujuan belum memiliki endpoint backend, jadi ID posisi tujuan berupa input opsional dan transfer antar lokasi tetap dapat digunakan tanpa posisi. Typecheck, test, dan build lulus; menunggu verifikasi klik browser.
 - **2026-10-27** — Perapihan navigasi: menu Kasir dan Shift Saya disembunyikan dari navigasi Admin, sidebar dikelompokkan dalam bagian yang dapat dibuka-tutup, dan scroll dibatasi pada workspace kanan agar sidebar tetap di tempat. Typecheck dan test lulus; menunggu verifikasi browser.
 - **2026-10-27** — Tahap frontend Adjustment & Opname: `/inventory/adjustments` menyediakan daftar/filter dokumen, Draft dari snapshot saldo sellable per batch/lokasi, validasi kuantitas desimal, detail, pengajuan/pembatalan, serta approve/reject dengan autentikasi ulang untuk loss/expired. Approver dengan permission `inventory.adjust.approve` dapat membaca antrean/detail tanpa `inventory.adjust.request`. `npm run typecheck`, `npm test` (**141 test, 22 berkas**), `npm run build`, dan `php artisan test` (**223 test, 1.953 assertions**) lulus. Uji klik browser menunggu pengguna.
 - **2026-10-27** — Tahap Admin PR/PO: Finance dapat meloloskan atau mengembalikan PR dengan catatan; Owner dapat menyetujui/menolak dengan autentikasi ulang; Purchasing dapat membuat PO Draft per supplier, mengajukan untuk persetujuan otomatis/konfirmasi Owner, dan mengirim PO. UI dan menu dibatasi berdasarkan permission agar role Finance, Owner, dan Purchasing terpisah tetap dapat memakai antrean. Akses daftar/detail PR, PO, dan supplier backend diselaraskan dengan permission alur (bukan hanya izin membuat); test akses Finance, Owner, dan Purchasing ditambahkan. `npm run typecheck`, `npm test` (130), `npm run build`, dan `php artisan test` (222; 1.946 assertions) lulus. Menunggu uji klik pengguna.

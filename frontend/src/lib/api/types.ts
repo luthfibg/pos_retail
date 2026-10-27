@@ -237,6 +237,55 @@ export interface StockAdjustmentInput {
   }>;
 }
 
+export type StockTransferStatus = 'draft' | 'posted' | 'cancelled';
+
+export interface StockTransferSummary {
+  id: number;
+  doc_number: string;
+  from_location_id: number;
+  from_location_name: string;
+  to_location_id: number;
+  to_location_name: string;
+  status: StockTransferStatus;
+  created_by: number;
+  created_by_name: string;
+  posted_by: number | null;
+  posted_by_name: string | null;
+  posted_at: string | null;
+  created_at: string;
+}
+
+export interface StockTransferItem {
+  id: number;
+  product_id: number;
+  sku: string;
+  product_name: string;
+  batch_id: number | null;
+  batch_code: string | null;
+  expiry_date: string | null;
+  from_position_id: number | null;
+  from_position: string | null;
+  to_position_id: number | null;
+  to_position: string | null;
+  qty: Decimal;
+}
+
+export interface StockTransfer extends StockTransferSummary {
+  items: StockTransferItem[];
+}
+
+export interface StockTransferInput {
+  from_location_id: number;
+  to_location_id: number;
+  items: Array<{
+    product_id: number;
+    batch_id?: number;
+    from_position_id?: number;
+    to_position_id?: number;
+    qty: Decimal;
+  }>;
+}
+
 export type CustomerStatus = 'pending_verification' | 'active' | 'inactive';
 export type CreditState = 'not_verified' | 'limit_not_set' | 'available' | 'exhausted' | 'inactive';
 
@@ -596,6 +645,15 @@ export interface GoodsReceiptItem {
   note: string | null;
 }
 
+export interface GoodsReceiptAttachment {
+  id: number;
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by_name: string;
+  created_at: string;
+}
+
 export interface GoodsReceipt extends GoodsReceiptSummary {
   po_doc_number: string;
   supplier_id: number;
@@ -607,6 +665,7 @@ export interface GoodsReceipt extends GoodsReceiptSummary {
   verified_at: string | null;
   note: string | null;
   items: GoodsReceiptItem[];
+  attachments: GoodsReceiptAttachment[];
 }
 
 export interface GoodsReceiptItemInput {

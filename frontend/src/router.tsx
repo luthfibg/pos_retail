@@ -21,6 +21,7 @@ const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module)
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
 const AdjustmentsPage = lazy(() => import('@/features/inventory/AdjustmentsPage').then((module) => ({ default: module.AdjustmentsPage })));
+const TransfersPage = lazy(() => import('@/features/inventory/TransfersPage').then((module) => ({ default: module.TransfersPage })));
 const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
 const PurchasingEntryPage = lazy(() => import('@/features/purchasing/PurchaseBoardPage').then((module) => ({ default: module.PurchasingEntryPage })));
 
@@ -83,6 +84,10 @@ export const router = createBrowserRouter([
           {
             element: <RequireAnyPermission permissions={['inventory.adjust.request', 'inventory.adjust.approve']} />,
             children: [{ path: 'inventory/adjustments', element: <LazyPage><AdjustmentsPage /></LazyPage> }],
+          },
+          {
+            element: <RequirePermission permission="stock_transfer.create" />,
+            children: [{ path: 'inventory/transfers', element: <LazyPage><TransfersPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="inventory.view" />,

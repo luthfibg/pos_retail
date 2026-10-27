@@ -55,11 +55,12 @@ function buildUrl(path: string, query?: Query): string {
 
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const token = tokenStore.get();
+  const formDataBody = opts.body instanceof FormData ? opts.body : undefined;
   const headers: Record<string, string> = {
     Accept: 'application/json', // wajib: tanpa ini Laravel bisa membalas redirect HTML
     ...opts.headers,
   };
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (opts.body !== undefined && !formDataBody) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response;
@@ -67,7 +68,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     res = await fetch(buildUrl(path, opts.query), {
       method: opts.method ?? 'GET',
       headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.body === undefined ? undefined : formDataBody ?? JSON.stringify(opts.body),
       signal: opts.signal,
     });
   } catch (e) {
@@ -85,4 +86,26 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   }
 
   return payload as T;
+}
+
+export async function apiDownload(path: string): Promise<Blob> {
+  const token = tokenStore.get();
+  let res: Response;
+  try {
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    res = await fetch(buildUrl(path), { headers });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw e;
+    throw new ApiError(0, 'Tidak dapat terhubung ke server. Periksa koneksi atau pastikan backend berjalan.');
+  }
+
+  if (!res.ok) {
+    const payload: unknown = await res.json().catch(() => null);
+    const p = (payload ?? {}) as { message?: string; errors?: Record<string, string[]> };
+    if (res.status === 401 && token) onUnauthorized?.();
+    throw new ApiError(res.status, p.message ?? `Permintaan gagal (${res.status}).`, p.errors);
+  }
+
+  return res.blob();
 }
