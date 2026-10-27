@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **210 lulus (1.837 assertions)** · **Dikerjakan:** WS-B (Inventory inti + transfer stok), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **218 lulus (1.922 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 210 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 218 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -37,6 +37,12 @@
 | GET | `/api/inventory/transfers/{id}` | `stock_transfer.create` | Detail draft/posted/cancelled |
 | POST | `/api/inventory/transfers/{id}/post` | `stock_transfer.create` | Posting atomik dan memindahkan saldo |
 | POST | `/api/inventory/transfers/{id}/cancel` | `stock_transfer.create` | Batalkan draft (opsional `reason`) |
+| GET | `/api/inventory/adjustments` | `inventory.adjust.request` | Daftar adjustment/opname yang diizinkan untuk pengguna |
+| POST | `/api/inventory/adjustments` | `inventory.adjust.request` | Buat draft adjustment/opname dengan snapshot saldo |
+| GET | `/api/inventory/adjustments/{id}` | `inventory.adjust.request` | Detail dokumen |
+| POST | `/api/inventory/adjustments/{id}/request` | `inventory.adjust.request` | Ajukan draft untuk persetujuan |
+| POST | `/api/inventory/adjustments/{id}/approve` | `inventory.adjust.approve` | Setujui dan posting atomik, atau tolak dengan alasan |
+| POST | `/api/inventory/adjustments/{id}/cancel` | `inventory.adjust.request` | Batalkan draft/permintaan sebelum posting |
 
 Daftar produk (`GET /api/products`) sudah memuat `stock_sellable` dan `stock_status`; angka itu kini terisi dari saldo nyata.
 
@@ -108,8 +114,33 @@ Semua endpoint transfer memakai permission `stock_transfer.create` (role Kasir/A
 - Daftar menerima filter `status` (`draft|posted|cancelled`), awalan nomor dokumen melalui `q`, dan `per_page` (1–100, default 25). Detail memuat nama lokasi, pembuat/pemosting, waktu posting, serta rincian produk, batch, posisi dan qty.
 - Error validasi mengikuti format 422 standar; kegagalan stok menunjuk `items.N.qty`.
 
+### Adjustment dan opname (tahap 2.7) ✅
+
+Semua endpoint memakai permission `inventory.adjust.request`, kecuali approve/reject yang memakai `inventory.adjust.approve`. Kasir hanya dapat melihat dokumen yang dia ajukan; pemegang permission approve dapat melihat semua dokumen di tokonya.
+
+`POST /api/inventory/adjustments` menerima draft:
+```json
+{
+  "reason": "opname",
+  "note": "Hitung stok rak A",
+  "items": [
+    { "product_id": 12, "batch_id": 7, "location_id": 1, "shelf_position_id": 3, "qty_counted": "5" }
+  ]
+}
+```
+- `reason`: `opname|loss|damage|expired|other`. `items`: 1–200 baris; `qty_counted` wajib nonnegatif, maksimal 3 desimal. Batch dan posisi opsional; lokasi wajib aktif dan milik toko yang sama. Batch harus milik produk, posisi (jika ada) harus berada di lokasi. Batch wajib untuk produk yang melacak tanggal kedaluwarsa.
+- Setiap kombinasi produk/batch/lokasi/posisi hanya boleh muncul sekali. Draft menyimpan `qty_before` (saldo sellable saat dibuat), `qty_counted`, dan `qty_diff = qty_counted - qty_before`. Pembuatan tidak mengubah atau mereservasi saldo. Draft tidak dapat diedit; batalkan lalu buat ulang jika salah.
+- `POST .../{id}/request` mengubah `draft` menjadi `requested`. Pemohon dapat membatalkan draft/permintaan sebelum disetujui; `reason` pembatalan opsional.
+- `POST .../{id}/approve` secara default menyetujui. Persetujuan dan posting saldo dilakukan dalam transaksi yang sama; respons akhir berstatus `posted`. Untuk keputusan `reject`, kirim `{ "decision": "reject", "note": "..." }`; alasan penolakan wajib dan stok tidak berubah.
+- Persetujuan untuk alasan `loss` atau `expired` wajib menyertakan `approver_username` dan `approver_password` milik akun Admin/pemegang `inventory.adjust.approve` sendiri. Alasan lain cukup dengan sesi approver yang berizin. Kegagalan autentikasi ulang menghasilkan 422 `approver_password`; catatan autentikasi ulang gagal/berhasil masuk audit.
+- Saat posting, saldo sellable saat ini harus tetap sama dengan `qty_before`. Jika ada transaksi lain sejak draft dibuat, posting ditolak dengan 422 `items.N.qty_counted`; buat dokumen baru berdasarkan saldo terbaru. Seluruh baris dan saldo diperiksa sebelum ada movement, dan transaksi seluruhnya rollback bila satu baris gagal.
+- Selisih positif menambah sellable; selisih negatif mengurangi sellable tanpa mengizinkan stok negatif. Alasan `damage` memindahkan selisih dari bucket sellable ke damaged (total stok tetap); alasan `loss`/`expired` menghapus stok dengan movement `write_off`; selisih lain memakai movement `adjustment`. HPP tidak berubah dan bucket quarantine tidak disentuh.
+- Pembuatan, pengajuan, persetujuan, posting, penolakan, dan pembatalan dicatat pada audit (`stock_adjustment.create|request|approve|post|reject|cancel`). Dokumen posted tidak dapat diubah atau dibatalkan; koreksi memerlukan dokumen adjustment baru.
+- Opname pada tahap ini dicatat sebagai adjustment dengan `reason: "opname"`; skema/migration Paket 1 tidak menyediakan sesi opname terpisah. Tidak ada migration baru dan tidak ada permission baru.
+- Daftar menerima `status` (`draft|requested|posted|rejected|cancelled`), `reason`, awalan nomor dokumen melalui `q`, dan `per_page` (1–100, default 25). Nomor dokumen `ADJ-...`; jumlah, snapshot saldo, dan selisih dikembalikan sebagai string desimal.
+
 ### Yang belum ada untuk Inventory
-Adjustment/opname, karantina/write-off dan denah rak ⏳. `InventoryService` menyediakan `receive`, `sell` FEFO, `voidSale`, dan `transfer`; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
+Denah rak ⏳. `InventoryService` menyediakan `receive`, `sell` FEFO, `voidSale`, `transfer`, dan `adjust`; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
 
 ---
 
@@ -554,9 +585,10 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`; URL lama tidak berubah.
-- Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
+- Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-27** — Tahap 2.7 (adjustment/opname) ditambahkan: draft dan snapshot stok, pengajuan, persetujuan/re-auth kondisional, penolakan/pembatalan, pemeriksaan snapshot untuk mencegah posting hitung-stok kedaluwarsa, movement dan audit atomik. `StockAdjustmentTest` 8 test (85 assertions); seluruh suite **218 test lulus (1.922 assertions)**; bagian 1 kini ✅.
 - **2026-10-27** — Tahap 2.6 (transfer stok) ditambahkan: draft, validasi posisi/lokasi dan setting gudang, posting saldo atomik dengan pasangan movement, pembatalan draft, dan audit. **210 test lulus (1.837 assertions)**; bagian 1 kini ✅.
 - **2026-10-26** — Tahap 3.6 (kas masuk/keluar nonpenjualan) ditambahkan: API pencatatan dan riwayat per shift, pembatasan akses pemilik shift, update ledger Kas Kecil, dan audit. **204 test lulus (1.764 assertions)**; bagian 7.4 kini ✅.
 - **2026-10-26** — Pengguna menjalankan seluruh suite: **200 test lulus (1.729 assertions)**. Bagian 10 (Manajemen Pengguna) kini ✅.

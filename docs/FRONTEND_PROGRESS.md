@@ -64,12 +64,13 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Penyerahan setoran akhir (Kasir) | 7.1 | ✅ | Hasil tutup shift menampilkan nilai setoran/endapan/flag, serahkan setoran Draft, pulihkan setoran Draft setelah reload, dan tahan buka shift baru sampai setoran diserahkan |
 | Fitur setoran/endapan lainnya | 7.1 | 🟡 | Pengguna telah menguji pembuatan Draft setoran parsial Kasir dan mengonfirmasi hasil sesuai ekspektasi. Uji serah/batal Draft, blokir tutup shift, antrean/penerimaan Finance, koreksi selisih, dan saldo dana masih menunggu |
 | Transfer stok antarposisi / putaway | 1 | ⏳ | Backend tahap 2.6 siap; UI daftar, buat draft, detail, posting, dan pembatalan draft belum dibuat |
+| Adjustment dan opname | 1 | ⏳ | Backend tahap 2.7 siap: draft snapshot stok, pengajuan, approve/reject, re-auth untuk loss/expired, dan posting atomik; batch wajib untuk produk yang melacak kedaluwarsa. Alasan damage memindahkan saldo ke bucket rusak; UI belum dibuat. Opname memakai `reason=opname`, belum ada sesi opname terpisah |
 | Riwayat penjualan | 5, 7.2 | ✅ | `/sales`: daftar + filter, detail, **cetak ulang SALINAN**, **void** Admin; pengguna mengonfirmasi uji klik berjalan lancar |
 | Penerimaan barang | 6.3 | 🟡 | Tahap aktif `/goods-receipts`: pilih PO `receivable=1`, catat diterima/rusak, pecah batch, validasi kedaluwarsa, simpan Draft, posting, batalkan Draft, dan verifikasi surat jalan/faktur (Admin); menunggu uji klik |
 | PR dan PO | 6.1, 6.2 | ⏳ | Form/daftar PR (Kasir); antrean Finance/Owner dengan re-auth; PO dari PR (Admin) |
 | Tagihan HRD | 8 | ⏳ | Periode tagihan (tutup periode, ubah tanggal gaji), buat invoice, terbit → serah ke HRD → catat pembayaran, tampilan cetak invoice |
 | Manajemen pengguna | 10 | ⏳ | Daftar/cari/filter; tambah/ubah role; aktif/nonaktif; reset sandi; ganti sandi sendiri |
-| Adjustment, opname, denah rak | — | ⛔ | Backend belum ada |
+| Denah rak | — | ⛔ | Backend belum ada |
 
 ## 2. Kode bersama (fondasi)
 

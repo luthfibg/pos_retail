@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\StockTransferController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +15,20 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
     // Stok awal: hanya Admin. Memakai inventory.adjust.approve (belum ada permission khusus) [ASUMSI].
     Route::post('opening-balances', [InventoryController::class, 'openingBalance'])
         ->middleware('can:inventory.adjust.approve');
+
+    // Adjustment dan opname; perubahan saldo terjadi setelah persetujuan.
+    Route::get('adjustments', [StockAdjustmentController::class, 'index'])
+        ->middleware('can:inventory.adjust.request');
+    Route::post('adjustments', [StockAdjustmentController::class, 'store'])
+        ->middleware('can:inventory.adjust.request');
+    Route::get('adjustments/{adjustment}', [StockAdjustmentController::class, 'show'])
+        ->whereNumber('adjustment')->middleware('can:inventory.adjust.request');
+    Route::post('adjustments/{adjustment}/request', [StockAdjustmentController::class, 'request'])
+        ->whereNumber('adjustment')->middleware('can:inventory.adjust.request');
+    Route::post('adjustments/{adjustment}/approve', [StockAdjustmentController::class, 'approve'])
+        ->whereNumber('adjustment')->middleware('can:inventory.adjust.approve');
+    Route::post('adjustments/{adjustment}/cancel', [StockAdjustmentController::class, 'cancel'])
+        ->whereNumber('adjustment')->middleware('can:inventory.adjust.request');
 
     // Transfer stok; sumber/tujuan tervalidasi per toko dan stok berpindah saat posting.
     Route::get('transfers', [StockTransferController::class, 'index'])->middleware('can:stock_transfer.create');

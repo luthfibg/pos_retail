@@ -461,6 +461,94 @@ class InventoryService
         }
     }
 
+    /**
+     * Reconcile counted sellable stock against its snapshot. The caller must own the
+     * adjustment transaction so approval, balances, movements, and document status commit together.
+     *
+     * @param  list<array{product_id: int, batch_id: int|null, location_id: int, shelf_position_id: int|null, qty_before: string, qty_counted: string, qty_diff: string}>  $items
+     */
+    public function adjust(int $storeId, int $adjustmentId, string $reason, array $items, int $actorId): void
+    {
+        $this->requireTransaction();
+
+        $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+        $products = DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
+            ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $balances = [];
+        $errors = [];
+
+        foreach ($items as $index => $item) {
+            $productId = (int) $item['product_id'];
+            $product = $products->get($productId);
+            if ($product === null) {
+                $errors["items.{$index}.product_id"] = ['Produk tidak ditemukan pada toko ini.'];
+
+                continue;
+            }
+
+            $balanceId = $this->lockOrCreateBalance(
+                $productId,
+                (int) $item['location_id'],
+                $item['shelf_position_id'] === null ? null : (int) $item['shelf_position_id'],
+                $item['batch_id'] === null ? null : (int) $item['batch_id'],
+            );
+            $balance = DB::table('inventory_balances')->where('id', $balanceId)->lockForUpdate()->first();
+            $balances[$index] = ['id' => $balanceId, 'row' => $balance, 'product' => $product];
+
+            $before = Decimal::qty((string) $item['qty_before']);
+            $current = Decimal::qty((string) $balance->qty_sellable);
+            if ($current !== $before) {
+                $errors["items.{$index}.qty_counted"] = [
+                    'Saldo stok berubah sejak opname dibuat. Buat adjustment baru berdasarkan saldo terbaru.',
+                ];
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $now = $this->now();
+        foreach ($items as $index => $item) {
+            $diff = Decimal::qty((string) $item['qty_diff']);
+            if ($diff === 0) {
+                continue;
+            }
+
+            $balanceId = $balances[$index]['id'];
+            $product = $balances[$index]['product'];
+            $isDamage = $diff < 0 && $reason === 'damage';
+            $isWriteOff = $diff < 0 && in_array($reason, ['loss', 'expired'], true);
+            if ($diff < 0) {
+                $this->decreaseBalance($balanceId, 'sellable', abs($diff));
+                if ($isDamage) {
+                    $this->increaseBalance($balanceId, 'damaged', abs($diff));
+                }
+            } else {
+                $this->increaseBalance($balanceId, 'sellable', $diff);
+            }
+
+            DB::table('inventory_movements')->insert([
+                'store_id' => $storeId,
+                'product_id' => (int) $item['product_id'],
+                'batch_id' => $item['batch_id'],
+                'from_location_id' => $diff < 0 ? (int) $item['location_id'] : null,
+                'from_position_id' => $diff < 0 ? $item['shelf_position_id'] : null,
+                'from_bucket' => $diff < 0 ? 'sellable' : null,
+                'to_location_id' => $diff > 0 || $isDamage ? (int) $item['location_id'] : null,
+                'to_position_id' => $diff > 0 || $isDamage ? $item['shelf_position_id'] : null,
+                'to_bucket' => $diff > 0 ? 'sellable' : ($isDamage ? 'damaged' : null),
+                'qty' => Decimal::qtyString(abs($diff)),
+                'movement_type' => $isWriteOff ? 'write_off' : 'adjustment',
+                'unit_cost' => $product->avg_cost,
+                'ref_type' => 'stock_adjustment',
+                'ref_id' => $adjustmentId,
+                'occurred_at' => $now,
+                'created_by' => $actorId,
+            ]);
+        }
+    }
+
     // ------------------------------------------------------------------ baca
 
     /**
