@@ -1,6 +1,6 @@
 import { api } from './client';
 import type {
-  Category, CategoryInput, CashDeposit, CashMovement, CashMovementType, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
+  Category, CategoryInput, CashDeposit, CashMovement, CashMovementType, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
@@ -121,11 +121,20 @@ export const shiftApi = {
 };
 
 export const cashDepositApi = {
-  list: (f: { status?: DepositStatus; kind?: DepositKind; shift_id?: number; per_page?: number } = {}) =>
+  list: (f: { status?: DepositStatus; kind?: DepositKind; shift_id?: number; page?: number; per_page?: number } = {}) =>
     api<Paginated<CashDeposit>>('/cash-deposits', { query: { ...f } }),
   get: (id: number) => api<{ data: CashDeposit }>(`/cash-deposits/${id}`).then((r) => r.data),
+  createPartial: (shiftId: number, input: { counted_amount: string; note?: string }) =>
+    api<{ data: CashDeposit }>(`/shifts/${shiftId}/deposits`, { method: 'POST', body: input }).then((r) => r.data),
   submit: (id: number) =>
     api<{ data: CashDeposit }>(`/cash-deposits/${id}/submit`, { method: 'POST' }).then((r) => r.data),
+  cancel: (id: number, reason?: string) =>
+    api<{ data: { id: number; cancelled: boolean } }>(`/cash-deposits/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }).then((r) => r.data),
+  receive: (id: number, input: { received_amount: string; note?: string }) =>
+    api<{ data: CashDeposit }>(`/cash-deposits/${id}/receive`, { method: 'POST', body: input }).then((r) => r.data),
+  correct: (id: number, reason: string) =>
+    api<{ data: CashDeposit }>(`/cash-deposits/${id}/correct`, { method: 'POST', body: { reason } }).then((r) => r.data),
+  funds: () => api<{ data: FundAccount[] }>('/fund-accounts').then((r) => r.data),
 };
 
 export const floatPolicyApi = {

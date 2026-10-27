@@ -18,6 +18,7 @@ import { VatSettingsPage } from '@/features/pricing/VatSettingsPage';
 const FloatPolicyPage = lazy(() => import('@/features/shifts/FloatPolicyPage').then((module) => ({ default: module.FloatPolicyPage })));
 const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module) => ({ default: module.ShiftPage })));
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
+const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<div className="p-6 text-slate-500">Memuat layar…</div>}>{children}</Suspense>;
@@ -43,6 +44,10 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="shift.review" />,
             children: [{ path: 'shifts', element: <LazyPage><ShiftsAdminPage /></LazyPage> }],
+          },
+          {
+            element: <RequirePermission permission="cash_deposit.receive" />,
+            children: [{ path: 'cash-deposits', element: <LazyPage><DepositQueuePage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="reports.view" />,

@@ -256,6 +256,16 @@ export interface CashDeposit {
   created_at: string;
 }
 
+export type FundAccountType = 'petty_cash' | 'main_cash';
+
+export interface FundAccount {
+  id: number;
+  type: FundAccountType;
+  name: string;
+  register_id: number | null;
+  balance: Decimal;
+}
+
 /** Setoran akhir shift (kind=final). Dibuat otomatis saat tutup shift bila ada yang harus disetor. */
 export interface ShiftDeposit {
   id: number;

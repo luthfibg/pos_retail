@@ -10,6 +10,7 @@
 | ID | Judul | Prioritas | Status | Diajukan |
 |---|---|---|---|---|
 | FR-01 | Pratinjau penjualan (`POST /api/sales/preview`) | Tinggi (layar kasir) | **Diminta** | 25 Okt 2026 |
+| FR-02 | Izin Finance untuk daftar/detail setoran | Tinggi (antrean setoran) | **Diminta** | 27 Okt 2026 |
 
 ---
 
@@ -104,3 +105,13 @@ Tidak menjadi galat di pratinjau: stok kurang (→ `stock_sufficient: false`), m
 Bila lebih mudah, nama rute boleh diubah (mis. `POST /api/sales/quote`); kabari lewat bagian "Diskusi" di bawah dan frontend menyesuaikan.
 
 **Diskusi / keputusan:** _(kosong)_
+
+---
+
+## FR-02 — Izin Finance untuk daftar/detail setoran
+
+**Status:** Diminta · **Prioritas:** Tinggi · **Dibutuhkan oleh:** halaman `/cash-deposits` · **Perubahan skema:** tidak ada.
+
+Route `GET /api/cash-deposits` dan `GET /api/cash-deposits/{id}` saat ini memakai middleware `can:cash_deposit.create`, sedangkan halaman antrean Finance/Admin dan saldo dana seharusnya dapat digunakan pemegang `cash_deposit.receive`. `POST receive`, `POST correct`, dan `GET /api/fund-accounts` sudah memakai `cash_deposit.receive`. Akibatnya akun Finance yang hanya diberi izin menerima setoran akan mendapat 403 saat mengambil antrean/detail.
+
+Mohon izinkan `cash_deposit.receive` untuk daftar dan detail setoran, sambil mempertahankan `cash_deposit.create` untuk Kasir. Otorisasi data tetap mengikuti aturan service: Kasir hanya melihat setoran shift sendiri, Finance/Admin dengan `cash_deposit.receive` dapat melihat semua. Tambahkan test Finance yang hanya memiliki permission `cash_deposit.receive` untuk daftar, detail, penerimaan, koreksi, dan saldo; pastikan Kasir tidak dapat melihat setoran milik shift lain.

@@ -39,8 +39,9 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|---|---|---|---|
 | `/login` | Login | — | HANDOFF 6 | ✅ | Throttle 429 ditangani |
 | `/pos` | **Kasir**: scan/cari produk, keranjang, tunai dan kredit potong gaji, pemilih karyawan, konfirmasi, struk cetak, pengecualian kredit Admin | `sales.create` | 4, 5 | ✅ diuji manual | Total resmi dari pratinjau server ⛔ FR-01; sementara memakai "perkiraan subtotal" |
-| `/shift` | Shift Saya: buka, mulai hitung, tutup (hitung buta), catat kas masuk/keluar dan riwayat, serahkan setoran akhir | `shift.open`, `cash_deposit.create`, `cash_movement.create` | 4, 7 | 🟡 | Alur kas masuk/keluar nonpenjualan sudah diuji pengguna; bagian Shift lainnya masih perlu verifikasi browser |
+| `/shift` | Shift Saya: buka, mulai hitung, tutup (hitung buta), catat kas masuk/keluar, setoran parsial dan serahkan setoran akhir | `shift.open`, `cash_deposit.create`, `cash_movement.create` | 4, 7 | 🟡 | UI parsial baru dibuat; menunggu verifikasi browser |
 | `/shifts` | Tinjau Shift (Admin) | `shift.review` | 4 | ✅ | |
+| `/cash-deposits` | Setoran Masuk: antrean, penerimaan Finance, koreksi selisih, saldo Kas Kecil/Besar | `cash_deposit.receive` | 7.1 | 🟡 | UI baru dibuat; menunggu verifikasi browser |
 | `/products` | Produk: daftar, form, stok per batch (FEFO) | `inventory.view` | HANDOFF 6, 1 | ✅ | HPP hanya tampil untuk Admin |
 | `/categories` | Kategori (pohon) | `category.manage` | HANDOFF 6 | ✅ | |
 | `/suppliers` | Supplier | `supplier.manage` | HANDOFF 6 | ✅ | |
@@ -59,7 +60,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|---|---|
 | Kas masuk/keluar nonpenjualan | 7.4 | ✅ | Form kas masuk/keluar berkonfirmasi dan riwayat berpaginasi di halaman Shift; perubahan kas hanya saat shift aktif. Otomatisasi frontend lulus dan pengguna sudah menguji alur klik tanpa kendala |
 | Penyerahan setoran akhir (Kasir) | 7.1 | ✅ | Hasil tutup shift menampilkan nilai setoran/endapan/flag, serahkan setoran Draft, pulihkan setoran Draft setelah reload, dan tahan buka shift baru sampai setoran diserahkan |
-| Fitur setoran/endapan lainnya | 7.1 | ⏳ | Kasir: setoran parsial; Finance/Admin: antrean setoran masuk (terima/selisih/koreksi) dan saldo Kas Kecil/Besar |
+| Fitur setoran/endapan lainnya | 7.1 | 🟡 | UI Kasir untuk membuat/menyerahkan/membatalkan Draft parsial dan riwayat; Finance/Admin untuk antrean, penerimaan, catatan/koreksi selisih, serta saldo dana. Shift diblokir ditutup saat Draft parsial masih ada. Menunggu verifikasi browser |
 | Transfer stok antarposisi / putaway | 1 | ⏳ | Backend tahap 2.6 siap; UI daftar, buat draft, detail, posting, dan pembatalan draft belum dibuat |
 | Riwayat penjualan | 5, 7.2 | ⏳ | Daftar + filter, detail, **cetak ulang SALINAN**, **void** (Admin) |
 | Penerimaan barang | 6.3 | ⏳ | Pilih PO `receivable=1` → qty/rusak/kedaluwarsa → posting; verifikasi dokumen (Admin) |
@@ -74,7 +75,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|
 | `lib/api/client.ts` | `fetch` + Bearer + `ApiError` (`status`, `errors`, `firstError()`); 401 pada sesi berjalan memicu keluar |
 | `lib/api/types.ts` | Kontrak API (satu-satunya sumber tipe) |
-| `lib/api/endpoints.ts` | Fungsi per modul: `authApi`, `productApi`, `categoryApi`, `supplierApi`, `inventoryApi`, `customerApi`, `notificationApi`, `shiftApi`, `saleApi`, `discountApi`, `settingsApi` |
+| `lib/api/endpoints.ts` | Fungsi per modul: `authApi`, `productApi`, `categoryApi`, `supplierApi`, `inventoryApi`, `customerApi`, `notificationApi`, `shiftApi`, `cashDepositApi`, `saleApi`, `discountApi`, `settingsApi` |
 | `lib/format.ts` | `formatRupiah`, `formatQty`, `formatDateTime` (WIB), `formatDate`, `toWibDate` |
 | `lib/money.ts` | Aritmetika uang/qty berbasis bigint untuk **tampilan dan validasi** (bukan keputusan transaksi) |
 | `components/layout/nav.ts` | Satu sumber menu + izin; `AppLayout` menyaring per izin |
@@ -91,11 +92,11 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Shift dan kasir | `shiftLogic`, `money`, `cartLogic` | 6 · 6 · 21 | ✅ |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**112 lulus, 15 berkas**) dan `npm run build` lulus. Test otomatis mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan berjalan tanpa kendala.
+Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**118 lulus, 17 berkas**) dan `npm run build` lulus. Test otomatis mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan berjalan tanpa kendala.
 
 ## 4. Celah dan catatan yang diketahui
 
-1. **Setoran akhir dan kebijakan endapan:** Kasir dapat menyerahkan setoran akhir Draft dan kebijakan laci kini dapat diatur Admin di `/settings/float-policy`. Tanpa kebijakan aktif, backend mempertahankan seluruh kas terhitung sebagai endapan dan tidak membuat dokumen setoran. Atur kebijakan sebelum menguji setoran akhir. Setoran parsial, antrean penerimaan Finance, dan saldo dana belum dibuat. **Fitur kas lengkap tetap prasyarat go-live.**
+1. **Setoran dan endapan:** Setoran akhir, kebijakan endapan, setoran parsial Kasir, antrean Finance/Admin, penerimaan/koreksi selisih, dan saldo dana kini sudah tersedia di UI. Tahap parsial/Finance menunggu uji klik pengguna. Tanpa kebijakan endapan aktif, backend mempertahankan seluruh kas terhitung sebagai endapan dan tidak membuat dokumen setoran akhir; atur kebijakan sebelum menguji. **Fitur kas lengkap tetap prasyarat go-live.** Catatan integrasi: route backend daftar/detail setoran masih mewajibkan `cash_deposit.create`, sementara halaman Finance ditampilkan untuk `cash_deposit.receive`; sampai izin route diselaraskan, akun Finance harus memiliki kedua permission.
 2. **Pratinjau penjualan (FR-01) ⛔:** tanpa `POST /api/sales/preview`, kasir tidak melihat total resmi sebelum memproses (diskon dan PPN baru tampak di struk). Layar sudah siap memakainya dan akan berpindah otomatis begitu endpoint ada.
 3. **Hasil transaksi tidak diketahui:** bila jaringan putus saat posting, keranjang dikunci dan hanya bisa kirim ulang dengan kunci yang sama. Bila tab ditutup sebelum itu, struk mungkin tersimpan tetapi tidak terlihat; **riwayat penjualan** (⏳) menutup celah ini.
 4. **Cetak struk:** memakai `window.print` dan lebar kecil di layar; penyesuaian kertas thermal 58/80 mm dan uji printer/scanner di perangkat klien belum dilakukan (ROADMAP 6.1, 7.4).
@@ -106,12 +107,13 @@ Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**112 lulus, 15 berkas**) dan
 
 ## 5. Tahap berikutnya (urut, usulan agent)
 
-1. **Lanjutkan setoran dan endapan** (bagian 7): setoran akhir Kasir dan kebijakan endapan Admin selesai; berikutnya setoran parsial, antrean setoran masuk dan saldo dana (Finance/Admin).
-2. **Manajemen pengguna**: UI Admin untuk mengelola akun dan ganti sandi. Backend bagian 10 sudah lulus test; frontend belum dibuat.
-3. **Riwayat penjualan**: daftar, detail, cetak ulang SALINAN, void Admin. Menutup celah nomor 3.
-4. **Penerimaan barang** oleh Kasir (jalur resmi stok masuk), lalu PR/PO.
-5. **Tagihan HRD** (Admin).
-6. Dashboard setelah backend menyediakan laporan.
+1. **Sedang dikerjakan: setoran parsial dan penerimaan Finance** (bagian 7.1): UI dibuat, menunggu uji klik pengguna.
+2. **Riwayat penjualan**: daftar, detail, cetak ulang SALINAN, void Admin.
+3. **Penerimaan barang** oleh Kasir (jalur resmi stok masuk), lalu PR/PO.
+4. **Tagihan HRD** (Admin).
+5. **Manajemen pengguna**: UI Admin untuk mengelola akun dan ganti sandi. Backend bagian 10 sudah lulus test.
+6. Transfer stok antarposisi (backend tahap 2.6 sudah tersedia).
+7. Dashboard setelah backend menyediakan laporan.
 
 Jika jadwal mundur, yang tidak boleh dipotong: layar kasir, setoran + endapan, tagihan HRD (HANDOFF bagian 7).
 
@@ -128,6 +130,7 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 
 ## Riwayat
 
+- **2026-10-27** — Tahap frontend setoran parsial dan penerimaan Finance: Kasir dapat membuat, menyerahkan, melihat riwayat, dan membatalkan hanya Draft parsial; penutupan shift tertahan selama Draft masih ada. Halaman `/cash-deposits` menyediakan antrean/status, detail, penerimaan dengan catatan wajib bila selisih, koreksi beralasan, dan saldo dana. `npm run typecheck`, `npm test` (**118 lulus**) dan `npm run build` lulus; status 🟡 menunggu verifikasi browser pengguna.
 - **2026-10-27** — Tahap frontend kas masuk/keluar nonpenjualan: endpoint, validasi nominal dan keterangan, konfirmasi pencatatan yang tidak dapat dibatalkan, riwayat berpaginasi pada halaman Shift, pembaruan ringkasan setelah sukses, dan pemeriksaan permission `cash_movement.create`. `npm run typecheck`, `npm test` (**112 lulus**) dan `npm run build` lulus; pengguna mengonfirmasi pengujian klik berjalan lancar.
 - **2026-10-27** — Tahap frontend kebijakan endapan Admin (`/settings/float-policy`): konfigurasi endapan laci dengan nominal/persentase, basis, batas minimum/maksimum, pembulatan, dan alasan perubahan. Dokumen setoran akhir hanya dibuat saat kebijakan aktif; tanpa kebijakan, seluruh kas terhitung menjadi endapan. `npm run typecheck`, `npm test` (**109 lulus**) dan `npm run build` lulus.
 - **2026-10-26** — Tahap frontend setoran akhir Kasir: layar Shift menampilkan setoran/endapan dan flag tutup shift, konfirmasi penyerahan ke Finance, pencarian setoran Draft final setelah reload, serta mencegah buka shift baru sampai setoran diserahkan. `npm run typecheck`, `npm test` (**104 lulus**) dan `npm run build` lulus. Setoran parsial dan penerimaan Finance belum dikerjakan.

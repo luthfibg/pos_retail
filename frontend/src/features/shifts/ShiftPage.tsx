@@ -12,6 +12,7 @@ import { ShiftFigures, ShiftStatusBadge } from './ShiftParts';
 import { formatRupiah } from '@/lib/format';
 import { canOpenNextShift } from './shiftLogic';
 import { CashMovementsPanel } from './CashMovementsPanel';
+import { PartialDepositsPanel } from './PartialDepositsPanel';
 
 const DEPOSIT_STATUS_LABEL: Record<DepositStatus, string> = {
   draft: 'Draft — belum diserahkan',
@@ -153,6 +154,10 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
 // ------------------------------------------------------------------ shift berjalan
 
 function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChanged: () => void; onClosed: (s: Shift) => void }) {
+  const partialDrafts = useQuery({
+    queryKey: ['cash-deposits', 'shift-drafts', shift.id],
+    queryFn: () => cashDepositApi.list({ shift_id: shift.id, kind: 'partial', status: 'draft', per_page: 100 }),
+  });
   const [confirming, setConfirming] = useState(false);
 
   const startCount = useMutation({
@@ -178,6 +183,14 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
 
       <CashMovementsPanel shift={shift} />
 
+      {(shift.status === 'open' || shift.status === 'counting') && (
+        <PartialDepositsPanel
+          shift={shift}
+          hasDraft={Boolean(partialDrafts.data?.data.length)}
+          checkingDraft={partialDrafts.isLoading || Boolean(partialDrafts.error)}
+        />
+      )}
+
       <ErrorNotice error={startCount.error} />
 
       {shift.status === 'open' && (
@@ -186,13 +199,34 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
           <p className="mt-1 text-sm text-slate-600">
             Mulai dengan menghitung uang fisik di laci. Setelah penghitungan dimulai, penjualan baru tidak dapat dibuat pada shift ini.
           </p>
-          <button type="button" onClick={() => setConfirming(true)} className="mt-3 rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+          <ErrorNotice error={partialDrafts.error} />
+          {partialDrafts.data?.data.length ? (
+            <p role="status" className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+              Ada Draft setoran parsial. Serahkan atau batalkan Draft sebelum menutup shift.
+            </p>
+          ) : null}
+          <button type="button" disabled={partialDrafts.isLoading} onClick={() => setConfirming(true)} className="mt-3 rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50">
             Mulai hitung kas
           </button>
         </div>
       )}
 
-      {shift.status === 'counting' && <CloseShiftForm shift={shift} onClosed={onClosed} />}
+      {shift.status === 'counting' && (
+        partialDrafts.isLoading ? (
+          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">Memeriksa Draft setoran sebelum penutupan…</p>
+        ) : partialDrafts.error ? (
+          <div className="space-y-2 rounded-md bg-red-50 p-3 text-sm text-red-900">
+            <p>Draft setoran belum dapat diperiksa. Coba muat ulang sebelum menutup shift.</p>
+            <ErrorNotice error={partialDrafts.error} />
+          </div>
+        ) : partialDrafts.data?.data.length ? (
+          <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+            Shift belum dapat ditutup karena masih ada Draft setoran parsial. Serahkan atau batalkan Draft terlebih dahulu.
+          </div>
+        ) : (
+          <CloseShiftForm shift={shift} onClosed={onClosed} />
+        )
+      )}
 
       {confirming && (
         <Modal title="Mulai hitung kas?" onClose={() => !startCount.isPending && setConfirming(false)}>

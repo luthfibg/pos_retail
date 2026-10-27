@@ -25,7 +25,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | RBAC: role + override per pengguna, `Gate::before`, `can:<permission>` | Selesai | **Lolos** test |
 | Re-auth persetujuan (`ReauthService`, lockout 5x, penanda self-approval) | Selesai | **Lolos** test |
 | Master data: kategori, supplier, produk (+price_history, barcode otomatis, status stok) | Selesai | **Lolos** test di mesin pengguna |
-| Frontend React + Vite + TypeScript | Implementasi berjalan; POS, master data, inventory, pelanggan, shift, Diskon dan PPN sudah tersedia | `npm run typecheck`, build, dan 112 test lulus (27 Okt 2026); kas nonpenjualan sudah diuji pengguna; lihat `docs/FRONTEND_PROGRESS.md` |
+| Frontend React + Vite + TypeScript | Implementasi berjalan; POS, master data, inventory, pelanggan, shift, Diskon dan PPN tersedia | `npm run typecheck`, build, dan 118 test lulus (27 Okt 2026); kas nonpenjualan sudah diuji pengguna; lihat `docs/FRONTEND_PROGRESS.md` |
 | Customers (karyawan), verifikasi, batas kredit, notifikasi `customer.limit_needed` | Selesai | **Lolos** test (24 Okt 2026) |
 | Denah rak | Belum | — |
 | Inventory inti: `InventoryService` (saldo/pergerakan/batch/FEFO/anti-negatif/HPP), stok awal, lihat stok, riwayat pergerakan | Selesai | **Lolos** test (24 Okt 2026) |
@@ -38,9 +38,10 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Setoran kasir + kebijakan endapan (parsial/final, penerimaan Finance, selisih/koreksi, saldo dana) dan void penjualan | Selesai | **Lolos** test (24 Okt 2026) |
 | Manajemen pengguna (CRUD akun, aktif/nonaktif, reset/ganti sandi) | Selesai | **Lolos** test (`UserManagementTest`, 26 Okt 2026) |
 | Frontend: POS dan pengaturan diskon/PPN | Sudah dibuat | Test frontend lulus; lihat `docs/FRONTEND_PROGRESS.md` |
-| Frontend: penyerahan setoran akhir Kasir dan konfigurasi kebijakan endapan Admin | Selesai | `npm run typecheck`, `npm test` (112 test), dan build lulus (27 Okt 2026) |
+| Frontend: penyerahan setoran akhir Kasir dan konfigurasi kebijakan endapan Admin | Selesai | `npm run typecheck`, `npm test` dan build lulus; lihat riwayat `docs/FRONTEND_PROGRESS.md` |
 | Frontend: kas masuk/keluar nonpenjualan | Selesai | Otomatisasi lulus dan pengguna sudah menguji alur klik |
-| Frontend: setoran parsial/antrean Finance, riwayat penjualan, pembelian, tagihan HRD, manajemen pengguna | Belum lengkap | Backlog frontend; kontrak backend tersedia |
+| Frontend: setoran parsial/antrean Finance | Implementasi tersedia; menunggu uji klik | Otomatisasi frontend lulus (118 test); detail di `docs/FRONTEND_PROGRESS.md` |
+| Frontend: riwayat penjualan, pembelian, tagihan HRD, manajemen pengguna | Belum lengkap | Backlog frontend; kontrak backend tersedia |
 | Periode tagihan + invoice HRD + pembayaran HRD | Selesai | **Lolos** test (25 Okt 2026) |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 

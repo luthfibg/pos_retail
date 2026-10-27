@@ -57,7 +57,21 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 3b. ~~Jalankan test 3.7~~ — **selesai 25 Okt 2026: 190 lulus.**
 3c. ~~Jalankan `php artisan test` untuk 1.8~~ — **selesai 26 Okt 2026: seluruh 200 test lulus.**
 4. ~~Kas masuk/keluar lain (3.6)~~ — **selesai 26 Okt 2026: seluruh 204 test lulus.**
-5. Adjustment dan opname dengan persetujuan (2.7), lalu cetak, dashboard, hardening, UAT (Fase 6–8). Tahap 2.5 denah rak tetap berprioritas rendah; backlog UI dan tahap yang sudah selesai dicatat di `FRONTEND_PROGRESS.md`. Setoran parsial dan antrean Finance masih belum dikerjakan.
+5. Adjustment dan opname dengan persetujuan (2.7), lalu cetak, dashboard, hardening, UAT (Fase 6–8). Tahap 2.5 denah rak tetap berprioritas rendah; backlog UI dan tahap yang sudah selesai dicatat di `FRONTEND_PROGRESS.md`.
+
+### Tahap frontend berjalan
+
+**Lengkapi alur setoran kasir dan penerimaan Finance** sebelum membuka modul frontend baru. Backend sudah menyediakan seluruh endpoint dan aturan bisnis pada `BACKEND_PROGRESS.md` bagian 7; frontend kini mencakup setoran akhir serta kebijakan endapan, dan implementasi setoran parsial + penerimaan Finance sedang dilakukan. Pekerjaan ini menutup alur uang Kas Kecil → Kas Besar dan merupakan prasyarat go-live menurut `FRONTEND_PROGRESS.md`.
+
+Cakupan satu tahap:
+- Kasir membuat setoran parsial saat shift `open`/`counting`, melihat status dan riwayat setoran sendiri, menyerahkan setoran, atau membatalkan hanya Draft parsial.
+- Finance/Admin memakai antrean setoran masuk untuk memeriksa detail, mencatat jumlah yang diterima, menangani selisih dengan catatan wajib, serta mengoreksi selisih dengan alasan.
+- Tampilkan saldo Kas Kecil dan Kas Besar dari endpoint dana; akses antrean, penerimaan/koreksi, dan saldo mengikuti `cash_deposit.receive`.
+- Pertahankan jumlah sebagai string desimal dan konfirmasi tindakan finansial; cegah penutupan shift ketika masih ada setoran parsial Draft. Setoran akhir yang sudah dibuat sistem tidak dapat dibatalkan.
+
+**Mengapa ini didahulukan:** menuntaskan kontrol kas yang sudah sebagian tersedia, tanpa menunggu backend baru, serta mengurangi risiko operasional sebelum UAT. Setelah tahap ini, prioritas frontend berikutnya adalah riwayat penjualan (termasuk cetak ulang/void sesuai batas shift dan status tagihan), lalu penerimaan barang dan PR/PO. UI transfer stok (backend tahap 2.6 sudah siap) dan manajemen pengguna juga dapat dikerjakan dari kontrak yang ada; adjustment/opname tetap menunggu backend tahap 2.7.
+
+Status implementasi frontend: form/riwayat setoran parsial dan blokir penutupan shift saat Draft masih ada, serta halaman antrean Finance/Admin dengan terima/koreksi dan saldo dana sudah dibuat. `npm run typecheck`, `npm test` (**118 lulus**) dan `npm run build` lulus; tahap menunggu uji klik pengguna.
 
 **Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → UI adjustment/opname → transfer antar-rak → UI langkah pemeriksaan Finance (jadikan satu tombol Admin) → dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 
@@ -188,7 +202,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 ## 4. Untuk agent frontend
 
-**Terbaru (27 Okt 2026): transfer stok (tahap 2.6) selesai dan suite backend lulus 210 test.** API transfer draft→posting sudah tersedia; UI transfer belum dibuat. UI kas masuk/keluar nonpenjualan di halaman Shift sudah diimplementasikan, otomatisasi frontend lulus, dan pengguna sudah menguji alur klik tanpa kendala. Kontrak transfer ada di `BACKEND_PROGRESS.md` bagian 1.
+**Terbaru (27 Okt 2026): transfer stok (tahap 2.6) selesai dan suite backend lulus 210 test.** API transfer draft→posting sudah tersedia; UI transfer belum dibuat. UI kas nonpenjualan sudah diuji pengguna. Tahap frontend berjalan: setoran parsial dan penerimaan Finance; otomatisasi frontend lulus, menunggu uji klik pengguna. Kontrak transfer ada di `BACKEND_PROGRESS.md` bagian 1; kontrak setoran ada di bagian 7.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|
