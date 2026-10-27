@@ -33,9 +33,7 @@ class InventoryService
         'damaged' => 'qty_damaged',
     ];
 
-    public function __construct(private AuditLogger $audit, private NumberSequence $sequences)
-    {
-    }
+    public function __construct(private AuditLogger $audit, private NumberSequence $sequences) {}
 
     // ------------------------------------------------------------------ lokasi
 
@@ -78,11 +76,13 @@ class InventoryService
 
                 if ($product === null) {
                     $errors["items.{$i}.product_id"] = ['Produk tidak ditemukan.'];
+
                     continue;
                 }
 
                 if ($product->status === 'inactive') {
                     $errors["items.{$i}.product_id"] = ["Produk {$product->name} nonaktif."];
+
                     continue;
                 }
 
@@ -90,6 +90,7 @@ class InventoryService
                     ->where('product_id', $product->id)->where('movement_type', '<>', 'opening_balance')->exists();
                 if ($hasOperations) {
                     $errors["items.{$i}.product_id"] = ["Produk {$product->name} sudah memiliki pergerakan stok operasional; gunakan adjustment."];
+
                     continue;
                 }
 
@@ -337,6 +338,125 @@ class InventoryService
                 'ref_id' => $refId,
                 'occurred_at' => $now,
                 'created_by' => $actorId,
+            ]);
+        }
+    }
+
+    /**
+     * Memindahkan stok layak jual antarposisi/lokasi. Setiap baris menghasilkan movement keluar
+     * dan masuk; batch dan HPP tetap sama.
+     *
+     * @param  list<array{product_id: int, batch_id: int|null, from_position_id: int|null, to_position_id: int|null, qty: string}>  $items
+     */
+    public function transfer(
+        int $storeId,
+        int $fromLocationId,
+        int $toLocationId,
+        array $items,
+        string $refType,
+        int $refId,
+        ?int $actorId = null,
+    ): void {
+        $this->requireTransaction();
+
+        $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+        $products = DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
+            ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+
+        $errors = [];
+        $sourceBalances = [];
+        $sourceByItem = [];
+        $requiredByBalance = [];
+        foreach ($items as $index => $item) {
+            $productId = (int) $item['product_id'];
+            $product = $products->get($productId);
+            if ($product === null) {
+                $errors["items.{$index}.product_id"] = ['Produk tidak ditemukan.'];
+
+                continue;
+            }
+
+            $batchId = $item['batch_id'] === null ? null : (int) $item['batch_id'];
+            if ($batchId !== null && ! DB::table('product_batches')->where('id', $batchId)->where('product_id', $productId)->exists()) {
+                $errors["items.{$index}.batch_id"] = ['Batch tidak ditemukan untuk produk ini.'];
+
+                continue;
+            }
+
+            $fromPositionId = $item['from_position_id'] === null ? null : (int) $item['from_position_id'];
+            $source = DB::table('inventory_balances')
+                ->where('product_id', $productId)
+                ->where('location_id', $fromLocationId)
+                ->whereRaw('position_key = ?', [$fromPositionId ?? 0])
+                ->whereRaw('batch_key = ?', [$batchId ?? 0])
+                ->lockForUpdate()
+                ->first(['id', 'qty_sellable']);
+
+            if ($source === null) {
+                $errors["items.{$index}.qty"] = ['Tidak ada stok layak jual pada batch dan posisi asal.'];
+
+                continue;
+            }
+
+            $units = Decimal::qty((string) $item['qty']);
+            $sourceBalances[$source->id] = $source;
+            $sourceByItem[$index] = $source;
+            $requiredByBalance[$source->id]['units'] = ($requiredByBalance[$source->id]['units'] ?? 0) + $units;
+            $requiredByBalance[$source->id]['indexes'][] = $index;
+        }
+
+        foreach ($requiredByBalance as $balanceId => $required) {
+            $available = Decimal::qty($sourceBalances[$balanceId]->qty_sellable);
+            if ($required['units'] > $available) {
+                $index = $required['indexes'][0];
+                $errors["items.{$index}.qty"] = [sprintf(
+                    'Stok asal tidak mencukupi: tersedia %s, diminta %s.',
+                    Decimal::qtyString($available),
+                    Decimal::qtyString($required['units']),
+                )];
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $now = $this->now();
+        foreach ($items as $index => $item) {
+            $productId = (int) $item['product_id'];
+            $product = $products->get($productId);
+            $batchId = $item['batch_id'] === null ? null : (int) $item['batch_id'];
+            $fromPositionId = $item['from_position_id'] === null ? null : (int) $item['from_position_id'];
+            $toPositionId = $item['to_position_id'] === null ? null : (int) $item['to_position_id'];
+            $units = Decimal::qty((string) $item['qty']);
+            $qty = Decimal::qtyString($units);
+            $source = $sourceByItem[$index];
+
+            $this->decreaseBalance((int) $source->id, 'sellable', $units);
+            $destinationId = $this->lockOrCreateBalance($productId, $toLocationId, $toPositionId, $batchId);
+            $this->increaseBalance($destinationId, 'sellable', $units);
+
+            $common = [
+                'store_id' => $storeId,
+                'product_id' => $productId,
+                'batch_id' => $batchId,
+                'qty' => $qty,
+                'movement_type' => 'transfer',
+                'unit_cost' => $product->avg_cost,
+                'ref_type' => $refType,
+                'ref_id' => $refId,
+                'occurred_at' => $now,
+                'created_by' => $actorId,
+            ];
+            DB::table('inventory_movements')->insert($common + [
+                'from_location_id' => $fromLocationId,
+                'from_position_id' => $fromPositionId,
+                'from_bucket' => 'sellable',
+            ]);
+            DB::table('inventory_movements')->insert($common + [
+                'to_location_id' => $toLocationId,
+                'to_position_id' => $toPositionId,
+                'to_bucket' => 'sellable',
             ]);
         }
     }

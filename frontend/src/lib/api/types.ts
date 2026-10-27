@@ -288,6 +288,19 @@ export interface FloatPolicies {
   main_cash: FloatPolicy | null;
 }
 
+export type CashMovementType = 'in' | 'out';
+
+export interface CashMovement {
+  id: number;
+  shift_id: number;
+  type: CashMovementType;
+  amount: Decimal;
+  reason: string;
+  created_by: number;
+  created_by_name: string;
+  created_at: string;
+}
+
 export type FloatPolicyInput =
   | {
       mode: 'fixed';

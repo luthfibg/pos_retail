@@ -11,6 +11,7 @@ import { normalizeDecimal } from '@/features/products/productForm';
 import { ShiftFigures, ShiftStatusBadge } from './ShiftParts';
 import { formatRupiah } from '@/lib/format';
 import { canOpenNextShift } from './shiftLogic';
+import { CashMovementsPanel } from './CashMovementsPanel';
 
 const DEPOSIT_STATUS_LABEL: Record<DepositStatus, string> = {
   draft: 'Draft — belum diserahkan',
@@ -174,6 +175,8 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
           <p className="text-xs text-slate-500">Kas yang diharapkan disembunyikan selama shift berjalan (hitung buta) dan tampil setelah shift ditutup.</p>
         )}
       </div>
+
+      <CashMovementsPanel shift={shift} />
 
       <ErrorNotice error={startCount.error} />
 

@@ -1,6 +1,6 @@
 import { api } from './client';
 import type {
-  Category, CategoryInput, CashDeposit, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
+  Category, CategoryInput, CashDeposit, CashMovement, CashMovementType, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
@@ -132,6 +132,13 @@ export const floatPolicyApi = {
   list: () => api<{ data: FloatPolicies }>('/float-policies').then((r) => r.data),
   update: (scope: FloatPolicyScope, input: FloatPolicyInput) =>
     api<{ data: FloatPolicies['petty_cash'] }>('/float-policies/' + scope, { method: 'PUT', body: input }).then((r) => r.data),
+};
+
+export const cashMovementApi = {
+  list: (shiftId: number, page = 1, perPage = 25) =>
+    api<Paginated<CashMovement>>(`/shifts/${shiftId}/cash-movements`, { query: { page, per_page: perPage } }),
+  create: (shiftId: number, input: { type: CashMovementType; amount: string; reason: string }) =>
+    api<{ data: CashMovement }>(`/shifts/${shiftId}/cash-movements`, { method: 'POST', body: input }).then((r) => r.data),
 };
 
 export interface SaleFilters {

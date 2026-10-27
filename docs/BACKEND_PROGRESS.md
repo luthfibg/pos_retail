@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 26 Oktober 2026 · **Test terbaru:** `php artisan test` — **204 lulus (1.764 assertions)** · **Dikerjakan:** WS-B (Inventory inti), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **210 lulus (1.837 assertions)** · **Dikerjakan:** WS-B (Inventory inti + transfer stok), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 26 Okt 2026: 204 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 210 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -32,6 +32,11 @@
 | GET | `/api/inventory/products/{product}/stock` | `inventory.view` | Stok satu produk per batch/posisi + total |
 | GET | `/api/inventory/movements` | `inventory.view` | Riwayat pergerakan stok (terbaru dulu) |
 | POST | `/api/inventory/opening-balances` | `inventory.adjust.approve` (Admin) | **Stok awal** (satu dokumen, banyak baris, atomik) |
+| GET | `/api/inventory/transfers` | `stock_transfer.create` | Daftar/filter dokumen transfer |
+| POST | `/api/inventory/transfers` | `stock_transfer.create` | Buat draft transfer stok |
+| GET | `/api/inventory/transfers/{id}` | `stock_transfer.create` | Detail draft/posted/cancelled |
+| POST | `/api/inventory/transfers/{id}/post` | `stock_transfer.create` | Posting atomik dan memindahkan saldo |
+| POST | `/api/inventory/transfers/{id}/cancel` | `stock_transfer.create` | Batalkan draft (opsional `reason`) |
 
 Daftar produk (`GET /api/products`) sudah memuat `stock_sellable` dan `stock_status`; angka itu kini terisi dari saldo nyata.
 
@@ -79,9 +84,32 @@ Query: `product_id`, `movement_type` (`opening_balance|receipt|putaway|transfer|
 Item: `id, product_id, sku, product_name, batch_id, batch_code, expiry_date, movement_type, qty, unit_cost, from_location_id, from_bucket, to_location_id, to_bucket, ref_type, ref_id, occurred_at, created_by, created_by_name`.
 Arah: ada `to_bucket` = barang masuk; ada `from_bucket` = barang keluar.
 
-### Yang belum ada untuk Inventory (jangan dibuatkan UI dulu)
-Penerimaan barang dari PO, transfer, adjustment/opname, karantina/write-off, denah rak ⏳.
-(`InventoryService` sudah punya `receive`, `sell` FEFO, `voidSale` untuk dipakai penerimaan dan POS berikutnya — belum ada endpoint-nya.)
+### Transfer stok antar lokasi/posisi (tahap 2.6) ✅
+
+Semua endpoint transfer memakai permission `stock_transfer.create` (role Kasir/Admin). Dokumen dibatasi ke toko pengguna.
+
+`POST /api/inventory/transfers` menerima:
+```json
+{
+  "from_location_id": 1,
+  "to_location_id": 1,
+  "items": [
+    { "product_id": 12, "batch_id": 7, "from_position_id": 3, "to_position_id": 4, "qty": "5" }
+  ]
+}
+```
+- `items`: 1–200 baris; `qty` wajib lebih dari nol, maksimal 3 desimal. `batch_id`, `from_position_id`, dan `to_position_id` opsional.
+- Kedua lokasi harus aktif dan milik toko yang sama. Bila `warehouse_enabled=false`, transfer yang melibatkan lokasi gudang ditolak. Posisi asal, jika diisi, harus berada di lokasi asal; posisi tujuan, jika diisi, harus pada rak aktif di lokasi tujuan.
+- Draft diberi nomor `TRF-...`; pembuatan draft tidak mengubah atau mereservasi stok. Tidak ada endpoint edit: draft yang keliru dibatalkan dan dibuat ulang.
+- `POST .../{id}/post` hanya menerima draft. Saat posting, stok sumber yang tersedia diperiksa secara agregat (termasuk beberapa baris untuk produk/batch/posisi yang sama); jika tidak cukup, operasi gagal tanpa perubahan stok dan draft tetap utuh.
+- Posting memindahkan bucket `sellable` secara atomik melalui `InventoryService`, mempertahankan produk, batch, qty dan HPP, serta membuat movement keluar dan masuk bertipe `transfer` dengan referensi dokumen yang sama. HPP produk tidak berubah.
+- `POST .../{id}/cancel` hanya membatalkan draft; `reason` opsional (maksimum 500 karakter). Dokumen posted tidak dapat diedit atau dibatalkan.
+- Pembuatan, posting, dan pembatalan dicatat pada audit log (`stock_transfer.create|post|cancel`).
+- Daftar menerima filter `status` (`draft|posted|cancelled`), awalan nomor dokumen melalui `q`, dan `per_page` (1–100, default 25). Detail memuat nama lokasi, pembuat/pemosting, waktu posting, serta rincian produk, batch, posisi dan qty.
+- Error validasi mengikuti format 422 standar; kegagalan stok menunjuk `items.N.qty`.
+
+### Yang belum ada untuk Inventory
+Adjustment/opname, karantina/write-off dan denah rak ⏳. `InventoryService` menyediakan `receive`, `sell` FEFO, `voidSale`, dan `transfer`; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
 
 ---
 
@@ -529,6 +557,7 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 - Tidak ada permission baru dan tidak ada migration baru. Stok awal memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-27** — Tahap 2.6 (transfer stok) ditambahkan: draft, validasi posisi/lokasi dan setting gudang, posting saldo atomik dengan pasangan movement, pembatalan draft, dan audit. **210 test lulus (1.837 assertions)**; bagian 1 kini ✅.
 - **2026-10-26** — Tahap 3.6 (kas masuk/keluar nonpenjualan) ditambahkan: API pencatatan dan riwayat per shift, pembatasan akses pemilik shift, update ledger Kas Kecil, dan audit. **204 test lulus (1.764 assertions)**; bagian 7.4 kini ✅.
 - **2026-10-26** — Pengguna menjalankan seluruh suite: **200 test lulus (1.729 assertions)**. Bagian 10 (Manajemen Pengguna) kini ✅.
 - **2026-10-25 (4)** — WS-G: manajemen pengguna (CRUD, aktif/nonaktif, reset sandi, ganti sandi sendiri). Status: 🟡 menunggu test (`UserManagementTest`).
