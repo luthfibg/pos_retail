@@ -11,6 +11,8 @@ import { purchaseRequisitionApi } from '@/lib/api/endpoints';
 import type { PurchaseRequisition, PurchaseRequisitionStatus } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
 import { PurchaseOrderCreateDialog, PurchaseOrderManageDialog } from './PurchaseOrderDialogs';
+import { PurchaseStageTracker } from './PurchaseStageTracker';
+import { isPrPrintable, trackerStageForPr } from './purchaseFlow';
 import {
   buildPurchaseRequisitionInput,
   mapPurchaseRequisitionServerErrors,
@@ -20,7 +22,7 @@ import {
   type PurchaseRequisitionRow,
 } from './purchaseRequisitionForm';
 
-const STATUS_LABEL: Record<PurchaseRequisitionStatus, string> = {
+export const STATUS_LABEL: Record<PurchaseRequisitionStatus, string> = {
   draft: 'Draft',
   submitted: 'Menunggu Finance',
   finance_checked: 'Menunggu Owner',
@@ -170,7 +172,7 @@ export function PurchaseRequisitionsPage() {
   );
 }
 
-function PurchaseRequisitionForm({
+export function PurchaseRequisitionForm({
   prId,
   onClose,
   onSaved,
@@ -307,7 +309,7 @@ function PurchaseRequisitionForm({
   );
 }
 
-function PurchaseRequisitionDetailDialog({
+export function PurchaseRequisitionDetailDialog({
   prId,
   canManagePr,
   canCancel,
@@ -320,6 +322,8 @@ function PurchaseRequisitionDetailDialog({
   onSaved,
   onCreatePo,
   onManagePo,
+  closeOnSuccess = false,
+  onPrint,
 }: {
   prId: number;
   canManagePr: boolean;
@@ -333,6 +337,9 @@ function PurchaseRequisitionDetailDialog({
   onSaved: () => void;
   onCreatePo: (pr: PurchaseRequisition) => void;
   onManagePo: (poId: number) => void;
+  /** Tutup dialog setelah aksi yang mengubah status berhasil (dipakai papan tahap). */
+  closeOnSuccess?: boolean;
+  onPrint?: (pr: PurchaseRequisition) => void;
 }) {
   const qc = useQueryClient();
   const [confirmAction, setConfirmAction] = useState<'submit' | 'cancel' | 'finance-pass' | 'finance-return' | 'approve' | 'reject' | null>(null);
@@ -350,6 +357,7 @@ function PurchaseRequisitionDetailDialog({
     setApproverUsername('');
     setApproverPassword('');
     onSaved();
+    if (closeOnSuccess) onClose();
   };
   const submit = useMutation({ mutationFn: () => purchaseRequisitionApi.submit(prId), onSuccess: refresh, onError: () => setConfirmAction(null) });
   const cancel = useMutation({ mutationFn: () => purchaseRequisitionApi.cancel(prId), onSuccess: refresh, onError: () => setConfirmAction(null) });
@@ -378,6 +386,7 @@ function PurchaseRequisitionDetailDialog({
       ) : pr ? (
         <div className="space-y-4 p-5">
           <ErrorNotice error={submit.error ?? cancel.error ?? financeCheck.error ?? approve.error} />
+          <PurchaseStageTracker current={trackerStageForPr(pr)} archivedNote={`Status: ${STATUS_LABEL[pr.status]}. PR ini tidak lagi berjalan di alur pembelian.`} />
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <Detail label="Nomor PR" value={pr.doc_number} />
             <Detail label="Status" value={STATUS_LABEL[pr.status]} />
@@ -500,6 +509,7 @@ function PurchaseRequisitionDetailDialog({
           )}
           {!confirmAction && (
             <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+              {onPrint && isPrPrintable(pr.status) && <button type="button" onClick={() => onPrint(pr)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak PR</button>}
               {canManagePr && active && <button type="button" onClick={onEdit} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Ubah Draft</button>}
               {canManagePr && active && <button type="button" onClick={() => setConfirmAction('submit')} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Ajukan ke Finance</button>}
               {canCancel && cancellable && <button type="button" onClick={() => setConfirmAction('cancel')} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700">Batalkan PR</button>}

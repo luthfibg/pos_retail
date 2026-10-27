@@ -90,6 +90,9 @@ export const purchaseRequisitionApi = {
 };
 
 export const purchaseOrderApi = {
+  /** Semua PO untuk pengelola (`purchase_order.create`); peran lain hanya melihat PO yang dapat diterima. */
+  list: (f: { q?: string; status?: PurchaseOrderSummary['status']; page?: number; per_page?: number } = {}) =>
+    api<Paginated<PurchaseOrderSummary>>('/purchase-orders', { query: { ...f } }),
   receivable: (f: { q?: string; page?: number; per_page?: number } = {}) =>
     api<Paginated<PurchaseOrderSummary>>('/purchase-orders', { query: { ...f, receivable: 1 } }),
   get: (id: number) => api<{ data: PurchaseOrder }>(`/purchase-orders/${id}`).then((r) => r.data),

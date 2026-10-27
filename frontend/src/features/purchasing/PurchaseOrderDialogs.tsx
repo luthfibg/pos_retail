@@ -7,8 +7,10 @@ import { purchaseOrderApi, supplierApi } from '@/lib/api/endpoints';
 import type { PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { PurchaseStageTracker } from './PurchaseStageTracker';
+import { isPoPrintable, poStage } from './purchaseFlow';
 
-const ORDER_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
+export const ORDER_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
   draft: 'Draft',
   pending_confirmation: 'Menunggu konfirmasi Owner',
   approved: 'Disetujui',
@@ -161,10 +163,12 @@ export function PurchaseOrderManageDialog({
   poId,
   onClose,
   onChanged,
+  onPrint,
 }: {
   poId: number;
   onClose: () => void;
   onChanged: () => void;
+  onPrint?: (po: PurchaseOrder) => void;
 }) {
   const qc = useQueryClient();
   const { can } = useAuth();
@@ -193,6 +197,7 @@ export function PurchaseOrderManageDialog({
       ) : po ? (
         <div className="space-y-4 p-5">
           <ErrorNotice error={submit.error ?? confirm.error ?? send.error} />
+          <PurchaseStageTracker current={poStage(po.status)} archivedNote="PO ini dibatalkan dan tidak lagi berjalan di alur pembelian." />
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <div><div className="text-xs text-slate-500">Nomor PO</div><div className="font-mono font-medium">{po.doc_number}</div></div>
             <div><div className="text-xs text-slate-500">Status</div><div className="font-medium">{ORDER_STATUS_LABEL[po.status]}</div></div>
@@ -240,6 +245,11 @@ export function PurchaseOrderManageDialog({
             </button>
           )}
           {po.status === 'sent' && <p className="text-sm text-slate-600">PO telah dikirim ke supplier.</p>}
+          {onPrint && isPoPrintable(po.status) && (
+            <div className="flex justify-end border-t border-slate-100 pt-3">
+              <button type="button" onClick={() => onPrint(po)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak PO</button>
+            </div>
+          )}
         </div>
       ) : null}
     </Modal>

@@ -21,7 +21,7 @@ const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module)
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
 const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
-const PurchaseRequisitionsPage = lazy(() => import('@/features/purchasing/PurchaseRequisitionsPage').then((module) => ({ default: module.PurchaseRequisitionsPage })));
+const PurchasingEntryPage = lazy(() => import('@/features/purchasing/PurchaseBoardPage').then((module) => ({ default: module.PurchasingEntryPage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<div className="p-6 text-slate-500">Memuat layar…</div>}>{children}</Suspense>;
@@ -95,7 +95,7 @@ export const router = createBrowserRouter([
               'purchase_order.create',
               'purchase_order.send',
             ]} />,
-            children: [{ path: 'purchase-requisitions', element: <LazyPage><PurchaseRequisitionsPage /></LazyPage> }],
+            children: [{ path: 'purchase-requisitions', element: <LazyPage><PurchasingEntryPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="discount.manage" />,

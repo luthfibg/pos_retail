@@ -16,3 +16,13 @@ body { @apply bg-slate-50 text-slate-900 antialiased; }
 }
 
 .print-only { display: none; }
+
+/* Cetak PR/PO (A4). Layar lain memakai .no-print; lembar cetak memakai .print-only.print-doc. */
+@media print {
+  html, body, #root, #root > div, main { height: auto !important; overflow: visible !important; }
+  .print-doc { color: #000; font-size: 12px; }
+  .print-doc table { width: 100%; border-collapse: collapse; }
+  .print-doc th, .print-doc td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+  .print-doc th { background: #f1f5f9; text-align: left; }
+  .print-doc tr { break-inside: avoid; }
+}
