@@ -29,7 +29,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Customers (karyawan), verifikasi, batas kredit, notifikasi `customer.limit_needed` | Selesai | **Lolos** test (24 Okt 2026) |
 | Denah rak | Belum | — |
 | Inventory inti: `InventoryService` (saldo/pergerakan/batch/FEFO/anti-negatif/HPP), stok awal, lihat stok, riwayat pergerakan | Selesai | **Lolos** test (24 Okt 2026) |
-| Penerimaan barang dari PO (posting menambah stok, selisih/rusak, verifikasi dokumen, tujuan gudang/posisi rak) | Selesai | GoodsReceiptTest; lihat kontrak `docs/BACKEND_PROGRESS.md` bagian 6.3 |
+| Penerimaan barang dari PO (posting menambah stok, selisih/rusak, verifikasi dokumen, tujuan gudang/posisi rak, lampiran surat jalan privat) | Selesai | GoodsReceiptTest; lihat kontrak `docs/BACKEND_PROGRESS.md` bagian 6.3 |
 | Transfer antarposisi / putaway (draft, posting atomik, batal draft) | Selesai | **Lolos** `StockTransferTest` (6 test) dan suite 210 test (27 Okt 2026) |
 | Adjustment dan opname (snapshot, pengajuan, persetujuan, posting atomik) | Selesai | **Lolos** `StockAdjustmentTest` (8 test) dan suite 218 test (27 Okt 2026) |
 | Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Selesai | **Lolos** test (24 Okt 2026) |
@@ -48,7 +48,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Periode tagihan + invoice HRD + pembayaran HRD | Selesai | **Lolos** test (25 Okt 2026) |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
-**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 27 Okt 2026: **224 test lulus (1.978 assertions)**.
+**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 27 Okt 2026: **228 test lulus (2.019 assertions)**.
 
 ---
 
@@ -81,7 +81,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 3. **Uang = `DECIMAL(18,2)`, qty = `DECIMAL(18,3)`**; API mengembalikan **string desimal** (`"3500.00"`), jangan float. Waktu disimpan **UTC**, tampil WIB.
 4. **Otorisasi:** route memakai `->middleware(['auth:sanctum', 'can:<kode.permission>'])`. Kode permission dan deskripsi hanya didefinisikan di `app/Support/PermissionCatalog.php` (satu sumber). Subset Kasir ada di `PermissionCatalog::cashier()`.
 5. **Persetujuan (PR Owner, pengecualian kredit, write-off, adjustment):** pakai `ReauthService::confirm($username, $password, $permission, $requester)`. Pemberi persetujuan mengetik password akunnya sendiri; tidak ada password bersama.
-6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`, `customer.create|update|status_change|verify|set_limit`, `inventory.opening_balance`, `stock_adjustment.create|request|approve|post|reject|cancel`, `shift.open|start_count|close|review`, `cash_movement.create`, `sale.post`, `sale.credit_exception`, `receipt.reprint`, `purchase_requisition.create|update|submit|finance_check|return|approve|reject|cancel|convert|reopen`, `purchase_order.create|update|submit|approve|confirm|send|cancel|close`, `goods_receipt.create|post|verify_documents|cancel`.
+6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`, `customer.create|update|status_change|verify|set_limit`, `inventory.opening_balance`, `stock_adjustment.create|request|approve|post|reject|cancel`, `shift.open|start_count|close|review`, `cash_movement.create`, `sale.post`, `sale.credit_exception`, `receipt.reprint`, `purchase_requisition.create|update|submit|finance_check|return|approve|reject|cancel|convert|reopen`, `purchase_order.create|update|submit|approve|confirm|send|cancel|close`, `goods_receipt.create|attach|post|verify_documents|cancel`.
 7. **Dokumen terposting tidak dihapus/diedit.** Koreksi lewat pembatalan, reversal, atau dokumen koreksi yang bertaut.
 8. **Penomoran dokumen:** `NumberSequence::next($storeId, $jenis, $periode)` — hanya di dalam transaksi — lalu `DocumentNumber::format('SALE', $n, '202610')` → `SALE-202610-000123` (sudah ada; stok awal memakai `OPEN-000001`).
 9. **Stok:** saldo (`inventory_balances`) turunan dari `inventory_movements` (append-only). Stok negatif **dilarang**. Semua perubahan stok lewat `InventoryService` (`receive`, `sell` FEFO, `voidSale`, `transfer`, `adjust`), **wajib di dalam `DB::transaction` pemanggil**; produk dikunci berurutan id. Hitung qty/uang dengan `App\Support\Decimal` (integer), bukan float.
@@ -207,5 +207,5 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 1. ~~Verifikasi test master data~~ — **sudah lolos**.
 2. ~~`git init`, commit baseline, cabang per workstream~~ — **sudah** (root `pos_retail`: backend, frontend, docs).
-3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Tahap manajemen pengguna (1.8), kas masuk/keluar nonpenjualan (3.6), transfer stok (2.6), adjustment/opname (2.7), dan penerimaan gudang/putaway (4.4) selesai; suite backend terbaru **224 test lulus (1.978 assertions) pada 27 Okt 2026**. Opname memakai dokumen adjustment `reason=opname`; skema saat ini tidak memiliki sesi opname terpisah. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
+3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Tahap manajemen pengguna (1.8), kas masuk/keluar nonpenjualan (3.6), transfer stok (2.6), adjustment/opname (2.7), penerimaan gudang/putaway (4.4), dan lampiran penerimaan (4.5) selesai; suite backend terbaru **228 test lulus (2.019 assertions) pada 27 Okt 2026**. Opname memakai dokumen adjustment `reason=opname`; skema saat ini tidak memiliki sesi opname terpisah. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
 4. Mulai paralel: WS-B dan WS-A (backend), WS-F scaffold (frontend).

@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\BuildsPurchasing;
 use Tests\SeededTestCase;
@@ -20,6 +22,7 @@ class GoodsReceiptTest extends SeededTestCase
 
         $this->cashier = $this->makeUser('Kasir', 'kasir-terima');
         Sanctum::actingAs($this->cashier, ['*']);
+        Storage::fake('local');
     }
 
     /** PO berstatus sent dengan satu baris; mengembalikan [poId, poItemId]. */
@@ -256,6 +259,108 @@ class GoodsReceiptTest extends SeededTestCase
         $this->postJson("/api/goods-receipts/{$gr}/verify-documents", ['delivery_note_no' => 'SJ-1', 'invoice_no' => 'INV-1'])
             ->assertUnprocessable()->assertJsonValidationErrors(['document_status']);
         $this->assertDatabaseHas('audit_logs', ['action' => 'goods_receipt.verify_documents', 'entity_id' => $gr]);
+    }
+
+    public function test_goods_receipt_attachments_are_private_audited_and_available_in_detail(): void
+    {
+        $p = $this->product();
+        [$po, $item] = $this->sentPo($p);
+        $gr = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, [], ['post' => true]))
+            ->assertCreated()->json('data.id');
+
+        $response = $this->post("/api/goods-receipts/{$gr}/attachments", [
+            'file' => UploadedFile::fake()->image('SJ 001.jpg')->size(80),
+        ])->assertCreated()
+            ->assertJsonPath('data.original_name', 'SJ 001.jpg')
+            ->assertJsonPath('data.mime_type', 'image/jpeg')
+            ->assertJsonPath('data.uploaded_by_name', $this->cashier->name);
+
+        $attachmentId = $response->json('data.id');
+        $attachment = DB::table('attachments')->where('id', $attachmentId)->first();
+
+        $this->assertSame('goods_receipt', $attachment->entity_type);
+        $this->assertSame($gr, (int) $attachment->entity_id);
+        Storage::disk('local')->assertExists($attachment->file_path);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'goods_receipt.attach',
+            'entity_id' => $gr,
+            'actor_id' => $this->cashier->id,
+        ]);
+
+        $this->getJson("/api/goods-receipts/{$gr}")
+            ->assertOk()
+            ->assertJsonPath('data.attachments.0.id', $attachmentId)
+            ->assertJsonMissingPath('data.attachments.0.file_path');
+
+        $this->get("/api/goods-receipts/{$gr}/attachments/{$attachmentId}")
+            ->assertOk()
+            ->assertHeader('content-type', 'image/jpeg')
+            ->assertHeader('x-content-type-options', 'nosniff')
+            ->assertHeader('content-disposition');
+    }
+
+    public function test_only_receipt_owner_or_document_verifier_can_access_attachments(): void
+    {
+        $p = $this->product();
+        [$po, $item] = $this->sentPo($p);
+        $gr = $this->postJson('/api/goods-receipts', $this->receipt($po, $item))
+            ->assertCreated()->json('data.id');
+        $attachmentId = $this->post("/api/goods-receipts/{$gr}/attachments", [
+            'file' => UploadedFile::fake()->image('surat-jalan.png'),
+        ])->assertCreated()->json('data.id');
+
+        Sanctum::actingAs($this->makeUser('Kasir', 'kasir-lain'), ['*']);
+        $this->post("/api/goods-receipts/{$gr}/attachments", [
+            'file' => UploadedFile::fake()->image('salinan.png'),
+        ])->assertForbidden();
+        $this->get("/api/goods-receipts/{$gr}/attachments/{$attachmentId}")->assertNotFound();
+
+        $this->actAsAdmin();
+        $this->get("/api/goods-receipts/{$gr}/attachments/{$attachmentId}")->assertOk();
+    }
+
+    public function test_attachment_upload_validates_file_type_and_size(): void
+    {
+        $p = $this->product();
+        [$po, $item] = $this->sentPo($p);
+        $gr = $this->postJson('/api/goods-receipts', $this->receipt($po, $item))
+            ->assertCreated()->json('data.id');
+
+        $this->post("/api/goods-receipts/{$gr}/attachments", [
+            'file' => UploadedFile::fake()->create('payload.txt', 10, 'text/plain'),
+        ])->assertUnprocessable()->assertJsonValidationErrors(['file']);
+
+        $this->post("/api/goods-receipts/{$gr}/attachments", [
+            'file' => UploadedFile::fake()->create('large.pdf', 10241, 'application/pdf'),
+        ])->assertUnprocessable()->assertJsonValidationErrors(['file']);
+
+        $this->assertSame(0, DB::table('attachments')->where('entity_type', 'goods_receipt')->where('entity_id', $gr)->count());
+    }
+
+    public function test_attachments_cannot_be_added_to_cancelled_or_verified_receipts(): void
+    {
+        $p = $this->product();
+        [$po, $item] = $this->sentPo($p);
+        $draft = $this->postJson('/api/goods-receipts', $this->receipt($po, $item))
+            ->assertCreated()->json('data.id');
+
+        $this->postJson("/api/goods-receipts/{$draft}/cancel")->assertOk();
+        $this->post("/api/goods-receipts/{$draft}/attachments", [
+            'file' => UploadedFile::fake()->image('cancelled.jpg'),
+        ])->assertUnprocessable()->assertJsonValidationErrors(['status']);
+
+        $posted = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, [], ['post' => true]))
+            ->assertCreated()->json('data.id');
+
+        $this->actAsAdmin();
+        $this->postJson("/api/goods-receipts/{$posted}/verify-documents", [
+            'delivery_note_no' => 'SJ-1',
+            'invoice_no' => 'INV-1',
+        ])->assertOk();
+
+        $this->post("/api/goods-receipts/{$posted}/attachments", [
+            'file' => UploadedFile::fake()->image('verified.jpg'),
+        ])->assertUnprocessable()->assertJsonValidationErrors(['status']);
     }
 
     public function test_cancel_only_drafts_and_only_by_owner_of_the_receipt(): void

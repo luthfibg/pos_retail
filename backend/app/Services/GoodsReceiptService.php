@@ -5,10 +5,16 @@ namespace App\Services;
 use App\Models\User;
 use App\Services\Concerns\PurchasingSupport;
 use App\Support\Decimal;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
+use Throwable;
 
 /**
  * Penerimaan barang (Goods Receipt, GR) dari PO. Alur (dokumen kebutuhan 6.4):
@@ -184,6 +190,112 @@ class GoodsReceiptService
         }
 
         return $this->load($storeId, $id, $this->canVerify($actor, $storeId)) ?? [];
+    }
+
+    /**
+     * Adds private supporting evidence to a receipt while its documents are pending verification.
+     *
+     * @return array<string, mixed>
+     */
+    public function attach(User $actor, int $storeId, int $grId, UploadedFile $file): array
+    {
+        $gr = DB::table('goods_receipts')
+            ->where('store_id', $storeId)
+            ->where('id', $grId)
+            ->first();
+
+        abort_if($gr === null, 404, 'Penerimaan tidak ditemukan.');
+        $this->assertAccess($actor, $storeId, $gr);
+        $this->assertAttachmentsOpen($gr);
+
+        $path = $file->store("{$storeId}/goods-receipts/{$grId}", 'local');
+
+        if (! is_string($path) || $path === '') {
+            throw new RuntimeException('Gagal menyimpan file lampiran penerimaan.');
+        }
+
+        $originalName = basename(str_replace('\\', '/', $file->getClientOriginalName()));
+        $originalName = preg_replace('/[\x00-\x1F\x7F]/u', '', $originalName) ?: 'lampiran';
+        $originalName = Str::limit($originalName, 255, '');
+
+        try {
+            $attachmentId = DB::transaction(function () use ($actor, $storeId, $grId, $file, $path, $originalName) {
+                $lockedReceipt = $this->lock($storeId, $grId);
+                $this->assertAccess($actor, $storeId, $lockedReceipt);
+                $this->assertAttachmentsOpen($lockedReceipt);
+
+                $attachmentId = DB::table('attachments')->insertGetId([
+                    'store_id' => $storeId,
+                    'entity_type' => 'goods_receipt',
+                    'entity_id' => $grId,
+                    'file_path' => $path,
+                    'original_name' => $originalName,
+                    'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
+                    'size_bytes' => (int) $file->getSize(),
+                    'uploaded_by' => $actor->id,
+                ]);
+
+                $this->audit->log(
+                    'goods_receipt.attach',
+                    'goods_receipt',
+                    $grId,
+                    after: [
+                        'attachment_id' => $attachmentId,
+                        'original_name' => $originalName,
+                        'mime_type' => $file->getMimeType(),
+                        'size_bytes' => (int) $file->getSize(),
+                    ],
+                    actorId: $actor->id,
+                    storeId: $storeId,
+                );
+
+                return $attachmentId;
+            });
+        } catch (Throwable $exception) {
+            if (! Storage::disk('local')->delete($path)) {
+                Log::error('Failed to remove an unrecorded goods receipt attachment.', [
+                    'goods_receipt_id' => $grId,
+                    'path' => $path,
+                ]);
+            }
+
+            throw $exception;
+        }
+
+        return $this->attachmentDetails($storeId, $grId, $attachmentId)
+            ?? throw new RuntimeException('Lampiran tersimpan tetapi tidak dapat dibaca kembali.');
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function findAttachment(User $user, int $storeId, int $grId, int $attachmentId): ?array
+    {
+        $gr = DB::table('goods_receipts')
+            ->where('store_id', $storeId)
+            ->where('id', $grId)
+            ->first();
+
+        if ($gr === null || (! $this->canVerify($user, $storeId) && (int) $gr->received_by !== $user->id)) {
+            return null;
+        }
+
+        $attachment = DB::table('attachments')
+            ->where('store_id', $storeId)
+            ->where('entity_type', 'goods_receipt')
+            ->where('entity_id', $grId)
+            ->where('id', $attachmentId)
+            ->first(['file_path', 'original_name', 'mime_type']);
+
+        if ($attachment === null) {
+            return null;
+        }
+
+        return [
+            'file_path' => $attachment->file_path,
+            'original_name' => $attachment->original_name,
+            'mime_type' => $attachment->mime_type,
+        ];
     }
 
     /**
@@ -456,6 +568,60 @@ class GoodsReceiptService
         );
     }
 
+    private function assertAttachmentsOpen(object $gr): void
+    {
+        if ($gr->status === 'cancelled' || $gr->document_status === 'verified') {
+            throw ValidationException::withMessages([
+                'status' => ['Lampiran tidak dapat ditambahkan setelah penerimaan dibatalkan atau dokumennya diverifikasi.'],
+            ]);
+        }
+    }
+
+    /** @return array<string, mixed>|null */
+    private function attachmentDetails(int $storeId, int $grId, int $attachmentId): ?array
+    {
+        $attachment = DB::table('attachments as a')
+            ->join('users as u', 'u.id', '=', 'a.uploaded_by')
+            ->where('a.store_id', $storeId)
+            ->where('a.entity_type', 'goods_receipt')
+            ->where('a.entity_id', $grId)
+            ->where('a.id', $attachmentId)
+            ->first(['a.id', 'a.original_name', 'a.mime_type', 'a.size_bytes', 'a.created_at', 'u.name as uploaded_by_name']);
+
+        if ($attachment === null) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $attachment->id,
+            'original_name' => $attachment->original_name,
+            'mime_type' => $attachment->mime_type,
+            'size_bytes' => (int) $attachment->size_bytes,
+            'uploaded_by_name' => $attachment->uploaded_by_name,
+            'created_at' => $attachment->created_at,
+        ];
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function attachments(int $storeId, int $grId): array
+    {
+        return DB::table('attachments as a')
+            ->join('users as u', 'u.id', '=', 'a.uploaded_by')
+            ->where('a.store_id', $storeId)
+            ->where('a.entity_type', 'goods_receipt')
+            ->where('a.entity_id', $grId)
+            ->orderBy('a.id')
+            ->get(['a.id', 'a.original_name', 'a.mime_type', 'a.size_bytes', 'a.created_at', 'u.name as uploaded_by_name'])
+            ->map(fn ($attachment) => [
+                'id' => (int) $attachment->id,
+                'original_name' => $attachment->original_name,
+                'mime_type' => $attachment->mime_type,
+                'size_bytes' => (int) $attachment->size_bytes,
+                'uploaded_by_name' => $attachment->uploaded_by_name,
+                'created_at' => $attachment->created_at,
+            ])->all();
+    }
+
     private function lock(int $storeId, int $id): object
     {
         $gr = DB::table('goods_receipts')->where('store_id', $storeId)->where('id', $id)->lockForUpdate()->first();
@@ -682,6 +848,7 @@ class GoodsReceiptService
             'note' => $gr->note,
             'created_at' => $gr->created_at,
             'items' => $items,
+            'attachments' => $this->attachments($storeId, $id),
         ];
     }
 }

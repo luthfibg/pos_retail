@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **224 lulus (1.978 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **228 lulus (2.019 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 224 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 228 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -404,6 +404,18 @@ Permintaan buat:
 - Bila lokasi tujuan bertipe gudang, lokasi tersebut harus aktif dan `warehouse_enabled=true`; aturan diperiksa saat membuat **dan** memposting draft. Posisi rak per item opsional, tetapi bila diisi harus berada pada rak aktif di lokasi penerimaan. Stok tanpa posisi dapat dipindahkan/di-putaway memakai alur transfer stok.
 - UI dapat mengambil pilihan lokasi lewat `GET /api/goods-receipts/receiving-locations`; endpoint hanya mengembalikan lokasi aktif milik toko dan menyembunyikan gudang saat konfigurasi nonaktif.
 
+### Lampiran dokumen penerimaan (tahap 4.5) ✅
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| POST | `/api/goods-receipts/{gr}/attachments` | `goods_receipt.create` | Unggah satu berkas per permintaan melalui `multipart/form-data` dengan field `file` |
+| GET | `/api/goods-receipts/{gr}/attachments/{attachment}` | `goods_receipt.create` | Unduh lampiran secara privat; akses hanya untuk pembuat penerimaan atau pemegang `goods_receipt.verify_documents` |
+
+- Format yang diterima: JPEG, PNG, WebP, atau PDF; ukuran maksimum 10 MB per berkas.
+- Upload dapat dilakukan pada GR draft atau posted selama belum dibatalkan atau diverifikasi. Lampiran bersifat append-only; verifikasi dokumen yang sudah ada tidak diubah dan tidak mensyaratkan lampiran.
+- Detail `GET /api/goods-receipts/{gr}` menyertakan `attachments[]`: `id, original_name, mime_type, size_bytes, uploaded_by_name, created_at`. Path fisik tidak dikirim ke klien dan berkas tidak disajikan dari disk publik.
+- File disimpan di disk privat Laravel dan metadata disimpan pada tabel `attachments` dengan `entity_type = goods_receipt`; setiap upload diaudit sebagai `goods_receipt.attach`.
+
 ### 6.4 Kunci error yang perlu penanganan khusus (422 `errors.<kunci>`)
 
 | Kunci | Arti | Tindakan UI |
@@ -437,7 +449,7 @@ Permintaan buat:
 - Penerimaan dari PO berstatus `approved` (belum diklik "kirim") tetap diizinkan agar operasional tidak tertahan langkah administratif.
 - Tanpa toleransi kelebihan kiriman; barang yang sudah kedaluwarsa tidak diterima sebagai layak jual.
 - **Selesai tahap 4.4:** penerimaan dapat diarahkan ke gudang aktif saat `warehouse_enabled=true`; posisi rak bisa ditentukan per item atau stok dipindahkan kemudian melalui transfer stok.
-- **Belum ada:** unggah lampiran surat jalan/foto, retur supplier/klaim barang rusak (Paket 3), pembayaran supplier dan Saldo Pembelian (Paket 2), dokumen koreksi penerimaan terposting.
+- **Belum ada:** retur supplier/klaim barang rusak (Paket 3), pembayaran supplier dan Saldo Pembelian (Paket 2), dokumen koreksi penerimaan terposting.
 
 ## 7. Setoran, Endapan, dan Void ✅
 
@@ -595,6 +607,7 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-27** — Tahap 4.5: upload lampiran GR (JPEG/PNG/WebP/PDF, maks. 10 MB), penyimpanan privat, download dengan pemeriksaan akses pemilik/approver, metadata pada detail, audit, dan penutupan upload setelah dokumen diverifikasi atau GR dibatalkan. `GoodsReceiptTest` **16 lulus**; suite `php artisan test`: **228 lulus (2.019 assertions)**; Pint lulus.
 - **2026-10-27** — Tahap 4.4: Goods Receipt dapat diarahkan ke lokasi gudang aktif ketika `warehouse_enabled=true`, dengan opsi posisi rak per item; pilihan lokasi disediakan endpoint khusus dan konfigurasi/lokasi divalidasi ulang saat draft diposting. Uji jalur gudang, posisi, mode mati, dan regresi: `GoodsReceiptTest` **12 lulus**; suite `php artisan test`: **224 lulus (1.978 assertions)**; Pint dan typecheck frontend lulus.
 - **2026-10-27** — Akses baca adjustment diselaraskan untuk role approver: pemegang `inventory.adjust.approve` dapat membaca antrean dan detail tanpa `inventory.adjust.request`; test akses ditambahkan. `StockAdjustmentTest`: **9 lulus**; suite `php artisan test`: **223 lulus (1.953 assertions)**.
 - **2026-10-27** — Akses baca alur purchasing diselaraskan untuk konfigurasi role terpisah: Finance/Owner/Purchasing dapat membaca antrean PR sesuai permission; pemegang `purchase_requisition.approve`/`purchase_order.send` dapat membaca PO yang perlu diproses; pemegang `purchase_order.create` dapat membaca supplier untuk membuat PO. Test akses ditambahkan. `php artisan test`: **222 lulus (1.946 assertions)**.

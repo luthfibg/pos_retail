@@ -34,6 +34,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('can:goods_receipt.create');
     Route::post('goods-receipts', [GoodsReceiptController::class, 'store'])->middleware('can:goods_receipt.create');
     Route::get('goods-receipts/{gr}', [GoodsReceiptController::class, 'show'])->whereNumber('gr')->middleware('can:goods_receipt.create');
+    Route::post('goods-receipts/{gr}/attachments', [GoodsReceiptController::class, 'storeAttachment'])
+        ->whereNumber('gr')->middleware('can:goods_receipt.create');
+    Route::get('goods-receipts/{gr}/attachments/{attachment}', [GoodsReceiptController::class, 'downloadAttachment'])
+        ->whereNumber('gr')->whereNumber('attachment')->middleware('can:goods_receipt.create');
     Route::post('goods-receipts/{gr}/post', [GoodsReceiptController::class, 'post'])->whereNumber('gr')->middleware('can:goods_receipt.create');
     Route::post('goods-receipts/{gr}/cancel', [GoodsReceiptController::class, 'cancel'])->whereNumber('gr')->middleware('can:goods_receipt.create');
     Route::post('goods-receipts/{gr}/verify-documents', [GoodsReceiptController::class, 'verifyDocuments'])->whereNumber('gr')->middleware('can:goods_receipt.verify_documents');
