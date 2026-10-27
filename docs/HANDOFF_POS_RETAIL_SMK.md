@@ -29,7 +29,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Customers (karyawan), verifikasi, batas kredit, notifikasi `customer.limit_needed` | Selesai | **Lolos** test (24 Okt 2026) |
 | Denah rak | Belum | — |
 | Inventory inti: `InventoryService` (saldo/pergerakan/batch/FEFO/anti-negatif/HPP), stok awal, lihat stok, riwayat pergerakan | Selesai | **Lolos** test (24 Okt 2026) |
-| Penerimaan barang dari PO (posting menambah stok, selisih/rusak, verifikasi dokumen) | Selesai | **Lolos** test (24 Okt 2026) |
+| Penerimaan barang dari PO (posting menambah stok, selisih/rusak, verifikasi dokumen, tujuan gudang/posisi rak) | Selesai | GoodsReceiptTest; lihat kontrak `docs/BACKEND_PROGRESS.md` bagian 6.3 |
 | Transfer antarposisi / putaway (draft, posting atomik, batal draft) | Selesai | **Lolos** `StockTransferTest` (6 test) dan suite 210 test (27 Okt 2026) |
 | Adjustment dan opname (snapshot, pengajuan, persetujuan, posting atomik) | Selesai | **Lolos** `StockAdjustmentTest` (8 test) dan suite 218 test (27 Okt 2026) |
 | Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Selesai | **Lolos** test (24 Okt 2026) |
@@ -48,7 +48,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Periode tagihan + invoice HRD + pembayaran HRD | Selesai | **Lolos** test (25 Okt 2026) |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
-**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 27 Okt 2026: **218 test lulus (1.922 assertions)**.
+**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 27 Okt 2026: **224 test lulus (1.978 assertions)**.
 
 ---
 
@@ -196,7 +196,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 |---|---|---|
 | R-04 | PPN: tarif, harga termasuk/tidak, status PKP, faktur pajak — menunggu klien | Wajib sebelum UAT; tidak menghambat pengembangan |
 | R-09 | Konfirmasi: kredit ditahan selama batas belum diisi | Diterapkan sebagai asumsi |
-| WS-C | ASUMSI pembelian: PO otomatis disetujui bila total ≤ total PR; Owner = pemegang `settings.manage`; penerimaan dari PO `approved` diizinkan; gudang/putaway belum didukung (lihat `BACKEND_PROGRESS.md` 6.7) | Konfirmasi klien sebelum UAT |
+| WS-C | ASUMSI pembelian: PO otomatis disetujui bila total ≤ total PR; Owner = pemegang `settings.manage`; penerimaan dari PO `approved` diizinkan. Penerimaan ke gudang aktif didukung bila `warehouse_enabled=true`; validasi lokasi dan posisi rak lihat `BACKEND_PROGRESS.md` 6.3 | Konfirmasi klien sebelum UAT |
 | R-11 | Format file migrasi dari aplikasi lama | Ditunda |
 | Q-07/09/10/11/13/14 | Default ASUMSI (lihat dokumen Bagian 13.7) | Perlu konfirmasi klien sebelum UAT |
 | Risiko | Cakupan vs 1 bulan; kode backend baru belum diuji di lingkungan penyusun; uji scanner/printer butuh perangkat klien | Kelola lewat pemotongan cakupan (bagian 7) |
@@ -207,5 +207,5 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 1. ~~Verifikasi test master data~~ — **sudah lolos**.
 2. ~~`git init`, commit baseline, cabang per workstream~~ — **sudah** (root `pos_retail`: backend, frontend, docs).
-3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Tahap manajemen pengguna (1.8), kas masuk/keluar nonpenjualan (3.6), transfer stok (2.6), dan adjustment/opname (2.7) selesai; suite backend terbaru **218 test lulus (1.922 assertions) pada 27 Okt 2026**. Opname memakai dokumen adjustment `reason=opname`; skema saat ini tidak memiliki sesi opname terpisah. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
+3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Tahap manajemen pengguna (1.8), kas masuk/keluar nonpenjualan (3.6), transfer stok (2.6), adjustment/opname (2.7), dan penerimaan gudang/putaway (4.4) selesai; suite backend terbaru **224 test lulus (1.978 assertions) pada 27 Okt 2026**. Opname memakai dokumen adjustment `reason=opname`; skema saat ini tidak memiliki sesi opname terpisah. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
 4. Mulai paralel: WS-B dan WS-A (backend), WS-F scaffold (frontend).

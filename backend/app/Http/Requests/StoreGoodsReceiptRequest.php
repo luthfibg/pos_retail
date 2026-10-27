@@ -16,6 +16,7 @@ class StoreGoodsReceiptRequest extends FormRequest
     {
         return [
             'po_id' => ['required', 'integer', 'min:1'],
+            'receiving_location_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'delivery_note_no' => ['nullable', 'string', 'max:60'],
             'invoice_no' => ['nullable', 'string', 'max:60'],
             'note' => ['nullable', 'string', 'max:500'],

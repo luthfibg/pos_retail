@@ -4,7 +4,7 @@ import type {
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
-  GoodsReceipt, GoodsReceiptItemInput, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
+  GoodsReceipt, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
   PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
 } from './types';
@@ -113,11 +113,14 @@ export const purchaseOrderApi = {
 };
 
 export const goodsReceiptApi = {
+  receivingLocations: () =>
+    api<{ data: GoodsReceiptLocation[] }>('/goods-receipts/receiving-locations').then((r) => r.data),
   list: (f: { q?: string; page?: number; per_page?: number } = {}) =>
     api<Paginated<GoodsReceiptSummary>>('/goods-receipts', { query: { ...f } }),
   get: (id: number) => api<{ data: GoodsReceipt }>(`/goods-receipts/${id}`).then((r) => r.data),
   create: (input: {
     po_id: number;
+    receiving_location_id?: number;
     delivery_note_no?: string;
     invoice_no?: string;
     note?: string;

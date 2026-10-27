@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Concerns\PurchasingSupport;
 use App\Support\Decimal;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -22,7 +23,7 @@ use Illuminate\Validation\ValidationException;
  *    ditolak sebagai "diterima layak jual" (catat sebagai rusak)
  *  - harga beli = harga di PO; hanya pemegang goods_receipt.verify_documents yang boleh mengubahnya (selisih tampil sebagai price_variance)
  *  - stok masuk lewat InventoryService::receive (batch + saldo + pergerakan `receipt` + HPP rata-rata bergerak), semua dalam satu transaksi
- *  - warehouse_enabled = true BELUM didukung (putaway/transfer gudang -> rak belum ada): penerimaan ditolak dengan pesan jelas
+ *  - penerimaan gudang hanya diizinkan bila warehouse_enabled aktif; posisi rak tujuan opsional dan dapat diisi saat putaway
  *  - [ASUMSI] qty_damaged hanya dicatat di dokumen (untuk klaim/retur supplier, Paket 3); tidak menambah stok dan tidak mengurangi sisa pesanan
  *  - GR terposting tidak diedit; koreksi lewat dokumen koreksi (belum ada)
  */
@@ -36,8 +37,7 @@ class GoodsReceiptService
         private PermissionResolver $permissions,
         private InventoryService $inventory,
         private NotificationService $notifications,
-    ) {
-    }
+    ) {}
 
     // ------------------------------------------------------------------ baca
 
@@ -48,8 +48,9 @@ class GoodsReceiptService
             ->join('purchase_orders as po', 'po.id', '=', 'gr.po_id')
             ->join('suppliers as s', 's.id', '=', 'gr.supplier_id')
             ->join('users as u', 'u.id', '=', 'gr.received_by')
+            ->join('locations as l', 'l.id', '=', 'gr.receiving_location_id')
             ->where('gr.store_id', $storeId)
-            ->select('gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'u.name as received_by_name');
+            ->select('gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'u.name as received_by_name', 'l.name as receiving_location_name');
 
         if (! $this->canVerify($user, $storeId)) {
             $query->where('gr.received_by', $user->id);
@@ -76,12 +77,33 @@ class GoodsReceiptService
             'po_id' => (int) $row->po_id,
             'po_doc_number' => $row->po_doc_number,
             'supplier_name' => $row->supplier_name,
+            'receiving_location_id' => (int) $row->receiving_location_id,
+            'receiving_location_name' => $row->receiving_location_name,
             'status' => $row->status,
             'document_status' => $row->document_status,
             'received_by_name' => $row->received_by_name,
             'posted_at' => $row->posted_at,
             'created_at' => $row->created_at,
         ]);
+    }
+
+    /** @return list<array{id: int, type: string, name: string}> */
+    public function receivingLocations(int $storeId): array
+    {
+        $query = DB::table('locations')
+            ->where('store_id', $storeId)
+            ->where('is_active', 1);
+
+        if (! (bool) $this->setting($storeId, 'warehouse_enabled', false)) {
+            $query->where('type', 'store_floor');
+        }
+
+        return $query->orderBy('type')->orderBy('id')->get(['id', 'type', 'name'])
+            ->map(fn ($location) => [
+                'id' => (int) $location->id,
+                'type' => $location->type,
+                'name' => $location->name,
+            ])->all();
     }
 
     /** @return array<string, mixed>|null */
@@ -105,7 +127,7 @@ class GoodsReceiptService
     /**
      * Membuat penerimaan (draft). `post: true` langsung memposting.
      *
-     * @param  array<string, mixed>  $data  po_id, delivery_note_no?, invoice_no?, note?, post?, items[] (po_item_id, qty_received, qty_damaged?, unit_cost?, expiry_date?, batch_code?, shelf_position_id?, note?)
+     * @param  array<string, mixed>  $data  po_id, receiving_location_id?, delivery_note_no?, invoice_no?, note?, post?, items[] (po_item_id, qty_received, qty_damaged?, unit_cost?, expiry_date?, batch_code?, shelf_position_id?, note?)
      * @return array<string, mixed>
      */
     public function create(User $actor, int $storeId, array $data): array
@@ -120,7 +142,10 @@ class GoodsReceiptService
                 ]);
             }
 
-            $locationId = $this->receivingLocationId($storeId);
+            $locationId = $this->receivingLocationId(
+                $storeId,
+                isset($data['receiving_location_id']) ? (int) $data['receiving_location_id'] : null,
+            );
             $poItems = DB::table('purchase_order_items')->where('po_id', $po->id)->get()->keyBy('id');
             $rows = $this->normalizeItems($actor, $storeId, $locationId, $poItems, $data['items']);
 
@@ -146,7 +171,7 @@ class GoodsReceiptService
                 'goods_receipt.create',
                 'goods_receipt',
                 $id,
-                after: ['po_id' => (int) $po->id, 'items' => count($rows)],
+                after: ['po_id' => (int) $po->id, 'receiving_location_id' => $locationId, 'items' => count($rows)],
                 actorId: $actor->id,
                 storeId: $storeId,
             );
@@ -182,6 +207,7 @@ class GoodsReceiptService
                 throw ValidationException::withMessages(['po_id' => ['PO sudah tidak dapat menerima barang.']]);
             }
 
+            $this->receivingLocationId($storeId, (int) $gr->receiving_location_id);
             $poItems = DB::table('purchase_order_items')->where('po_id', $po->id)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $items = DB::table('goods_receipt_items')->where('gr_id', $id)->orderBy('id')->get();
             $products = DB::table('products')->whereIn('id', $items->pluck('product_id')->unique()->all())->get(['id', 'name', 'status'])->keyBy('id');
@@ -196,6 +222,10 @@ class GoodsReceiptService
 
                 if ($products->get($item->product_id)->status === 'inactive') {
                     $errors["items.{$i}.po_item_id"] = ['Produk nonaktif tidak dapat diterima.'];
+                }
+
+                if ($item->shelf_position_id !== null && ! $this->positionBelongsToLocation((int) $item->shelf_position_id, (int) $gr->receiving_location_id)) {
+                    $errors["items.{$i}.shelf_position_id"] = ['Posisi rak tidak aktif atau tidak valid untuk lokasi penerimaan.'];
                 }
 
                 if (Decimal::qty($item->qty_received) > 0 && $item->expiry_date !== null && $item->expiry_date < $today) {
@@ -435,21 +465,34 @@ class GoodsReceiptService
         return $gr;
     }
 
-    private function receivingLocationId(int $storeId): int
+    private function receivingLocationId(int $storeId, ?int $requestedLocationId = null): int
     {
-        if ((bool) $this->setting($storeId, 'warehouse_enabled', false)) {
+        if ($requestedLocationId === null) {
+            return $this->inventory->sellingLocationId($storeId);
+        }
+
+        $location = DB::table('locations')
+            ->where('store_id', $storeId)->where('id', $requestedLocationId)->first();
+
+        if ($location === null || ! (bool) $location->is_active) {
             throw ValidationException::withMessages([
-                'po_id' => ['Penerimaan ke gudang belum didukung (warehouse_enabled aktif). Nonaktifkan gudang untuk menerima langsung ke rak toko.'],
+                'receiving_location_id' => ['Lokasi penerimaan tidak ditemukan atau nonaktif pada toko ini.'],
             ]);
         }
 
-        return $this->inventory->sellingLocationId($storeId);
+        if ($location->type === 'warehouse' && ! (bool) $this->setting($storeId, 'warehouse_enabled', false)) {
+            throw ValidationException::withMessages([
+                'receiving_location_id' => ['Penerimaan ke gudang memerlukan warehouse_enabled aktif.'],
+            ]);
+        }
+
+        return (int) $location->id;
     }
 
     /**
      * Validasi baris penerimaan terhadap PO dan produk. Mengembalikan baris siap simpan ke goods_receipt_items (tanpa gr_id).
      *
-     * @param  \Illuminate\Support\Collection<int, object>  $poItems  baris PO, kunci = id
+     * @param  Collection<int, object>  $poItems  baris PO, kunci = id
      * @param  list<array<string, mixed>>  $items
      * @return list<array<string, mixed>>
      */
@@ -477,6 +520,7 @@ class GoodsReceiptService
 
             if ($poItem === null) {
                 $errors["items.{$i}.po_item_id"] = ['Baris PO tidak ditemukan pada PO ini.'];
+
                 continue;
             }
 
@@ -484,6 +528,7 @@ class GoodsReceiptService
 
             if ($product === null || $product->status === 'inactive') {
                 $errors["items.{$i}.po_item_id"] = ['Produk tidak ditemukan atau nonaktif.'];
+
                 continue;
             }
 
@@ -492,6 +537,7 @@ class GoodsReceiptService
 
             if ($received <= 0 && $damaged <= 0) {
                 $errors["items.{$i}.qty_received"] = ['Isi jumlah diterima atau jumlah rusak.'];
+
                 continue;
             }
 
@@ -500,6 +546,7 @@ class GoodsReceiptService
 
             if ($take[$poItem->id] > $remaining) {
                 $errors["items.{$i}.qty_received"] = ["Melebihi sisa pesanan PO untuk {$product->name} (sisa ".Decimal::qtyString(max(0, $remaining)).').'];
+
                 continue;
             }
 
@@ -507,16 +554,19 @@ class GoodsReceiptService
 
             if ($expiry !== null && ! $product->track_expiry) {
                 $errors["items.{$i}.expiry_date"] = ["Produk {$product->name} tidak melacak tanggal kadaluarsa."];
+
                 continue;
             }
 
             if ($received > 0 && $product->track_expiry && $expiry === null) {
                 $errors["items.{$i}.expiry_date"] = ["Tanggal kadaluarsa wajib diisi untuk {$product->name}."];
+
                 continue;
             }
 
             if ($received > 0 && $expiry !== null && $expiry < $today) {
                 $errors["items.{$i}.expiry_date"] = ['Barang sudah kedaluwarsa; catat sebagai rusak, bukan diterima layak jual.'];
+
                 continue;
             }
 
@@ -535,6 +585,7 @@ class GoodsReceiptService
 
             if ($positionId !== null && ! $this->positionBelongsToLocation($positionId, $locationId)) {
                 $errors["items.{$i}.shelf_position_id"] = ['Posisi rak tidak valid untuk lokasi penerimaan.'];
+
                 continue;
             }
 
@@ -564,7 +615,7 @@ class GoodsReceiptService
     {
         return DB::table('shelf_positions as sp')
             ->join('shelves as s', 's.id', '=', 'sp.shelf_id')
-            ->where('sp.id', $positionId)->where('s.location_id', $locationId)
+            ->where('sp.id', $positionId)->where('s.location_id', $locationId)->where('s.is_active', 1)
             ->exists();
     }
 
@@ -575,9 +626,10 @@ class GoodsReceiptService
             ->join('purchase_orders as po', 'po.id', '=', 'gr.po_id')
             ->join('suppliers as s', 's.id', '=', 'gr.supplier_id')
             ->join('users as u', 'u.id', '=', 'gr.received_by')
+            ->join('locations as l', 'l.id', '=', 'gr.receiving_location_id')
             ->leftJoin('users as v', 'v.id', '=', 'gr.verified_by')
             ->where('gr.store_id', $storeId)->where('gr.id', $id)
-            ->first(['gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'u.name as received_by_name', 'v.name as verified_by_name']);
+            ->first(['gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'l.name as receiving_location_name', 'u.name as received_by_name', 'v.name as verified_by_name']);
 
         if ($gr === null) {
             return null;
@@ -618,6 +670,7 @@ class GoodsReceiptService
             'delivery_note_no' => $gr->delivery_note_no,
             'invoice_no' => $gr->invoice_no,
             'receiving_location_id' => (int) $gr->receiving_location_id,
+            'receiving_location_name' => $gr->receiving_location_name,
             'status' => $gr->status,
             'document_status' => $gr->document_status,
             'received_by' => (int) $gr->received_by,

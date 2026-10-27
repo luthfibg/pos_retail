@@ -12,9 +12,7 @@ use Illuminate\Validation\Rule;
 
 class GoodsReceiptController extends Controller
 {
-    public function __construct(private GoodsReceiptService $receipts, private StoreContext $stores)
-    {
-    }
+    public function __construct(private GoodsReceiptService $receipts, private StoreContext $stores) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -31,6 +29,15 @@ class GoodsReceiptController extends Controller
         return response()->json($this->receipts->search(
             $user, $this->stores->requireIdFor($user), $filters, (int) ($filters['per_page'] ?? 25),
         ));
+    }
+
+    public function receivingLocations(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'data' => $this->receipts->receivingLocations($this->stores->requireIdFor($user)),
+        ]);
     }
 
     public function show(Request $request, int $gr): JsonResponse

@@ -160,19 +160,84 @@ class GoodsReceiptTest extends SeededTestCase
         $this->assertSame(2500.0, (float) DB::table('products')->where('id', $p)->value('avg_cost'));
     }
 
-    public function test_warehouse_mode_and_unreceivable_orders_are_refused(): void
+    public function test_warehouse_receipt_requires_enabled_active_location_and_supports_putaway_position(): void
     {
         $p = $this->product();
         [$po, $item] = $this->sentPo($p);
         [$draftPo, $draftItem] = $this->sentPo($p, '10', '2000', 'draft');
         [$cancelledPo, $cancelledItem] = $this->sentPo($p, '10', '2000', 'cancelled');
+        $warehouseId = (int) DB::table('locations')->where('store_id', $this->storeId())->where('type', 'warehouse')->value('id');
 
+        $this->getJson('/api/goods-receipts/receiving-locations')
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.type', 'store_floor');
         $this->postJson('/api/goods-receipts', $this->receipt($draftPo, $draftItem))->assertUnprocessable()->assertJsonValidationErrors(['po_id']);
         $this->postJson('/api/goods-receipts', $this->receipt($cancelledPo, $cancelledItem))->assertUnprocessable()->assertJsonValidationErrors(['po_id']);
 
+        $warehouseReceipt = $this->receipt($po, $item, [], ['receiving_location_id' => $warehouseId, 'post' => true]);
+        $this->postJson('/api/goods-receipts', $warehouseReceipt)->assertUnprocessable()->assertJsonValidationErrors(['receiving_location_id']);
+
         $this->setSetting('warehouse_enabled', true);
-        $this->postJson('/api/goods-receipts', $this->receipt($po, $item))->assertUnprocessable()->assertJsonValidationErrors(['po_id']);
+        $this->postJson('/api/goods-receipts', $warehouseReceipt)->assertUnprocessable()->assertJsonValidationErrors(['receiving_location_id']);
         $this->assertSame(0, DB::table('goods_receipts')->count());
+
+        DB::table('locations')->where('id', $warehouseId)->update(['is_active' => 1]);
+        $this->getJson('/api/goods-receipts/receiving-locations')
+            ->assertOk()->assertJsonCount(2, 'data')->assertJsonFragment(['id' => $warehouseId, 'type' => 'warehouse', 'name' => 'Gudang']);
+        $shelfId = DB::table('shelves')->insertGetId([
+            'location_id' => $warehouseId,
+            'code' => 'G-1',
+            'name' => 'Rak Gudang 1',
+        ]);
+        $positionId = DB::table('shelf_positions')->insertGetId([
+            'shelf_id' => $shelfId,
+            'level' => 1,
+            'slot' => 1,
+        ]);
+        $warehouseReceipt['items'][0]['shelf_position_id'] = $positionId;
+
+        $response = $this->postJson('/api/goods-receipts', $warehouseReceipt)
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'posted')
+            ->assertJsonPath('data.receiving_location_id', $warehouseId)
+            ->assertJsonPath('data.receiving_location_name', 'Gudang')
+            ->assertJsonPath('data.items.0.shelf_position_id', $positionId);
+
+        $this->assertSame(10.0, $this->stock($p));
+        $this->assertDatabaseHas('inventory_balances', [
+            'product_id' => $p,
+            'location_id' => $warehouseId,
+            'shelf_position_id' => $positionId,
+            'qty_sellable' => '10.000',
+        ]);
+        $this->assertDatabaseHas('inventory_movements', [
+            'product_id' => $p,
+            'to_location_id' => $warehouseId,
+            'to_position_id' => $positionId,
+            'movement_type' => 'receipt',
+            'ref_type' => 'goods_receipt',
+            'ref_id' => $response->json('data.id'),
+        ]);
+    }
+
+    public function test_warehouse_draft_cannot_be_posted_after_warehouse_mode_is_disabled(): void
+    {
+        $p = $this->product();
+        [$po, $item] = $this->sentPo($p);
+        $warehouseId = (int) DB::table('locations')->where('store_id', $this->storeId())->where('type', 'warehouse')->value('id');
+        DB::table('locations')->where('id', $warehouseId)->update(['is_active' => 1]);
+        $this->setSetting('warehouse_enabled', true);
+
+        $gr = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, [], ['receiving_location_id' => $warehouseId]))
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->setSetting('warehouse_enabled', false);
+        $this->postJson("/api/goods-receipts/{$gr}/post")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['receiving_location_id']);
+
+        $this->assertSame('draft', DB::table('goods_receipts')->where('id', $gr)->value('status'));
+        $this->assertSame(0.0, $this->stock($p));
     }
 
     public function test_verify_documents_needs_permission_and_both_numbers(): void

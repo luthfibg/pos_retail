@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 27 Oktober 2026 (test terakhir dijalankan: **223 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 27 Oktober 2026 (test terakhir dijalankan: **224 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
@@ -13,7 +13,7 @@
 
 ## 1. Posisi saat ini
 
-**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 35 tahap — 29 ✅ selesai dan lulus test · 0 🟡 menunggu test · 6 ⏳ belum.**
+**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 35 tahap — 30 ✅ selesai dan lulus test · 0 🟡 menunggu test · 5 ⏳ belum.**
 
 | Fase | ✅ | 🟡 | ⏳ | ⏸ |
 |---|---|---|---|---|
@@ -21,13 +21,13 @@
 | Fase 1 — Fondasi backend (tahap 1a–1c) | 8 | 0 | 0 | 0 |
 | Fase 2 — Inventory & karyawan | 6 | 0 | 1 | 0 |
 | Fase 3 — POS & kas | 7 | 0 | 0 | 1 |
-| Fase 4 — Pembelian | 3 | 0 | 2 | 0 |
+| Fase 4 — Pembelian | 4 | 0 | 1 | 0 |
 | Fase 5 — Tagihan HRD | 3 | 0 | 0 | 0 |
 | Fase 6 — Cetak, laporan, dashboard | 0 | 0 | 3 | 0 |
 | Fase 7 — Hardening & UAT | 0 | 0 | 5 | 0 |
 | Fase 8 — Cut-over & go-live | 0 | 0 | 3 | 1 |
 | Di luar Paket 1 (setelah go-live) | 0 | 0 | 0 | 2 |
-| **Total semua fase** | **29** | **0** | **14** | **4** |
+| **Total semua fase** | **30** | **0** | **13** | **4** |
 
 ### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test`, terakhir 27 Okt 2026)
 
@@ -40,7 +40,7 @@
 - **Kasir:** buka shift (hitung buta), jual tunai atau kredit potong gaji (FEFO, diskon, PPN opsional, batas kredit + pengecualian Admin dengan re-auth, anti transaksi ganda), cetak ulang berlabel SALINAN, tutup shift dengan selisih kas, tinjau oleh Admin. ✅
 - **Kas dan koreksi:** kebijakan endapan (tetap/persen, min/maks, pembulatan ke bawah), setoran akhir shift dan setoran parsial tengah shift, Finance menghitung ulang dan menerima (selisih → koreksi), saldo Kas Kecil/Kas Besar dari ledger, void penjualan oleh Admin (stok kembali, kas/kredit dikoreksi). ✅
 - **Kas nonpenjualan:** Kasir mencatat kas masuk/keluar pada shift aktif; kas yang diharapkan dan saldo Kas Kecil diperbarui, dengan audit dan ledger. ✅
-- **Pembelian:** PR → pemeriksaan Finance → persetujuan Owner → PO → kirim → penerimaan barang (stok bertambah, HPP rata-rata), verifikasi surat jalan/faktur. ✅
+- **Pembelian:** PR → pemeriksaan Finance → persetujuan Owner → PO → kirim → penerimaan barang ke toko atau gudang (posisi rak opsional), HPP rata-rata, verifikasi surat jalan/faktur. ✅
 
 - **Tagihan HRD:** Admin membuka/menutup periode tagihan pada hari gaji (struk kredit terikat, periode berikutnya terbuka otomatis), membuat satu invoice gabungan per periode dengan rincian per karyawan (PPN kredit bila dikonfigurasi), menerbitkan, menandai diserahkan ke HRD, dan mencatat pembayaran HRD (boleh sebagian). ✅
 
@@ -49,7 +49,7 @@
 
 ### Belum bisa
 
-usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk tunai dari shift yang sudah ditutup · denah rak · penerimaan ke gudang · penyempurnaan cetak thermal 58/80 mm dan cetak invoice · koreksi/pembatalan invoice dan credit note · dashboard dan laporan · lampiran foto surat jalan.
+usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk tunai dari shift yang sudah ditutup · denah rak · penyempurnaan cetak thermal 58/80 mm dan cetak invoice · koreksi/pembatalan invoice dan credit note · dashboard dan laporan · lampiran foto surat jalan.
 
 ### Langkah berikutnya (urut)
 1. ~~Pasang paket WS-C dan jalankan seluruh test~~ — **selesai 24 Okt 2026: 154 lulus.**
@@ -58,11 +58,12 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 3b. ~~Jalankan test 3.7~~ — **selesai 25 Okt 2026: 190 lulus.**
 3c. ~~Jalankan `php artisan test` untuk 1.8~~ — **selesai 26 Okt 2026: seluruh 200 test lulus.**
 4. ~~Kas masuk/keluar lain (3.6)~~ — **selesai 26 Okt 2026: seluruh 204 test lulus.**
-5. ~~Adjustment dan opname dengan persetujuan (2.7)~~ — **selesai 27 Okt 2026: `StockAdjustmentTest` 9 test; suite terbaru 223 test lulus (1.953 assertions).** Berikutnya cetak, dashboard, hardening, UAT (Fase 6–8). Tahap 2.5 denah rak tetap berprioritas rendah; backlog UI dan tahap yang sudah selesai dicatat di `FRONTEND_PROGRESS.md`.
+5. ~~Adjustment dan opname dengan persetujuan (2.7)~~ — **selesai 27 Okt 2026: `StockAdjustmentTest` 9 test; suite saat tahap itu 223 test lulus (1.953 assertions).** Tahap backend berikutnya yang terbuka dicatat di bawah; tahap 2.5 denah rak tetap berprioritas rendah.
+6. ~~Penerimaan ke gudang + putaway (4.4)~~ — **selesai 27 Okt 2026: `GoodsReceiptTest` 12 test; suite 224 test lulus (1.978 assertions).** Tahap backend berikutnya yang terbuka: denah rak (2.5), lampiran dokumen penerimaan (4.5), cetak dan laporan (6.1–6.3).
 
 ### Tahap frontend terbaru
 
-Tahap terbaru adalah UI Adjustment & Opname. `/inventory/adjustments` mendukung pencatatan hitung fisik dari snapshot saldo sellable per batch/lokasi, pengajuan dan pembatalan, serta persetujuan/penolakan dengan re-auth untuk alasan loss/expired. Approver dapat membaca antrean dan detail tanpa permission request. Typecheck, seluruh 141 test frontend, build produksi, serta 223 test backend (1.953 assertions) lulus; uji klik pengguna masih menunggu.
+Tahap terbaru adalah UI Adjustment & Opname. `/inventory/adjustments` mendukung pencatatan hitung fisik dari snapshot saldo sellable per batch/lokasi, pengajuan dan pembatalan, serta persetujuan/penolakan dengan re-auth untuk alasan loss/expired. Approver dapat membaca antrean dan detail tanpa permission request. Typecheck, seluruh 141 test frontend, build produksi, serta 224 test backend (1.978 assertions) lulus; uji klik pengguna masih menunggu.
 
 Tahap PR/PO sebelumnya menutup gap alur pembelian yang hanya mencakup penerimaan PO yang sudah tersedia. `/purchase-requisitions` mendukung Kasir membuat/mengubah/mengajukan PR; Finance memeriksa dan mengembalikan dengan catatan; Owner menyetujui/menolak dengan autentikasi ulang; dan Purchasing membuat PO per supplier, mengajukan, melakukan konfirmasi Owner bila nilai PO memerlukan persetujuan, serta menandai PO dikirim.
 
@@ -128,7 +129,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | 4.1 | PR: draft, ajukan, pemeriksaan Finance, persetujuan Owner (re-auth, tanda swa-persetujuan) | ✅ | PurchaseRequisitionTest |
 | 4.2 | PO: dari PR, otomatis/konfirmasi Owner, kirim, batal, tutup | ✅ | PurchaseOrderTest |
 | 4.3 | Penerimaan barang: posting menambah stok, selisih/rusak, verifikasi surat jalan + faktur | ✅ | GoodsReceiptTest |
-| 4.4 | Penerimaan ke gudang + putaway (saat ini `warehouse_enabled` aktif ditolak) | ⏳ |  |
+| 4.4 | Penerimaan ke gudang + putaway (pilih lokasi gudang aktif dan posisi rak, atau putaway dengan transfer stok) | ✅ | GoodsReceiptTest |
 | 4.5 | Lampiran dokumen (foto surat jalan) — tabel `attachments` sudah ada | ⏳ |  |
 
 ### Fase 5 — Tagihan HRD
@@ -151,7 +152,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
-| 7.1 | Seluruh `php artisan test` hijau di akhir proyek. **Suite saat ini sudah hijau (218 lulus, 27 Okt 2026)**; gerbang ini diulang setiap tahap baru dan dikunci sebelum UAT | ⏳ | tugas pengguna |
+| 7.1 | Seluruh `php artisan test` hijau di akhir proyek. **Suite saat ini sudah hijau (224 lulus, 27 Okt 2026)**; gerbang ini diulang setiap tahap baru dan dikunci sebelum UAT | ⏳ | tugas pengguna |
 | 7.2 | Seeder demo + skrip smoke test alur utama | ⏳ |  |
 | 7.3 | Konfirmasi keputusan klien: R-04 PPN, Q-07/09/10/11/13/14, ASUMSI pembelian | ⏳ | klien |
 | 7.4 | Uji perangkat: scanner barcode dan printer thermal | ⏳ | perangkat klien |
@@ -182,7 +183,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | SeederTest, AuthTest, RbacTest, ReauthServiceTest, CategoryTest, SupplierTest, ProductTest, NumberSequenceTest, DecimalTest, Ean13Test, StockStatusTest | 3 · 8 · 7 · 6 · 8 · 4 · 15 · 1 · 4 · 2 · 5 | ✅ | pengguna (24 Okt 2026) |
 | InventoryServiceTest, OpeningBalanceTest, CustomerTest, NotificationTest | 10 · 9 · 12 · 4 | ✅ | pengguna (24 Okt 2026) |
 | ShiftTest, SaleTest | 7 · 17 | ✅ | pengguna (24 Okt 2026) |
-| PurchaseRequisitionTest, PurchaseOrderTest, GoodsReceiptTest (+ `tests/Concerns/BuildsPurchasing.php`) | 12 · 13 · 11 | ✅ | backend test run (27 Okt 2026) |
+| PurchaseRequisitionTest, PurchaseOrderTest, GoodsReceiptTest (+ `tests/Concerns/BuildsPurchasing.php`) | 12 · 13 · 12 | ✅ | backend test run (27 Okt 2026) |
 | SaleVoidTest, CashDepositTest | 6 · 14 | ✅ | pengguna (24 Okt 2026) |
 | BillingTest | 10 | ✅ | pengguna (25 Okt 2026) |
 | PricingSettingsTest | 6 | ✅ | pengguna (25 Okt 2026) |
@@ -190,9 +191,9 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | CashMovementTest | 4 | ✅ | backend test run (26 Okt 2026) |
 | StockTransferTest | 6 | ✅ | backend test run (27 Okt 2026) |
 | StockAdjustmentTest | 9 | ✅ | backend test run (27 Okt 2026) |
-| **Total saat ini (28 kelas)** | **223** — 223 lulus | ✅ | backend test run (27 Okt 2026) |
+| **Total saat ini (28 kelas)** | **224** — 224 lulus | ✅ | backend test run (27 Okt 2026) |
 
-Verifikasi terbaru: pada 27 Okt 2026 `php artisan test` dijalankan setelah akses antrean adjustment diselaraskan untuk approver; seluruh 223 test lulus (1.953 assertions).
+Verifikasi terbaru: pada 27 Okt 2026 `php artisan test` dijalankan setelah tahap 4.4; seluruh 224 test lulus (1.978 assertions).
 
 Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceiptTest` (satu kelas). Test memakai database `pos_retail_test`; `tests/TestCase.php` menolak berjalan di database yang namanya tidak berakhiran `_test`. Kegagalan paling mungkin: salah ketik nama kolom atau perbedaan format respons kecil — kirim keluaran lengkapnya ke agent yang menulis kodenya.
 
@@ -200,7 +201,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 ## 4. Untuk agent frontend
 
-**Terbaru (27 Okt 2026): backend suite lulus 223 test; UI adjustment/opname (2.7) sudah diimplementasikan dan menunggu uji klik.** Backend inventory juga menyediakan transfer (2.6), yang UI-nya belum dibuat. UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan sudah diuji pengguna. `/goods-receipts` serta UI PR/PO menunggu uji klik. Uji Finance pada setoran tetap belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
+**Terbaru (27 Okt 2026): backend suite lulus 224 test; UI adjustment/opname (2.7) sudah diimplementasikan dan menunggu uji klik.** Backend inventory juga menyediakan transfer (2.6), yang UI-nya belum dibuat. UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan sudah diuji pengguna. `/goods-receipts` mendukung kontrak lokasi gudang backend 4.4, tetapi UI pemilih lokasi/putaway belum dibuat; penerimaan, UI PR/PO menunggu uji klik. Uji Finance pada setoran tetap belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|
@@ -221,7 +222,7 @@ Kolom UI menunjukkan folder fitur pada source frontend saat ini; rincian status 
 
 **Pesan siap salin untuk agent frontend:**
 
-> Backend baru menyelesaikan **Pembelian** (PR → PO → penerimaan barang). Baca `docs/BACKEND_PROGRESS.md` bagian 6. Layar yang sekarang bisa dibuat, urut prioritas: (1) penerimaan barang oleh Kasir (`GET /api/purchase-orders?receivable=1` → `POST /api/goods-receipts` dengan `post: true`), (2) daftar/form PR untuk Kasir, (3) antrean pemeriksaan Finance dan dialog persetujuan Owner (input username + password; salah → 422 `approver_password`), (4) PO untuk Admin, (5) verifikasi dokumen penerimaan. Catatan: Kasir tidak menerima harga beli (`unit_price`, `unit_cost`, `total` = `null`); `qty_damaged` hanya dicatat, tidak menambah stok; mode gudang belum didukung. Status backend ✅ (lulus test 24 Okt 2026). **Layar kasir (penjualan, bagian 5) masih menjadi prioritas utama** bila belum dibuat.
+> Backend Pembelian (PR → PO → penerimaan barang) sudah mendukung penerimaan ke lokasi gudang aktif bila `warehouse_enabled=true`; baca `docs/BACKEND_PROGRESS.md` bagian 6. Layar yang sekarang bisa dibuat, urut prioritas: (1) penerimaan barang oleh Kasir (`GET /api/purchase-orders?receivable=1` → `POST /api/goods-receipts` dengan `post: true` dan `receiving_location_id` opsional), (2) daftar/form PR untuk Kasir, (3) antrean pemeriksaan Finance dan dialog persetujuan Owner (input username + password; salah → 422 `approver_password`), (4) PO untuk Admin, (5) verifikasi dokumen penerimaan. Catatan: Kasir tidak menerima harga beli (`unit_price`, `unit_cost`, `total` = `null`); `qty_damaged` hanya dicatat, tidak menambah stok. Status backend ✅ (224 test lulus). **Layar kasir (penjualan, bagian 5) masih menjadi prioritas utama** bila belum dibuat.
 
 ---
 

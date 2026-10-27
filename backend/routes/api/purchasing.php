@@ -30,6 +30,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Penerimaan barang. Kasir hanya melihat/mengelola penerimaannya sendiri (dicek di service).
     Route::get('goods-receipts', [GoodsReceiptController::class, 'index'])->middleware('can:goods_receipt.create');
+    Route::get('goods-receipts/receiving-locations', [GoodsReceiptController::class, 'receivingLocations'])
+        ->middleware('can:goods_receipt.create');
     Route::post('goods-receipts', [GoodsReceiptController::class, 'store'])->middleware('can:goods_receipt.create');
     Route::get('goods-receipts/{gr}', [GoodsReceiptController::class, 'show'])->whereNumber('gr')->middleware('can:goods_receipt.create');
     Route::post('goods-receipts/{gr}/post', [GoodsReceiptController::class, 'post'])->whereNumber('gr')->middleware('can:goods_receipt.create');

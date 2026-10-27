@@ -555,12 +555,20 @@ export interface PurchaseOrderInput {
 export type GoodsReceiptStatus = 'draft' | 'checked' | 'posted' | 'cancelled';
 export type GoodsReceiptDocumentStatus = 'pending' | 'verified';
 
+export interface GoodsReceiptLocation {
+  id: number;
+  type: 'store_floor' | 'warehouse';
+  name: string;
+}
+
 export interface GoodsReceiptSummary {
   id: number;
   doc_number: string;
   po_id: number;
   po_doc_number: string;
   supplier_name: string;
+  receiving_location_id: number;
+  receiving_location_name: string;
   status: GoodsReceiptStatus;
   document_status: GoodsReceiptDocumentStatus;
   received_by_name: string;
@@ -593,7 +601,6 @@ export interface GoodsReceipt extends GoodsReceiptSummary {
   supplier_id: number;
   delivery_note_no: string | null;
   invoice_no: string | null;
-  receiving_location_id: number;
   received_by: number;
   verified_by: number | null;
   verified_by_name: string | null;
@@ -608,6 +615,7 @@ export interface GoodsReceiptItemInput {
   qty_damaged?: Decimal;
   expiry_date?: string | null;
   batch_code?: string | null;
+  shelf_position_id?: number | null;
   note?: string | null;
 }
 

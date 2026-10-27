@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **223 lulus (1.953 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **224 lulus (1.978 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 223 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 224 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -381,7 +381,8 @@ Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
 | GET | `/api/goods-receipts` | `goods_receipt.create` | Daftar. Kasir: miliknya; Admin: semua. Query: `status`, `document_status`, `po_id`, `q`, `per_page` |
-| POST | `/api/goods-receipts` | `goods_receipt.create` | Buat penerimaan dari PO. `"post": true` = langsung posting |
+| GET | `/api/goods-receipts/receiving-locations` | `goods_receipt.create` | Lokasi penerimaan aktif pada toko; gudang hanya ditampilkan saat `warehouse_enabled=true` |
+| POST | `/api/goods-receipts` | `goods_receipt.create` | Buat penerimaan dari PO; `receiving_location_id` opsional, default lokasi toko. Gudang hanya bila `warehouse_enabled=true`; `"post": true` = langsung posting |
 | GET | `/api/goods-receipts/{gr}` | `goods_receipt.create` | Detail + baris |
 | POST | `/api/goods-receipts/{gr}/post` | `goods_receipt.create` | **Posting**: stok bertambah, PO diperbarui (atomik) |
 | POST | `/api/goods-receipts/{gr}/cancel` | `goods_receipt.create` | Batalkan penerimaan **draft** |
@@ -389,7 +390,7 @@ Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_
 
 Permintaan buat:
 ```json
-{ "po_id": 9, "delivery_note_no": "SJ-001", "invoice_no": "INV-77", "note": null, "post": true,
+{ "po_id": 9, "receiving_location_id": 3, "delivery_note_no": "SJ-001", "invoice_no": "INV-77", "note": null, "post": true,
   "items": [
     { "po_item_id": 31, "qty_received": "8", "qty_damaged": "2", "expiry_date": "2027-03-01", "batch_code": "L9", "shelf_position_id": null, "note": null }
   ] }
@@ -398,8 +399,10 @@ Permintaan buat:
 - Produk `track_expiry` **wajib** `expiry_date` (untuk qty diterima); produk lain **tidak boleh**; tanggal yang sudah lewat ditolak (catat sebagai rusak).
 - Harga beli = harga di PO. `unit_cost` hanya boleh diubah pemegang `goods_receipt.verify_documents` (Kasir mengirim nilai berbeda → 403). Kasir **tidak** menerima `unit_cost`/`price_variance` pada respons (`null`).
 - `qty_damaged` hanya **dicatat** (untuk klaim/retur supplier, Paket 3); tidak menambah stok dan tidak mengurangi sisa pesanan.
-- Respons `data`: `id, doc_number ("GR-…"), po_id, po_doc_number, supplier_name, delivery_note_no, invoice_no, status (draft|posted|cancelled), document_status (pending|verified), received_by_name, posted_at, verified_by_name, verified_at`, `items[]` (`po_item_id, product_id, sku, name, qty_ordered, qty_received, qty_damaged, qty_short, unit_cost, po_unit_price, price_variance, expiry_date, batch_code, shelf_position_id`). `qty_short` = sisa pesanan setelah penerimaan ini (di baris pertama tiap baris PO).
+- Respons `data`: `id, doc_number ("GR-…"), po_id, po_doc_number, supplier_name, receiving_location_id, receiving_location_name, delivery_note_no, invoice_no, status (draft|posted|cancelled), document_status (pending|verified), received_by_name, posted_at, verified_by_name, verified_at`, `items[]` (`po_item_id, product_id, sku, name, qty_ordered, qty_received, qty_damaged, qty_short, unit_cost, po_unit_price, price_variance, expiry_date, batch_code, shelf_position_id`). `qty_short` = sisa pesanan setelah penerimaan ini (di baris pertama tiap baris PO).
 - Efek posting: batch baru + saldo + pergerakan `receipt` + HPP rata-rata bergerak (lihat Inventory), qty PO terpenuhi, status PO `partially_received`/`received`. Bila ada barang rusak, Admin mendapat notifikasi `goods_receipt.damaged`.
+- Bila lokasi tujuan bertipe gudang, lokasi tersebut harus aktif dan `warehouse_enabled=true`; aturan diperiksa saat membuat **dan** memposting draft. Posisi rak per item opsional, tetapi bila diisi harus berada pada rak aktif di lokasi penerimaan. Stok tanpa posisi dapat dipindahkan/di-putaway memakai alur transfer stok.
+- UI dapat mengambil pilihan lokasi lewat `GET /api/goods-receipts/receiving-locations`; endpoint hanya mengembalikan lokasi aktif milik toko dan menyembunyikan gudang saat konfigurasi nonaktif.
 
 ### 6.4 Kunci error yang perlu penanganan khusus (422 `errors.<kunci>`)
 
@@ -411,7 +414,8 @@ Permintaan buat:
 | `note` / `reason` | Alasan wajib (kembalikan, tolak, batal, tutup) | Fokus ke kolom alasan |
 | `pr_id` | PR belum `approved` / sudah seluruhnya jadi PO | Muat ulang PR |
 | `items.N.qty_ordered` | Melebihi sisa qty PR | Tampilkan sisa dari pesan; sisa juga ada di `items[].qty_remaining` PR |
-| `po_id` | PO belum/tidak lagi bisa menerima barang, atau **mode gudang aktif (belum didukung)** | Tampilkan pesan |
+| `po_id` | PO belum/tidak lagi bisa menerima barang | Tampilkan pesan |
+| `receiving_location_id` | Lokasi tidak aktif/tidak dimiliki toko, atau gudang tidak diizinkan oleh `warehouse_enabled` | Pilih lokasi toko aktif atau aktifkan konfigurasi gudang |
 | `items.N.qty_received` | Melebihi sisa pesanan / kedua jumlah kosong | Tampilkan sisa dari pesan |
 | `items.N.expiry_date` | Wajib / tidak berlaku / sudah kedaluwarsa | Fokus ke kolom tanggal baris itu |
 | `items` (pada posting) | Penerimaan lain sudah memakai sisa PO | Muat ulang PO dan penerimaan |
@@ -432,7 +436,8 @@ Permintaan buat:
 - "Owner" = pemegang `settings.manage`; aturan swa-persetujuan memakai `sod_owner_self_approve` untuk Owner dan `sod_pr_creator_approver` untuk lainnya.
 - Penerimaan dari PO berstatus `approved` (belum diklik "kirim") tetap diizinkan agar operasional tidak tertahan langkah administratif.
 - Tanpa toleransi kelebihan kiriman; barang yang sudah kedaluwarsa tidak diterima sebagai layak jual.
-- **Belum ada:** penerimaan ke gudang + putaway (setting `warehouse_enabled` aktif ditolak dengan pesan), unggah lampiran surat jalan/foto, retur supplier/klaim barang rusak (Paket 3), pembayaran supplier dan Saldo Pembelian (Paket 2), dokumen koreksi penerimaan terposting.
+- **Selesai tahap 4.4:** penerimaan dapat diarahkan ke gudang aktif saat `warehouse_enabled=true`; posisi rak bisa ditentukan per item atau stok dipindahkan kemudian melalui transfer stok.
+- **Belum ada:** unggah lampiran surat jalan/foto, retur supplier/klaim barang rusak (Paket 3), pembayaran supplier dan Saldo Pembelian (Paket 2), dokumen koreksi penerimaan terposting.
 
 ## 7. Setoran, Endapan, dan Void ✅
 
@@ -590,6 +595,7 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-27** — Tahap 4.4: Goods Receipt dapat diarahkan ke lokasi gudang aktif ketika `warehouse_enabled=true`, dengan opsi posisi rak per item; pilihan lokasi disediakan endpoint khusus dan konfigurasi/lokasi divalidasi ulang saat draft diposting. Uji jalur gudang, posisi, mode mati, dan regresi: `GoodsReceiptTest` **12 lulus**; suite `php artisan test`: **224 lulus (1.978 assertions)**; Pint dan typecheck frontend lulus.
 - **2026-10-27** — Akses baca adjustment diselaraskan untuk role approver: pemegang `inventory.adjust.approve` dapat membaca antrean dan detail tanpa `inventory.adjust.request`; test akses ditambahkan. `StockAdjustmentTest`: **9 lulus**; suite `php artisan test`: **223 lulus (1.953 assertions)**.
 - **2026-10-27** — Akses baca alur purchasing diselaraskan untuk konfigurasi role terpisah: Finance/Owner/Purchasing dapat membaca antrean PR sesuai permission; pemegang `purchase_requisition.approve`/`purchase_order.send` dapat membaca PO yang perlu diproses; pemegang `purchase_order.create` dapat membaca supplier untuk membuat PO. Test akses ditambahkan. `php artisan test`: **222 lulus (1.946 assertions)**.
 - **2026-10-27** — Tahap 2.7 (adjustment/opname) ditambahkan: draft dan snapshot stok, pengajuan, persetujuan/re-auth kondisional, penolakan/pembatalan, pemeriksaan snapshot untuk mencegah posting hitung-stok kedaluwarsa, movement dan audit atomik. Implementasi awal `StockAdjustmentTest` memiliki 8 test (85 assertions); suite saat itu **218 test lulus (1.922 assertions)**; bagian 1 kini ✅.
