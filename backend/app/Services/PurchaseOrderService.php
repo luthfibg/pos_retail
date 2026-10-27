@@ -108,7 +108,11 @@ class PurchaseOrderService
         }
 
         // Kasir hanya melihat PO yang dapat menerima barang
-        if (! $this->permissions->allows($user, 'purchase_order.create', $storeId)
+        $canManage = $this->permissions->allows($user, 'purchase_order.create', $storeId)
+            || $this->permissions->allows($user, 'purchase_order.send', $storeId)
+            || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId);
+
+        if (! $canManage
             && ! in_array($detail['status'], self::RECEIVABLE, true)) {
             return null;
         }
@@ -471,6 +475,8 @@ class PurchaseOrderService
     {
         abort_unless(
             $this->permissions->allows($user, 'purchase_order.create', $storeId)
+                || $this->permissions->allows($user, 'purchase_order.send', $storeId)
+                || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId)
                 || $this->permissions->allows($user, 'goods_receipt.create', $storeId),
             403,
             'Anda tidak berwenang melihat PO.',

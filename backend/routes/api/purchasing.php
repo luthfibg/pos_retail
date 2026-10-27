@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Route;
 // Pembelian (WS-C): PR -> PO -> penerimaan barang. Dimuat dari routes/api.php (prefix /api sudah terpasang).
 Route::middleware('auth:sanctum')->group(function () {
     // Purchase Requisition. Kasir hanya melihat/mengelola PR miliknya (dicek di service).
-    Route::get('purchase-requisitions', [PurchaseRequisitionController::class, 'index'])->middleware('can:purchase_requisition.create');
+    Route::get('purchase-requisitions', [PurchaseRequisitionController::class, 'index']);
     Route::post('purchase-requisitions', [PurchaseRequisitionController::class, 'store'])->middleware('can:purchase_requisition.create');
-    Route::get('purchase-requisitions/{pr}', [PurchaseRequisitionController::class, 'show'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
+    Route::get('purchase-requisitions/{pr}', [PurchaseRequisitionController::class, 'show'])->whereNumber('pr');
     Route::patch('purchase-requisitions/{pr}', [PurchaseRequisitionController::class, 'update'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
     Route::post('purchase-requisitions/{pr}/submit', [PurchaseRequisitionController::class, 'submit'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
     Route::post('purchase-requisitions/{pr}/cancel', [PurchaseRequisitionController::class, 'cancel'])->whereNumber('pr')->middleware('can:purchase_requisition.create');

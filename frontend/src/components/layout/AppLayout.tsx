@@ -5,7 +5,9 @@ import { NAV_ITEMS } from './nav';
 
 export function AppLayout() {
   const { me, can, logout } = useAuth();
-  const items = NAV_ITEMS.filter((i) => can(i.permission));
+  const items = NAV_ITEMS.filter((i) =>
+    Array.isArray(i.permission) ? i.permission.some(can) : can(i.permission),
+  );
 
   return (
     <div className="flex h-full">

@@ -1,7 +1,7 @@
 export interface NavItem {
   to: string;
   label: string;
-  permission: string;
+  permission: string | string[];
 }
 
 // Satu sumber menu. Item disaring berdasarkan permission dari /auth/me.
@@ -19,6 +19,13 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/inventory/opening', label: 'Stok Awal', permission: 'inventory.adjust.approve' },
   { to: '/inventory/movements', label: 'Riwayat Stok', permission: 'inventory.view' },
   { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create' },
+  { to: '/purchase-requisitions', label: 'Permintaan Pembelian', permission: [
+    'purchase_requisition.create',
+    'purchase_requisition.finance_check',
+    'purchase_requisition.approve',
+    'purchase_order.create',
+    'purchase_order.send',
+  ] },
   { to: '/discounts', label: 'Diskon', permission: 'discount.manage' },
   { to: '/settings/vat', label: 'Pengaturan PPN', permission: 'settings.manage' },
   { to: '/settings/float-policy', label: 'Kebijakan Endapan', permission: 'float.configure' },

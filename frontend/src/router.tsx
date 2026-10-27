@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
-import { RequireAuth, RequirePermission } from '@/features/auth/guards';
+import { RequireAnyPermission, RequireAuth, RequirePermission } from '@/features/auth/guards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
@@ -21,6 +21,7 @@ const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module)
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
 const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
+const PurchaseRequisitionsPage = lazy(() => import('@/features/purchasing/PurchaseRequisitionsPage').then((module) => ({ default: module.PurchaseRequisitionsPage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<div className="p-6 text-slate-500">Memuat layar…</div>}>{children}</Suspense>;
@@ -85,6 +86,16 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="goods_receipt.create" />,
             children: [{ path: 'goods-receipts', element: <LazyPage><GoodsReceiptsPage /></LazyPage> }],
+          },
+          {
+            element: <RequireAnyPermission permissions={[
+              'purchase_requisition.create',
+              'purchase_requisition.finance_check',
+              'purchase_requisition.approve',
+              'purchase_order.create',
+              'purchase_order.send',
+            ]} />,
+            children: [{ path: 'purchase-requisitions', element: <LazyPage><PurchaseRequisitionsPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="discount.manage" />,

@@ -380,6 +380,71 @@ export type PurchaseOrderStatus =
   | 'received'
   | 'cancelled';
 
+export type PurchaseRequisitionStatus =
+  | 'draft'
+  | 'submitted'
+  | 'finance_checked'
+  | 'approved'
+  | 'rejected'
+  | 'returned'
+  | 'converted'
+  | 'cancelled';
+
+export interface PurchaseRequisitionSummary {
+  id: number;
+  doc_number: string;
+  status: PurchaseRequisitionStatus;
+  reason: string | null;
+  est_total: Decimal;
+  items_count: number;
+  requested_by: number;
+  requester_name: string;
+  submitted_at: string | null;
+  created_at: string;
+}
+
+export interface PurchaseRequisitionItem {
+  id: number;
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  qty: Decimal;
+  est_price: Decimal | null;
+  note: string | null;
+  qty_ordered: Decimal;
+  qty_remaining: Decimal;
+}
+
+export interface PurchaseRequisition extends PurchaseRequisitionSummary {
+  items: PurchaseRequisitionItem[];
+  approvals: Array<{
+    step: 'finance_check' | 'owner_auth';
+    decision: 'approved' | 'returned' | 'rejected';
+    decided_by: number;
+    decided_by_name: string;
+    note: string | null;
+    is_self_approval: boolean;
+    decided_at: string;
+  }>;
+  purchase_orders: Array<{
+    id: number;
+    doc_number: string;
+    status: PurchaseOrderStatus;
+    total: Decimal | null;
+  }>;
+}
+
+export interface PurchaseRequisitionInput {
+  reason?: string;
+  items: Array<{
+    product_id: number;
+    qty: Decimal;
+    est_price?: Decimal;
+    note?: string;
+  }>;
+}
+
 export interface PurchaseOrderSummary {
   id: number;
   doc_number: string;
@@ -420,6 +485,19 @@ export interface PurchaseOrder extends PurchaseOrderSummary {
     status: GoodsReceiptStatus;
     document_status: GoodsReceiptDocumentStatus;
     posted_at: string | null;
+  }>;
+}
+
+export interface PurchaseOrderInput {
+  pr_id: number;
+  supplier_id: number;
+  payment_terms?: 'prepaid' | 'credit' | 'cod';
+  order_date?: string;
+  expected_date?: string;
+  items: Array<{
+    product_id: number;
+    qty_ordered: Decimal;
+    unit_price: Decimal;
   }>;
 }
 

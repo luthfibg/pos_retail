@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **218 lulus (1.922 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **222 lulus (1.946 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 218 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 222 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -325,9 +325,9 @@ Alur bisnis: **Kasir** mengajukan PR → **Finance** memeriksa → **Owner** men
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
-| GET | `/api/purchase-requisitions` | `purchase_requisition.create` | Daftar. Kasir hanya melihat PR miliknya; Admin melihat semua. Query: `status`, `q` (awalan nomor), `mine=1`, `per_page` |
+| GET | `/api/purchase-requisitions` | Salah satu: `purchase_requisition.create`, `purchase_requisition.finance_check`, `purchase_requisition.approve`, `purchase_order.create`, `purchase_order.send` | Daftar. Pemohon melihat PR sendiri; pemegang permission alur melihat antrean seluruh toko. Query: `status`, `q` (awalan nomor), `mine=1`, `per_page` |
 | POST | `/api/purchase-requisitions` | `purchase_requisition.create` | Buat PR **draft** |
-| GET | `/api/purchase-requisitions/{pr}` | `purchase_requisition.create` | Detail + item + riwayat keputusan + PO turunan |
+| GET | `/api/purchase-requisitions/{pr}` | Sama dengan izin daftar | Detail + item + riwayat keputusan + PO turunan |
 | PATCH | `/api/purchase-requisitions/{pr}` | `purchase_requisition.create` | Ubah saat `draft`/`returned` (pembuat atau Admin). `items` menggantikan seluruh item |
 | POST | `/api/purchase-requisitions/{pr}/submit` | `purchase_requisition.create` | `draft`/`returned` → `submitted` (notifikasi ke Finance) |
 | POST | `/api/purchase-requisitions/{pr}/finance-check` | `purchase_requisition.finance_check` | `{ "decision": "pass" \| "return", "note": "..." }` — `note` wajib bila `return` |
@@ -349,10 +349,12 @@ Autentikasi ulang Owner: kirim `approver_username` + `approver_password` (diketi
 
 ### 6.2 Purchase Order (PO)
 
+Daftar supplier dapat dibaca oleh pemegang `supplier.manage` atau `purchase_order.create` agar Purchasing dapat memilih supplier saat membuat PO. Membuat/mengubah supplier tetap memerlukan `supplier.manage`.
+
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
-| GET | `/api/purchase-orders` | `purchase_order.create` **atau** `goods_receipt.create` | Daftar. Admin: semua. **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
-| GET | `/api/purchase-orders/{po}` | sama | Detail + item + daftar penerimaan |
+| GET | `/api/purchase-orders` | Salah satu: `purchase_order.create`, `purchase_order.send`, `purchase_requisition.approve`, `goods_receipt.create` | Daftar. Pengelola PO: semua; **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
+| GET | `/api/purchase-orders/{po}` | Sama dengan izin daftar | Detail + item + daftar penerimaan; pembatasan status untuk Kasir tetap berlaku |
 | POST | `/api/purchase-orders` | `purchase_order.create` | Buat PO **draft** dari PR `approved` |
 | PATCH | `/api/purchase-orders/{po}` | `purchase_order.create` | Ubah saat `draft` (`pr_id` tidak dapat diubah) |
 | POST | `/api/purchase-orders/{po}/submit` | `purchase_order.create` | `draft` → **otomatis `approved`** bila total PO ≤ total estimasi PR, selain itu `pending_confirmation` |
@@ -588,6 +590,7 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-27** — Akses baca alur purchasing diselaraskan untuk konfigurasi role terpisah: Finance/Owner/Purchasing dapat membaca antrean PR sesuai permission; pemegang `purchase_requisition.approve`/`purchase_order.send` dapat membaca PO yang perlu diproses; pemegang `purchase_order.create` dapat membaca supplier untuk membuat PO. Test akses ditambahkan. `php artisan test`: **222 lulus (1.946 assertions)**.
 - **2026-10-27** — Tahap 2.7 (adjustment/opname) ditambahkan: draft dan snapshot stok, pengajuan, persetujuan/re-auth kondisional, penolakan/pembatalan, pemeriksaan snapshot untuk mencegah posting hitung-stok kedaluwarsa, movement dan audit atomik. `StockAdjustmentTest` 8 test (85 assertions); seluruh suite **218 test lulus (1.922 assertions)**; bagian 1 kini ✅.
 - **2026-10-27** — Tahap 2.6 (transfer stok) ditambahkan: draft, validasi posisi/lokasi dan setting gudang, posting saldo atomik dengan pasangan movement, pembatalan draft, dan audit. **210 test lulus (1.837 assertions)**; bagian 1 kini ✅.
 - **2026-10-26** — Tahap 3.6 (kas masuk/keluar nonpenjualan) ditambahkan: API pencatatan dan riwayat per shift, pembatasan akses pemilik shift, update ledger Kas Kecil, dan audit. **204 test lulus (1.764 assertions)**; bagian 7.4 kini ✅.

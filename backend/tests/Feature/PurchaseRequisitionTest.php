@@ -219,4 +219,33 @@ class PurchaseRequisitionTest extends SeededTestCase
         $this->getJson('/api/purchase-requisitions?mine=1')->assertOk()->assertJsonPath('total', 0);
         $this->getJson("/api/purchase-requisitions/{$theirs}")->assertOk()->assertJsonPath('data.id', $theirs);
     }
+
+    public function test_finance_permission_can_view_all_requisitions_without_create_permission(): void
+    {
+        $p = $this->product();
+        $first = $this->pr($this->cashier->id, [$p => ['1', null]], 'submitted');
+        $other = $this->makeUser('Kasir', 'kasir-finance-test');
+        $second = $this->pr($other->id, [$p => ['2', null]], 'submitted');
+        $permissionIds = DB::table('permissions')->whereIn('code', [
+            'purchase_requisition.create',
+            'purchase_requisition.finance_check',
+        ])->pluck('id', 'code');
+        $roleId = (int) DB::table('user_roles')->where('user_id', $this->cashier->id)->value('role_id');
+        DB::table('role_permissions')->where('role_id', $roleId)->where('permission_id', $permissionIds['purchase_requisition.create'])->delete();
+        DB::table('role_permissions')->insert([
+            'role_id' => $roleId,
+            'permission_id' => $permissionIds['purchase_requisition.finance_check'],
+        ]);
+        app(\App\Services\PermissionResolver::class)->flush();
+
+        $this->getJson('/api/purchase-requisitions')
+            ->assertOk()
+            ->assertJsonPath('total', 2);
+        $this->getJson("/api/purchase-requisitions/{$second}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $second);
+        $this->getJson("/api/purchase-requisitions/{$first}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $first);
+    }
 }

@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres frontend.** Setiap pekerjaan frontend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), seperti `BACKEND_PROGRESS.md` untuk backend. Agent frontend baru cukup membaca berkas ini + `BACKEND_PROGRESS.md` (kontrak) + `HANDOFF_POS_RETAIL_SMK.md` (aturan) + `frontend/FRONTEND.md` (struktur dan konvensi). Kebutuhan yang belum dipenuhi kontrak API ditulis di `FRONTEND_REQUESTS.md` untuk agent backend.
 
-**Diperbarui:** 27 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin dan penyerahan setoran akhir Kasir
+**Diperbarui:** 27 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang, dan alur PR/PO
 
 ## Cara membaca status
 
@@ -44,6 +44,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/cash-deposits` | Setoran Masuk: antrean, penerimaan Finance, koreksi selisih, saldo Kas Kecil/Besar | `cash_deposit.receive` | 7.1 | 🟡 | UI baru dibuat; menunggu verifikasi browser |
 | `/sales` | Riwayat Penjualan: daftar/filter, detail struk, cetak SALINAN, void sesuai izin/status shift/tagihan | `sales.create`, `receipt.reprint`, `sales.void` | 5, 7.2 | ✅ | Pengguna mengonfirmasi uji klik berjalan lancar (27 Okt 2026) |
 | `/goods-receipts` | Penerimaan barang: PO receivable, qty diterima/rusak, batch/kedaluwarsa, Draft/posting, verifikasi dokumen Admin | `goods_receipt.create`, `goods_receipt.verify_documents` | 6.3 | 🟡 | Implementasi dan test logika tersedia; menunggu verifikasi browser |
+| `/purchase-requisitions` | Permintaan Pembelian: Kasir mengelola PR sendiri; Finance memeriksa; Owner menyetujui; Purchasing membuat, mengajukan, mengonfirmasi, dan mengirim PO | `purchase_requisition.create`, `purchase_requisition.finance_check`, `purchase_requisition.approve`, `purchase_order.create`, `purchase_order.send` | 6.1–6.2 | 🟡 | Aksi mengikuti permission, bukan nama role; menunggu uji klik Admin PR/PO |
 | `/products` | Produk: daftar, form, stok per batch (FEFO) | `inventory.view` | HANDOFF 6, 1 | ✅ | HPP hanya tampil untuk Admin |
 | `/categories` | Kategori (pohon) | `category.manage` | HANDOFF 6 | ✅ | |
 | `/suppliers` | Supplier | `supplier.manage` | HANDOFF 6 | ✅ | |
@@ -67,7 +68,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Adjustment dan opname | 1 | ⏳ | Backend tahap 2.7 siap: draft snapshot stok, pengajuan, approve/reject, re-auth untuk loss/expired, dan posting atomik; batch wajib untuk produk yang melacak kedaluwarsa. Alasan damage memindahkan saldo ke bucket rusak; UI belum dibuat. Opname memakai `reason=opname`, belum ada sesi opname terpisah |
 | Riwayat penjualan | 5, 7.2 | ✅ | `/sales`: daftar + filter, detail, **cetak ulang SALINAN**, **void** Admin; pengguna mengonfirmasi uji klik berjalan lancar |
 | Penerimaan barang | 6.3 | 🟡 | Tahap aktif `/goods-receipts`: pilih PO `receivable=1`, catat diterima/rusak, pecah batch, validasi kedaluwarsa, simpan Draft, posting, batalkan Draft, dan verifikasi surat jalan/faktur (Admin); menunggu uji klik |
-| PR dan PO | 6.1, 6.2 | ⏳ | Form/daftar PR (Kasir); antrean Finance/Owner dengan re-auth; PO dari PR (Admin) |
+| PR/PO | 6.1, 6.2 | 🟡 | PR Kasir dan Admin: alur Finance/Owner serta PO per supplier tersedia; menunggu uji klik. |
 | Tagihan HRD | 8 | ⏳ | Periode tagihan (tutup periode, ubah tanggal gaji), buat invoice, terbit → serah ke HRD → catat pembayaran, tampilan cetak invoice |
 | Manajemen pengguna | 10 | ⏳ | Daftar/cari/filter; tambah/ubah role; aktif/nonaktif; reset sandi; ganti sandi sendiri |
 | Denah rak | — | ⛔ | Backend belum ada |
@@ -78,7 +79,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|
 | `lib/api/client.ts` | `fetch` + Bearer + `ApiError` (`status`, `errors`, `firstError()`); 401 pada sesi berjalan memicu keluar |
 | `lib/api/types.ts` | Kontrak API (satu-satunya sumber tipe) |
-| `lib/api/endpoints.ts` | Fungsi per modul: `authApi`, `productApi`, `categoryApi`, `supplierApi`, `purchaseOrderApi`, `goodsReceiptApi`, `inventoryApi`, `customerApi`, `notificationApi`, `shiftApi`, `cashDepositApi`, `saleApi`, `discountApi`, `settingsApi` |
+| `lib/api/endpoints.ts` | Fungsi per modul: `authApi`, `productApi`, `categoryApi`, `supplierApi`, `purchaseRequisitionApi`, `purchaseOrderApi`, `goodsReceiptApi`, `inventoryApi`, `customerApi`, `notificationApi`, `shiftApi`, `cashDepositApi`, `saleApi`, `discountApi`, `settingsApi` |
 | `lib/format.ts` | `formatRupiah`, `formatQty`, `formatDateTime` (WIB), `formatDate`, `toWibDate` |
 | `lib/money.ts` | Aritmetika uang/qty berbasis bigint untuk **tampilan dan validasi** (bukan keputusan transaksi) |
 | `components/layout/nav.ts` | Satu sumber menu + izin; `AppLayout` menyaring per izin |
@@ -95,9 +96,10 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Shift dan kasir | `shiftLogic`, `money`, `cartLogic` | 6 · 6 · 21 | ✅ |
 | Riwayat penjualan | `saleHistoryLogic` | 3 | ✅ |
 | Penerimaan barang | `goodsReceiptForm` | 5 | ✅ |
+| PR/PO | `purchaseRequisitionForm` | 4 | ✅ |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**126 lulus, 19 berkas**) dan `npm run build` lulus setelah tahap penerimaan barang. Test otomatis mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan berjalan sesuai ekspektasi.
+Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**130 lulus, 20 berkas**) dan `npm run build` lulus setelah tahap PR/PO. `php artisan test` (**222 lulus, 1.946 assertions**) juga lulus setelah akses GET PR/PO dan daftar supplier diselaraskan dengan permission masing-masing peran. Test otomatis frontend mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan. Penerimaan barang serta alur Admin PR/PO menunggu uji klik.
 
 ## 4. Celah dan catatan yang diketahui
 
@@ -113,14 +115,12 @@ Pada 27 Okt 2026, `npm run typecheck`, `npm test` (**126 lulus, 19 berkas**) dan
 ## 5. Tahap berikutnya (urut, usulan agent)
 
 1. ✅ **Riwayat penjualan** (bagian 5 dan 7.2): pengguna telah menguji daftar/filter, detail, cetak ulang SALINAN, dan void Admin; uji klik berjalan lancar pada 27 Okt 2026.
-2. **Sedang dikerjakan: penerimaan barang** (bagian 6.3): daftar PO receivable, detail kuantitas diterima/rusak dan batch/kedaluwarsa, Draft/posting/pembatalan Draft, serta verifikasi dokumen Admin. Menunggu uji klik pengguna.
-3. **PR dan PO** (bagian 6.1 dan 6.2), setelah alur penerimaan barang.
-4. **Tagihan HRD** (Admin).
-5. **Manajemen pengguna**: UI Admin untuk mengelola akun dan ganti sandi. Backend bagian 10 sudah lulus test.
-6. Transfer stok antarposisi (backend tahap 2.6 sudah tersedia).
-7. Dashboard setelah backend menyediakan laporan.
+2. ✅ **PR/PO** (bagian 6.1–6.2): Kasir membuat/mengajukan PR; Finance dapat meloloskan atau mengembalikan dengan catatan; Owner dapat menyetujui/menolak dengan autentikasi ulang; Purchasing membuat PO per supplier, mengajukan, mengonfirmasi jika butuh Owner, dan menandai PO dikirim. Mendukung role gabungan maupun role terpisah lewat permission. Implementasi dan test lulus; menunggu uji klik pengguna.
+3. **Adjustment/opname** (bagian 1, backend 2.7 sudah selesai): draft snapshot, pengajuan, approval/rejection, re-auth untuk loss/expired, posting atomik.
+4. **Tagihan HRD** (Admin); diperlukan untuk menutup siklus penjualan kredit dan tidak boleh terlewat sebelum UAT.
+5. **Transfer stok** (backend 2.6 sudah siap), kemudian **manajemen pengguna** dan dashboard setelah endpoint laporan tersedia.
 
-Verifikasi tindakan setoran parsial dan Finance tetap belum dikonfirmasi pengguna; hal ini dicatat sebagai sisa uji untuk tahap kas, bukan perubahan cakupan pada tahap penerimaan barang.
+Verifikasi tindakan setoran parsial/Finance dan layar penerimaan barang tetap belum dikonfirmasi pengguna; ini adalah sisa uji UI yang sudah ada, bukan fitur backend yang belum tersedia.
 
 Jika jadwal mundur, yang tidak boleh dipotong: layar kasir, setoran + endapan, tagihan HRD (HANDOFF bagian 7).
 
@@ -136,6 +136,11 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 4. Jangan menandai ✅ sebelum pengguna menjalankan test (aturan kerja HANDOFF bagian 8 butir 5, berlaku juga untuk frontend).
 
 ## Riwayat
+
+- **2026-10-27** — Tahap Admin PR/PO: Finance dapat meloloskan atau mengembalikan PR dengan catatan; Owner dapat menyetujui/menolak dengan autentikasi ulang; Purchasing dapat membuat PO Draft per supplier, mengajukan untuk persetujuan otomatis/konfirmasi Owner, dan mengirim PO. UI dan menu dibatasi berdasarkan permission agar role Finance, Owner, dan Purchasing terpisah tetap dapat memakai antrean. Akses daftar/detail PR, PO, dan supplier backend diselaraskan dengan permission alur (bukan hanya izin membuat); test akses Finance, Owner, dan Purchasing ditambahkan. `npm run typecheck`, `npm test` (130), `npm run build`, dan `php artisan test` (222; 1.946 assertions) lulus. Menunggu uji klik pengguna.
+- **2026-10-27** — Analisis gap setelah backend adjustment 2.7: UI yang mendahului adjustment dan belum tersedia adalah PR/PO. `/goods-receipts` hanya memakai PO receivable, sehingga PR/PO belum tersedia membuat pembelian tidak dapat dimulai end-to-end dari UI. Adjustment dan transfer juga belum punya UI; tagihan HRD dan manajemen pengguna masih backlog. Dipilih PR Kasir sebagai tahap awal alur pembelian sebelum UI pemeriksaan/PO dan sebelum menyamai backend adjustment.
+- **2026-10-27** — Tahap PR Kasir (`/purchase-requisitions`): daftar PR sendiri, pencarian/filter, buat/ubah Draft atau returned, detail item dan riwayat keputusan, ajukan ke Finance, serta batalkan PR yang masih memenuhi status. Validasi qty/harga memakai string desimal dan aritmetika integer; backend tetap otoritatif. Test/typecheck/build dijalankan; menunggu uji klik pengguna.
+- **2026-10-27** — Perbaikan daftar PR: sebelumnya frontend selalu mengirim `mine=1`, sehingga Admin/Finance hanya melihat PR miliknya walaupun backend memberi visibilitas semua PR untuk `purchase_requisition.finance_check`, `purchase_requisition.approve`, atau `purchase_order.create`. Filter kini membatasi Kasir ke PR sendiri dan menampilkan semua PR kepada pemegang izin pengelolaan; identitas pemohon ditampilkan pada daftar bersama.
 
 - **2026-10-27** — Tahap frontend penerimaan barang: halaman `/goods-receipts` menampilkan PO yang dapat diterima dan riwayat GR; Kasir dapat mencatat qty diterima/rusak, batch, tanggal kedaluwarsa, serta menyimpan Draft; Draft dapat diposting atau dibatalkan; Admin dengan `goods_receipt.verify_documents` dapat memverifikasi nomor surat jalan dan faktur. Form mendukung beberapa batch untuk satu baris PO dan memakai aritmetika qty `bigint` untuk validasi batas sisa. `npm run typecheck`, `npm test` (**126 lulus, 19 berkas**) dan `npm run build` lulus; uji klik pengguna masih menunggu.
 - **2026-10-27** — Pengguna mengonfirmasi uji klik Riwayat Penjualan berjalan lancar. Status `/sales` diubah menjadi ✅.

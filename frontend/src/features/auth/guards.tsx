@@ -24,3 +24,16 @@ export function RequirePermission({ permission }: { permission: string }) {
   }
   return <Outlet />;
 }
+
+export function RequireAnyPermission({ permissions }: { permissions: string[] }) {
+  const { can } = useAuth();
+  if (!permissions.some(can)) {
+    return (
+      <div className="p-8">
+        <h1 className="text-lg font-semibold">Tidak ada akses</h1>
+        <p className="mt-1 text-sm text-slate-600">Akun Anda tidak memiliki izin untuk membuka halaman ini.</p>
+      </div>
+    );
+  }
+  return <Outlet />;
+}

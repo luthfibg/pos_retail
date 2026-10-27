@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 27 Oktober 2026 (test terakhir dijalankan: **218 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 27 Oktober 2026 (test terakhir dijalankan: **222 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
@@ -60,20 +60,13 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 4. ~~Kas masuk/keluar lain (3.6)~~ — **selesai 26 Okt 2026: seluruh 204 test lulus.**
 5. ~~Adjustment dan opname dengan persetujuan (2.7)~~ — **selesai 27 Okt 2026: `StockAdjustmentTest` 8 test; suite 218 test lulus.** Berikutnya cetak, dashboard, hardening, UAT (Fase 6–8). Tahap 2.5 denah rak tetap berprioritas rendah; backlog UI dan tahap yang sudah selesai dicatat di `FRONTEND_PROGRESS.md`.
 
-### Tahap frontend berjalan
+### Tahap frontend terbaru
 
-**Penerimaan barang** adalah tahap frontend aktif setelah pengguna mengonfirmasi uji klik Riwayat Penjualan berjalan lancar (27 Okt 2026). Backend menyediakan daftar PO yang dapat diterima, pembuatan/posting penerimaan, pembatalan Draft, dan verifikasi dokumen pada `BACKEND_PROGRESS.md` bagian 6.2–6.3.
+Tahap PR/PO kini menutup gap alur pembelian yang sebelumnya hanya mencakup penerimaan PO yang sudah tersedia. `/purchase-requisitions` mendukung Kasir membuat/mengubah/mengajukan PR; Finance memeriksa dan mengembalikan dengan catatan; Owner menyetujui/menolak dengan autentikasi ulang; dan Purchasing membuat PO per supplier, mengajukan, melakukan konfirmasi Owner bila nilai PO memerlukan persetujuan, serta menandai PO dikirim.
 
-Cakupan satu tahap:
-- Kasir memilih PO `receivable=1`, mencatat jumlah diterima dan rusak, metadata batch/kedaluwarsa, lalu menyimpan penerimaan Draft.
-- Posting Draft menambah stok layak jual dan memperbarui sisa/status PO secara atomik; qty rusak hanya dicatat dan tidak menambah stok.
-- Satu baris PO dapat dipecah menjadi beberapa batch; tanggal kedaluwarsa wajib untuk produk yang melacak expiry, dan tidak berlaku untuk produk lain.
-- Draft dapat dibatalkan sebelum posting; Admin dengan `goods_receipt.verify_documents` memverifikasi nomor surat jalan dan faktur setelah posting.
-- Jumlah tetap sebagai string desimal dan divalidasi tanpa float di UI; backend tetap otoritatif atas status PO, batas qty, permission, dan posting.
+Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga dapat dipakai pada model Admin gabungan maupun konfigurasi Kasir/Finance/Purchasing/Owner terpisah. Akses GET PR backend juga mendukung permission pengelolaan tanpa mewajibkan permission `purchase_requisition.create`. `npm run typecheck`, `npm test` (130 test), `npm run build`, dan `php artisan test` (222 test) lulus. Uji klik tahap Admin PR/PO belum dikonfirmasi.
 
-**Mengapa ini didahulukan:** jalur resmi stok masuk sudah tersedia di backend dan harus bisa dipakai operasional sebelum PR/PO dibuka lebih luas. Tahap berikutnya setelah ini adalah PR dan PO. Uji antrean/penerimaan Finance serta serah/batal setoran kas tetap belum dikonfirmasi; UI-nya sudah ada dan tetap menjadi sisa verifikasi terpisah. UI transfer stok (backend tahap 2.6), adjustment/opname (backend tahap 2.7), dan manajemen pengguna juga dapat dikerjakan dari kontrak yang tersedia.
-
-Status implementasi frontend: pengguna mengonfirmasi uji klik Riwayat Penjualan `/sales` lancar. Halaman `/goods-receipts` kini tersedia dengan PO receivable, riwayat GR, input diterima/rusak, batch/kedaluwarsa (termasuk pemecahan baris batch), simpan/post/batalkan Draft, dan verifikasi surat jalan/faktur oleh Admin. `npm run typecheck`, `npm test` (**126 lulus, 19 berkas**) dan `npm run build` lulus; uji klik penerimaan barang menunggu pengguna.
+**Langkah frontend berikutnya:** UI adjustment/opname (backend 2.7 sudah siap), lalu transfer stok; setelah itu Tagihan HRD dan Manajemen Pengguna. `/goods-receipts` tetap menunggu uji klik. Penyelesaian penerimaan barang dan Tagihan HRD tetap penting untuk go-live.
 
 **Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → UI adjustment/opname → transfer antar-rak → UI langkah pemeriksaan Finance (jadikan satu tombol Admin) → dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 
@@ -187,7 +180,7 @@ Status implementasi frontend: pengguna mengonfirmasi uji klik Riwayat Penjualan 
 | SeederTest, AuthTest, RbacTest, ReauthServiceTest, CategoryTest, SupplierTest, ProductTest, NumberSequenceTest, DecimalTest, Ean13Test, StockStatusTest | 3 · 8 · 7 · 6 · 8 · 4 · 15 · 1 · 4 · 2 · 5 | ✅ | pengguna (24 Okt 2026) |
 | InventoryServiceTest, OpeningBalanceTest, CustomerTest, NotificationTest | 10 · 9 · 12 · 4 | ✅ | pengguna (24 Okt 2026) |
 | ShiftTest, SaleTest | 7 · 17 | ✅ | pengguna (24 Okt 2026) |
-| PurchaseRequisitionTest, PurchaseOrderTest, GoodsReceiptTest (+ `tests/Concerns/BuildsPurchasing.php`) | 11 · 10 · 11 | ✅ | pengguna (24 Okt 2026) |
+| PurchaseRequisitionTest, PurchaseOrderTest, GoodsReceiptTest (+ `tests/Concerns/BuildsPurchasing.php`) | 12 · 13 · 11 | ✅ | backend test run (27 Okt 2026) |
 | SaleVoidTest, CashDepositTest | 6 · 14 | ✅ | pengguna (24 Okt 2026) |
 | BillingTest | 10 | ✅ | pengguna (25 Okt 2026) |
 | PricingSettingsTest | 6 | ✅ | pengguna (25 Okt 2026) |
@@ -195,9 +188,9 @@ Status implementasi frontend: pengguna mengonfirmasi uji klik Riwayat Penjualan 
 | CashMovementTest | 4 | ✅ | backend test run (26 Okt 2026) |
 | StockTransferTest | 6 | ✅ | backend test run (27 Okt 2026) |
 | StockAdjustmentTest | 8 | ✅ | backend test run (27 Okt 2026) |
-| **Total saat ini (28 kelas)** | **218** — 218 lulus | ✅ | backend test run (27 Okt 2026) |
+| **Total saat ini (28 kelas)** | **222** — 222 lulus | ✅ | backend test run (27 Okt 2026) |
 
-Verifikasi terbaru: pada 27 Okt 2026 `php artisan test` dijalankan setelah tahap 2.7; seluruh 218 test lulus (1.922 assertions).
+Verifikasi terbaru: pada 27 Okt 2026 `php artisan test` dijalankan setelah dukungan permission PR/PO lintas peran; seluruh 222 test lulus (1.946 assertions).
 
 Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceiptTest` (satu kelas). Test memakai database `pos_retail_test`; `tests/TestCase.php` menolak berjalan di database yang namanya tidak berakhiran `_test`. Kegagalan paling mungkin: salah ketik nama kolom atau perbedaan format respons kecil — kirim keluaran lengkapnya ke agent yang menulis kodenya.
 
@@ -205,7 +198,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 ## 4. Untuk agent frontend
 
-**Terbaru (27 Okt 2026): adjustment/opname (tahap 2.7) selesai; suite backend lulus 218 test.** Backend inventory kini menyediakan transfer (2.6) serta adjustment/opname dengan persetujuan dan posting atomik (2.7); UI keduanya belum dibuat. UI kas nonpenjualan dan pembuatan Draft parsial sudah diuji pengguna. Tahap frontend berjalan: penerimaan barang, menunggu uji klik pengguna. Uji bagian Finance pada setoran tetap belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
+**Terbaru (27 Okt 2026): adjustment/opname (tahap 2.7) selesai; suite backend lulus 222 test.** Backend inventory menyediakan transfer (2.6) serta adjustment/opname dengan persetujuan dan posting atomik (2.7); UI keduanya belum dibuat. UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan sudah diuji pengguna. `/goods-receipts` menunggu uji klik; tahap frontend PR/PO sudah diimplementasikan dan menunggu uji klik. Uji Finance pada setoran tetap belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|

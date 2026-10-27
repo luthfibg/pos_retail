@@ -23,8 +23,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('categories/{category}', [CategoryController::class, 'update'])
         ->whereNumber('category')->middleware('can:category.manage');
 
-    // Supplier (seluruhnya supplier.manage)
-    Route::get('suppliers', [SupplierController::class, 'index'])->middleware('can:supplier.manage');
+    // Supplier: Purchasing dapat membaca daftar untuk membuat PO; pengelolaan tetap supplier.manage.
+    Route::get('suppliers', [SupplierController::class, 'index']);
     Route::post('suppliers', [SupplierController::class, 'store'])->middleware('can:supplier.manage');
     Route::patch('suppliers/{supplier}', [SupplierController::class, 'update'])
         ->whereNumber('supplier')->middleware('can:supplier.manage');

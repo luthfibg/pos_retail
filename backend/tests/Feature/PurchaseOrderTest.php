@@ -122,6 +122,80 @@ class PurchaseOrderTest extends SeededTestCase
         $this->postJson("/api/purchase-orders/{$po}/confirm", $this->adminCreds())->assertUnprocessable()->assertJsonValidationErrors(['status']);
     }
 
+    public function test_owner_can_view_and_confirm_po_without_purchase_order_create_permission(): void
+    {
+        $p = $this->product();
+        $pr = $this->pr($this->cashier->id, [$p => ['10', '2500']]);
+        $po = $this->postJson('/api/purchase-orders', $this->payload($pr, $this->supplier(), $p, '10', '3000'))->assertCreated()->json('data.id');
+        $this->postJson("/api/purchase-orders/{$po}/submit")->assertOk()->assertJsonPath('data.status', 'pending_confirmation');
+
+        $admin = $this->actAsAdmin();
+        $storeId = (int) DB::table('user_roles')->where('user_id', $admin->id)->value('store_id');
+        foreach (['purchase_order.create', 'purchase_order.send', 'goods_receipt.create'] as $code) {
+            DB::table('user_permissions')->insert([
+                'user_id' => $admin->id,
+                'permission_id' => DB::table('permissions')->where('code', $code)->value('id'),
+                'store_id' => $storeId,
+                'effect' => 'deny',
+            ]);
+        }
+        app(\App\Services\PermissionResolver::class)->flush();
+
+        $this->getJson("/api/purchase-orders/{$po}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $po);
+        $this->postJson("/api/purchase-orders/{$po}/confirm", $this->adminCreds())
+            ->assertOk()
+            ->assertJsonPath('data.status', 'approved');
+    }
+
+    public function test_purchase_order_creator_can_list_suppliers_without_supplier_manage_permission(): void
+    {
+        $admin = $this->actAsAdmin();
+        $storeId = (int) DB::table('user_roles')->where('user_id', $admin->id)->value('store_id');
+        DB::table('user_permissions')->insert([
+            'user_id' => $admin->id,
+            'permission_id' => DB::table('permissions')->where('code', 'supplier.manage')->value('id'),
+            'store_id' => $storeId,
+            'effect' => 'deny',
+        ]);
+        app(\App\Services\PermissionResolver::class)->flush();
+
+        $this->getJson('/api/suppliers?active_only=1')
+            ->assertOk()
+            ->assertJsonStructure(['data']);
+    }
+
+    public function test_purchase_order_sender_can_open_pr_and_send_without_create_permission(): void
+    {
+        $p = $this->product();
+        $pr = $this->pr($this->cashier->id, [$p => ['10', '2500']]);
+        $po = $this->postJson('/api/purchase-orders', $this->payload($pr, $this->supplier(), $p))->assertCreated()->json('data.id');
+        $this->postJson("/api/purchase-orders/{$po}/submit")->assertOk()->assertJsonPath('data.status', 'approved');
+
+        $admin = $this->actAsAdmin();
+        $storeId = (int) DB::table('user_roles')->where('user_id', $admin->id)->value('store_id');
+        foreach (['purchase_requisition.create', 'purchase_order.create', 'goods_receipt.create'] as $code) {
+            DB::table('user_permissions')->insert([
+                'user_id' => $admin->id,
+                'permission_id' => DB::table('permissions')->where('code', $code)->value('id'),
+                'store_id' => $storeId,
+                'effect' => 'deny',
+            ]);
+        }
+        app(\App\Services\PermissionResolver::class)->flush();
+
+        $this->getJson('/api/purchase-requisitions')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $pr);
+        $this->getJson("/api/purchase-orders/{$po}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $po);
+        $this->postJson("/api/purchase-orders/{$po}/send")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'sent');
+    }
+
     public function test_pr_without_estimate_always_needs_confirmation(): void
     {
         $p = $this->product();

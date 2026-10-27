@@ -4,7 +4,8 @@ import type {
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
-  GoodsReceipt, GoodsReceiptItemInput, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderSummary,
+  GoodsReceipt, GoodsReceiptItemInput, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
+  PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
 } from './types';
 
 export const authApi = {
@@ -55,10 +56,56 @@ export const supplierApi = {
     api<Paginated<Supplier>>('/suppliers', { query: { ...f, active_only: f.active_only ? 1 : undefined } }),
 };
 
+export const purchaseRequisitionApi = {
+  list: (f: { q?: string; status?: PurchaseRequisitionStatus; mine?: boolean; page?: number; per_page?: number } = {}) =>
+    api<Paginated<PurchaseRequisitionSummary>>('/purchase-requisitions', {
+      query: { ...f, mine: f.mine ? 1 : undefined },
+    }),
+  get: (id: number) => api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}`).then((r) => r.data),
+  create: (input: PurchaseRequisitionInput) =>
+    api<{ data: PurchaseRequisition }>('/purchase-requisitions', { method: 'POST', body: input }).then((r) => r.data),
+  update: (id: number, input: PurchaseRequisitionInput) =>
+    api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
+  submit: (id: number) =>
+    api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}/submit`, { method: 'POST' }).then((r) => r.data),
+  cancel: (id: number, reason?: string) =>
+    api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}/cancel`, {
+      method: 'POST',
+      body: reason ? { reason } : {},
+    }).then((r) => r.data),
+  financeCheck: (id: number, input: { decision: 'pass' | 'return'; note?: string }) =>
+    api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}/finance-check`, {
+      method: 'POST',
+      body: input,
+    }).then((r) => r.data),
+  approve: (id: number, input: {
+    decision: 'approve' | 'reject';
+    note?: string;
+    approver_username: string;
+    approver_password: string;
+  }) => api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}/approve`, {
+    method: 'POST',
+    body: input,
+  }).then((r) => r.data),
+};
+
 export const purchaseOrderApi = {
   receivable: (f: { q?: string; page?: number; per_page?: number } = {}) =>
     api<Paginated<PurchaseOrderSummary>>('/purchase-orders', { query: { ...f, receivable: 1 } }),
   get: (id: number) => api<{ data: PurchaseOrder }>(`/purchase-orders/${id}`).then((r) => r.data),
+  create: (input: PurchaseOrderInput) =>
+    api<{ data: PurchaseOrder }>('/purchase-orders', { method: 'POST', body: input }).then((r) => r.data),
+  submit: (id: number) =>
+    api<{ data: PurchaseOrder }>(`/purchase-orders/${id}/submit`, { method: 'POST' }).then((r) => r.data),
+  confirm: (id: number, input: {
+    approver_username: string;
+    approver_password: string;
+  }) => api<{ data: PurchaseOrder }>(`/purchase-orders/${id}/confirm`, {
+    method: 'POST',
+    body: input,
+  }).then((r) => r.data),
+  send: (id: number) =>
+    api<{ data: PurchaseOrder }>(`/purchase-orders/${id}/send`, { method: 'POST' }).then((r) => r.data),
 };
 
 export const goodsReceiptApi = {

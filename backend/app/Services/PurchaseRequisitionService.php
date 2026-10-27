@@ -43,6 +43,8 @@ class PurchaseRequisitionService
     /** @param array<string, mixed> $filters status?, q?, mine? */
     public function search(User $user, int $storeId, array $filters, int $perPage): LengthAwarePaginator
     {
+        $this->assertCanView($user, $storeId);
+
         $query = DB::table('purchase_requisitions as pr')
             ->join('users as u', 'u.id', '=', 'pr.requested_by')
             ->where('pr.store_id', $storeId)
@@ -81,6 +83,8 @@ class PurchaseRequisitionService
     /** @return array<string, mixed>|null null bila tidak ada atau bukan milik pengguna yang tidak berhak melihat semua */
     public function find(User $user, int $storeId, int $id): ?array
     {
+        $this->assertCanView($user, $storeId);
+
         $detail = $this->load($storeId, $id);
 
         if ($detail === null) {
@@ -444,13 +448,35 @@ class PurchaseRequisitionService
 
     private function seesAll(User $user, int $storeId): bool
     {
-        foreach (['purchase_requisition.finance_check', 'purchase_requisition.approve', 'purchase_order.create'] as $code) {
+        foreach ([
+            'purchase_requisition.finance_check',
+            'purchase_requisition.approve',
+            'purchase_order.create',
+            'purchase_order.send',
+        ] as $code) {
             if ($this->permissions->allows($user, $code, $storeId)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private function assertCanView(User $user, int $storeId): void
+    {
+        foreach ([
+            'purchase_requisition.create',
+            'purchase_requisition.finance_check',
+            'purchase_requisition.approve',
+            'purchase_order.create',
+            'purchase_order.send',
+        ] as $code) {
+            if ($this->permissions->allows($user, $code, $storeId)) {
+                return;
+            }
+        }
+
+        abort(403, 'Anda tidak memiliki izin untuk melihat permintaan pembelian.');
     }
 
     private function assertCanManage(User $actor, int $storeId, object $pr): void
