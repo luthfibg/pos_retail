@@ -61,7 +61,7 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 
 ### Tahap frontend berjalan
 
-**Lengkapi alur setoran kasir dan penerimaan Finance** sebelum membuka modul frontend baru. Backend sudah menyediakan seluruh endpoint dan aturan bisnis pada `BACKEND_PROGRESS.md` bagian 7; frontend kini mencakup setoran akhir serta kebijakan endapan, dan implementasi setoran parsial + penerimaan Finance sedang dilakukan. Pekerjaan ini menutup alur uang Kas Kecil → Kas Besar dan merupakan prasyarat go-live menurut `FRONTEND_PROGRESS.md`.
+**Riwayat penjualan** adalah tahap frontend aktif berikutnya setelah pengguna menguji pembuatan Draft setoran parsial Kasir sesuai ekspektasi. Backend telah menyediakan daftar, detail, cetak ulang, dan void pada `BACKEND_PROGRESS.md` bagian 5 dan 7.2. UI setoran parsial/Finance sudah diimplementasikan; verifikasi Finance dan aksi lainnya tetap menunggu pengguna.
 
 Cakupan satu tahap:
 - Kasir membuat setoran parsial saat shift `open`/`counting`, melihat status dan riwayat setoran sendiri, menyerahkan setoran, atau membatalkan hanya Draft parsial.
@@ -71,7 +71,7 @@ Cakupan satu tahap:
 
 **Mengapa ini didahulukan:** menuntaskan kontrol kas yang sudah sebagian tersedia, tanpa menunggu backend baru, serta mengurangi risiko operasional sebelum UAT. Setelah tahap ini, prioritas frontend berikutnya adalah riwayat penjualan (termasuk cetak ulang/void sesuai batas shift dan status tagihan), lalu penerimaan barang dan PR/PO. UI transfer stok (backend tahap 2.6 sudah siap) dan manajemen pengguna juga dapat dikerjakan dari kontrak yang ada; adjustment/opname tetap menunggu backend tahap 2.7.
 
-Status implementasi frontend: form/riwayat setoran parsial dan blokir penutupan shift saat Draft masih ada, serta halaman antrean Finance/Admin dengan terima/koreksi dan saldo dana sudah dibuat. `npm run typecheck`, `npm test` (**118 lulus**) dan `npm run build` lulus; tahap menunggu uji klik pengguna.
+Status implementasi frontend: riwayat penjualan di `/sales` sudah tersedia dengan filter, detail, cetak ulang SALINAN, serta void Admin yang mengikuti batas shift terbuka dan status tagihan kredit. `npm run typecheck`, `npm test` (**121 lulus**) dan `npm run build` lulus; menunggu uji klik pengguna. Pembuatan Draft parsial sudah diuji pengguna; uji antrean Finance masih menunggu.
 
 **Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → UI adjustment/opname → transfer antar-rak → UI langkah pemeriksaan Finance (jadikan satu tombol Admin) → dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 
@@ -202,7 +202,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 ## 4. Untuk agent frontend
 
-**Terbaru (27 Okt 2026): transfer stok (tahap 2.6) selesai dan suite backend lulus 210 test.** API transfer draft→posting sudah tersedia; UI transfer belum dibuat. UI kas nonpenjualan sudah diuji pengguna. Tahap frontend berjalan: setoran parsial dan penerimaan Finance; otomatisasi frontend lulus, menunggu uji klik pengguna. Kontrak transfer ada di `BACKEND_PROGRESS.md` bagian 1; kontrak setoran ada di bagian 7.
+**Terbaru (27 Okt 2026): transfer stok (tahap 2.6) selesai dan suite backend lulus 210 test.** API transfer draft→posting sudah tersedia; UI transfer belum dibuat. UI kas nonpenjualan dan pembuatan Draft parsial sudah diuji pengguna. Tahap frontend berjalan: riwayat penjualan; otomatisasi frontend lulus, menunggu uji klik pengguna. Uji bagian Finance pada setoran tetap belum dikonfirmasi. Kontrak transfer ada di `BACKEND_PROGRESS.md` bagian 1; kontrak penjualan ada di bagian 5 dan 7.2.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|

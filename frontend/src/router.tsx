@@ -13,6 +13,7 @@ import { OpeningBalancePage } from '@/features/inventory/OpeningBalancePage';
 import { MovementsPage } from '@/features/inventory/MovementsPage';
 import { CustomersPage } from '@/features/customers/CustomersPage';
 import { PosPage } from '@/features/sales/PosPage';
+const SalesHistoryPage = lazy(() => import('@/features/sales/SalesHistoryPage').then((module) => ({ default: module.SalesHistoryPage })));
 import { DiscountsPage } from '@/features/pricing/DiscountsPage';
 import { VatSettingsPage } from '@/features/pricing/VatSettingsPage';
 const FloatPolicyPage = lazy(() => import('@/features/shifts/FloatPolicyPage').then((module) => ({ default: module.FloatPolicyPage })));
@@ -35,7 +36,10 @@ export const router = createBrowserRouter([
           { index: true, element: <HomeRedirect /> },
           {
             element: <RequirePermission permission="sales.create" />,
-            children: [{ path: 'pos', element: <PosPage /> }],
+            children: [
+              { path: 'pos', element: <PosPage /> },
+              { path: 'sales', element: <LazyPage><SalesHistoryPage /></LazyPage> },
+            ],
           },
           {
             element: <RequirePermission permission="shift.open" />,
