@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addProduct, buildSaleInput, estimateSubtotal, isShiftProblem, mapSaleErrors, mustChangeKey, needsCreditException,
+  addProduct, buildSaleInput, isShiftProblem, mapSaleErrors, mustChangeKey, needsCreditException, salePreviewChanged,
   newIdempotencyKey, parseQty, removeLine, setQty, validateCart, validateTendered, type CartProduct,
 } from './cartLogic';
 
@@ -58,12 +58,11 @@ describe('validateCart', () => {
   });
 });
 
-describe('perkiraan dan uang diterima', () => {
-  it('perkiraan sebelum diskon dan PPN', () => {
-    const l = addProduct(addProduct([], air, '2'), roti, '0.5');
-    expect(estimateSubtotal(l)).toBe('22750.00');
-    expect(estimateSubtotal([])).toBeNull();
-    expect(estimateSubtotal(addProduct([], baru))).toBeNull();
+describe('pratinjau dan uang diterima', () => {
+  it('mendeteksi perubahan total posting dibanding pratinjau', () => {
+    expect(salePreviewChanged('27500.00', '27500.00')).toBe(false);
+    expect(salePreviewChanged('27500.00', '27750.00')).toBe(true);
+    expect(salePreviewChanged(null, '27750.00')).toBe(false);
   });
   it('validateTendered', () => {
     expect(validateTendered('', null)).toBeTruthy();

@@ -352,7 +352,7 @@ export const saleApi = {
   /** Admin saja (sales.void). Alasan wajib. */
   void: (id: number, reason: string) =>
     api<{ data: Sale }>(`/sales/${id}/void`, { method: 'POST', body: { reason } }).then((r) => r.data),
-  /** FR-01: belum ada di backend sampai statusnya Selesai (docs/FRONTEND_REQUESTS.md). Hanya-baca. */
+  /** Pratinjau read-only: total, diskon, PPN, stok FEFO, dan batas kredit. */
   preview: (input: SalePreviewInput, signal?: AbortSignal) =>
     api<{ data: SalePreview }>('/sales/preview', { method: 'POST', body: input, signal }).then((r) => r.data),
 };

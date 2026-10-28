@@ -66,6 +66,8 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 
 ### Tahap frontend terbaru
 
+UI Kasir `/pos` kini terintegrasi dengan `POST /api/sales/preview`: total, diskon, PPN, stok FEFO, dan sinyal batas kredit berasal dari backend setelah debounce; frontend tidak lagi menghitung perkiraan subtotal. Struk menampilkan peringatan jika total final posting berbeda dari pratinjau. Typecheck, 161 test frontend, build produksi, dan `git diff --check` lulus; uji klik setelah integrasi ini masih menunggu pengguna.
+
 UI Manajemen Pengguna `/users` kini menyediakan daftar/cari/filter, tambah dan ubah akun, pengelolaan role/status, reset sandi, serta ganti sandi sendiri dari profil untuk semua pengguna. Aturan sensitif (self-role, self-deaktivasi, Admin aktif terakhir, validitas sandi) tetap ditegakkan backend. Typecheck, 161 test frontend, dan build produksi lulus; uji klik pengguna menunggu.
 
 UI Tagihan HRD `/billing` mengelola periode, merinci kredit per karyawan, membuat/mencetak invoice, memproses penerbitan dan serah terima, serta mencatat pembayaran sebagian. Cetakan A4 mencakup status invoice, ringkasan pembayaran, dan sisa tagihan. Pengguna mengonfirmasi uji klik berjalan lancar.
@@ -78,7 +80,7 @@ Tahap PR/PO sebelumnya menutup gap alur pembelian yang hanya mencakup penerimaan
 
 Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga dapat dipakai pada model Admin gabungan maupun konfigurasi Kasir/Finance/Purchasing/Owner terpisah. Akses GET PR backend juga mendukung permission pengelolaan tanpa mewajibkan permission `purchase_requisition.create`. `npm run typecheck`, `npm test` (130 test), `npm run build`, dan `php artisan test` (222 test saat tahap tersebut) lulus. Uji klik tahap Admin PR/PO belum dikonfirmasi.
 
-**Langkah frontend berikutnya:** uji perangkat cetak struk/invoice pada 58/80 mm dan A4, lalu uji klik Manajemen Pengguna, Transfer Stok, lampiran Penerimaan Barang, PR/PO, dan Adjustment/Opname. `/goods-receipts` juga masih menunggu uji klik. Dashboard dan Tagihan HRD sudah diuji pengguna.
+**Langkah frontend berikutnya:** uji klik integrasi pratinjau di `/pos`, uji perangkat cetak struk/invoice pada 58/80 mm dan A4, lalu uji klik Manajemen Pengguna, Transfer Stok, lampiran Penerimaan Barang, PR/PO, dan Adjustment/Opname. `/goods-receipts` juga masih menunggu uji klik. Dashboard dan Tagihan HRD sudah diuji pengguna.
 
 **Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → transfer antar-rak. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 

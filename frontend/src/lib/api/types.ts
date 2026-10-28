@@ -927,7 +927,7 @@ export interface PostSaleResponse {
   replayed: boolean;
 }
 
-// ---- KONTRAK DIUSULKAN (docs/FRONTEND_REQUESTS.md FR-01). Belum ada di backend sampai statusnya Selesai.
+// ---- Pratinjau penjualan (docs/BACKEND_PROGRESS.md bagian 5).
 
 export interface SalePreviewInput {
   payment_mode: PaymentMode;

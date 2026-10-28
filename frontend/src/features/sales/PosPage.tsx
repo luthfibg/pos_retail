@@ -14,8 +14,8 @@ import { Field, inputCls } from '@/components/ui/Field';
 import { formatQty, formatRupiah } from '@/lib/format';
 import { milliToQty, moneyToCents, qtyToMilli, subtractMoney } from '@/lib/money';
 import {
-  addProduct, buildSaleInput, estimateSubtotal, mapSaleErrors, mustChangeKey, needsCreditException, newIdempotencyKey,
-  parseQty, removeLine, setQty, validateCart, validateTendered,
+  addProduct, buildSaleInput, mapSaleErrors, mustChangeKey, needsCreditException, newIdempotencyKey,
+  parseQty, removeLine, salePreviewChanged, setQty, validateCart, validateTendered,
   type CartLine, type CartProduct, type SaleErrors,
 } from './cartLogic';
 import { CreditExceptionDialog } from './CreditExceptionDialog';
@@ -45,9 +45,8 @@ export function PosPage() {
   const [exceptionOpen, setExceptionOpen] = useState(false);
   /** Permintaan yang hasilnya tidak diketahui (jaringan putus/5xx). Keranjang dikunci; kirim ulang memakai kunci yang sama. */
   const [pending, setPending] = useState<SaleInput | null>(null);
-  const [done, setDone] = useState<{ sale: Sale; replayed: boolean } | null>(null);
+  const [done, setDone] = useState<{ sale: Sale; replayed: boolean; previewTotal: string | null } | null>(null);
   const [thermalPaperSize, setThermalPaperSize] = useState<ThermalPaperSize>('80');
-  const [previewMissing, setPreviewMissing] = useState(false);
 
   const shiftQuery = useQuery({ queryKey: ['shifts', 'current'], queryFn: shiftApi.current });
   const shift = shiftQuery.data ?? null;
@@ -71,13 +70,10 @@ export function PosPage() {
   const preview = useQuery({
     queryKey: ['sales', 'preview', previewKey],
     queryFn: ({ signal }) => saleApi.preview(JSON.parse(previewKey) as SalePreviewInput, signal),
-    enabled: previewKey !== '' && !previewMissing,
+    enabled: previewKey !== '',
     retry: false,
     staleTime: 0,
   });
-
-  const previewGone = preview.error instanceof ApiError && (preview.error.status === 404 || preview.error.status === 405);
-  useEffect(() => { if (previewGone) setPreviewMissing(true); }, [previewGone]);
 
   const previewFresh = preview.data !== undefined && !preview.isFetching && previewKey === currentKey && currentKey !== '';
   const quote = previewFresh ? preview.data : undefined;
@@ -88,7 +84,7 @@ export function PosPage() {
   const mutation = useMutation({
     mutationFn: (input: SaleInput) => saleApi.post(input),
     onSuccess: (res) => {
-      setDone({ sale: res.data, replayed: res.replayed });
+      setDone({ sale: res.data, replayed: res.replayed, previewTotal: quote?.total ?? null });
       setLines([]);
       setCustomer(null);
       setTendered('');
@@ -199,6 +195,11 @@ export function PosPage() {
               Struk ini sudah tercatat sebelumnya; permintaan ulang tidak membuat transaksi ganda.
             </p>
           )}
+          {salePreviewChanged(done.previewTotal, done.sale.total) && (
+            <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+              Total berubah sejak pratinjau. Struk memakai total final server dari saat transaksi diproses.
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Ukuran kertas">
               <select className={inputCls} value={thermalPaperSize} onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}>
@@ -216,7 +217,6 @@ export function PosPage() {
   }
 
   const unknownOutcome = pending !== null;
-  const estimate = quote ? null : estimateSubtotal(lines);
   const change = mode === 'cash' && total !== null && !validateTendered(tendered, total) ? subtractMoney(tendered.trim().replace(',', '.'), total) : null;
 
   return (
@@ -381,13 +381,11 @@ export function PosPage() {
             <p className="text-slate-500">Menghitung total…</p>
           ) : (
             <>
-              {estimate && <Row label="Perkiraan subtotal" value={formatRupiah(estimate)} />}
-              <p className="text-xs text-slate-500">
-                {previewMissing
-                  ? 'Total resmi (diskon, PPN) dihitung server saat transaksi diproses dan tampil di struk.'
-                  : 'Total dari server belum tersedia.'}
-              </p>
+              <p className="text-xs text-slate-500">Total resmi dari server belum tersedia.</p>
               {previewErrors.general && <p role="alert" className="text-xs text-red-700">{previewErrors.general}</p>}
+              {preview.error instanceof ApiError && preview.error.status !== 422 && (
+                <ErrorNotice error={preview.error} />
+              )}
             </>
           )}
         </div>
@@ -441,7 +439,7 @@ export function PosPage() {
             <p>{lines.length} jenis barang · {MODE_LABEL[mode]}</p>
             {total !== null
               ? <p className="text-2xl font-semibold tabular-nums">{formatRupiah(total)}</p>
-              : <p className="text-slate-600">Total resmi dihitung server saat diproses{estimate ? ` (perkiraan subtotal ${formatRupiah(estimate)})` : ''}.</p>}
+              : <p className="text-slate-600">Total resmi dari server sedang dihitung.</p>}
             {mode === 'payroll_credit' && customer && <p>Atas nama <span className="font-medium">{customer.name}</span> ({customer.customer_no}); ditagihkan lewat potong gaji.</p>}
             {mode === 'cash' && <p>Uang diterima {formatRupiah(tendered.trim().replace(',', '.'))}{change !== null ? `, kembalian ${formatRupiah(change)}` : ''}.</p>}
             <p className="text-slate-500">Setelah diproses, transaksi tidak dapat diubah (pembatalan hanya oleh Admin).</p>

@@ -39,7 +39,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|---|---|---|---|
 | `/login` | Login | — | HANDOFF 6 | ✅ | Throttle 429 ditangani |
 | (layout) | Sidebar: menu Kasir/Shift Saya disembunyikan untuk Admin; kelompok menu abu tipis dan submenu putih; workspace kanan yang dapat discroll | permission | — | 🟡 | Sidebar tetap di viewport; menunggu verifikasi browser |
-| `/pos` | **Kasir**: scan/cari produk, keranjang, tunai dan kredit potong gaji, pemilih karyawan, konfirmasi, struk cetak, pengecualian kredit Admin | `sales.create` | 4, 5 | ✅ diuji manual | Backend FR-01 tersedia; UI siap memakai total resmi dari pratinjau server |
+| `/pos` | **Kasir**: scan/cari produk, keranjang, tunai dan kredit potong gaji, pemilih karyawan, konfirmasi, struk cetak, pengecualian kredit Admin | `sales.create` | 4, 5 | 🟡 | Integrasi pratinjau FR-01 selesai; uji klik integrasi terbaru menunggu pengguna |
 | `/shift` | Shift Saya: buka, mulai hitung, tutup (hitung buta), catat kas masuk/keluar, setoran parsial dan serahkan setoran akhir | `shift.open`, `cash_deposit.create`, `cash_movement.create` | 4, 7 | 🟡 | UI parsial baru dibuat; menunggu verifikasi browser |
 | `/shifts` | Tinjau Shift (Admin) | `shift.review` | 4 | ✅ | |
 | `/cash-deposits` | Setoran Masuk: antrean, penerimaan Finance, koreksi selisih, saldo Kas Kecil/Besar | `cash_deposit.receive` | 7.1 | 🟡 | UI baru dibuat; menunggu verifikasi browser |
@@ -115,7 +115,7 @@ Pada 28 Okt 2026, setelah tahap Manajemen Pengguna, `npm run typecheck`, `npm te
 ## 4. Celah dan catatan yang diketahui
 
 1. **Setoran dan endapan:** Setoran akhir, kebijakan endapan, setoran parsial Kasir, antrean Finance/Admin, penerimaan/koreksi selisih, dan saldo dana tersedia di UI. Pengguna mengonfirmasi pembuatan Draft parsial; uji tindakan lain termasuk antrean Finance masih ditunggu. Tanpa kebijakan endapan aktif, backend mempertahankan seluruh kas terhitung sebagai endapan dan tidak membuat dokumen setoran akhir; atur kebijakan sebelum menguji. **Fitur kas lengkap tetap prasyarat go-live.** Catatan integrasi: route backend daftar/detail setoran masih mewajibkan `cash_deposit.create`, sementara halaman Finance ditampilkan untuk `cash_deposit.receive`; sampai izin route diselaraskan, akun Finance harus memiliki kedua permission.
-2. **Pratinjau penjualan (FR-01):** backend `POST /api/sales/preview` sudah tersedia untuk total resmi, diskon, PPN, stok FEFO, dan sinyal batas kredit. Layar kasir siap memakainya dan perlu diverifikasi saat pengujian klik berikutnya.
+2. **Pratinjau penjualan (FR-01):** backend `POST /api/sales/preview` terintegrasi di layar `/pos` untuk total resmi, diskon, PPN, stok FEFO, dan sinyal batas kredit. Layar tidak menghitung ulang aturan bisnis saat pratinjau gagal; peringatan ditampilkan bila total final posting berubah dari pratinjau.
 3. **Hasil transaksi tidak diketahui:** bila jaringan putus saat posting, keranjang dikunci dan hanya bisa kirim ulang dengan kunci yang sama. Bila tab ditutup sebelum itu, struk mungkin tersimpan tetapi tidak terlihat; riwayat penjualan kini menyediakan pencarian dan detail struk untuk menemukan transaksi tersebut.
 4. **Cetak struk dan invoice:** struk thermal kini memiliki pilihan 58/80 mm dengan ukuran halaman CSS terpisah, dan invoice A4 menampilkan status serta riwayat pembayaran/sisa tagihan. Uji printer fisik, pemilihan printer browser, dan printer/scanner perangkat klien masih wajib dilakukan (ROADMAP 6.1, 6.2, 7.4).
 5. **Karyawan pada penjualan tunai** tidak dipilih di kasir (hanya kredit); backend mengizinkan `customer_id` untuk tunai.
@@ -138,7 +138,7 @@ Jika jadwal mundur, yang tidak boleh dipotong: layar kasir, setoran + endapan, t
 
 ## 6. Permintaan ke backend
 
-Lihat `FRONTEND_REQUESTS.md`. **FR-01** pratinjau penjualan sudah selesai di backend dan menunggu verifikasi integrasi/uji klik frontend. Backend bagian 9 (diskon/PPN) dan bagian 10 (manajemen pengguna) sudah lulus test; UI manajemen pengguna tersedia dan menunggu uji klik.
+Lihat `FRONTEND_REQUESTS.md`. **FR-01** pratinjau penjualan sudah diintegrasikan di `/pos` dan menunggu verifikasi uji klik frontend. Backend bagian 9 (diskon/PPN) dan bagian 10 (manajemen pengguna) sudah lulus test; UI manajemen pengguna tersedia dan menunggu uji klik.
 
 ## 7. Cara memperbarui berkas ini
 
@@ -152,6 +152,7 @@ Lihat `FRONTEND_REQUESTS.md`. **FR-01** pratinjau penjualan sudah selesai di bac
 - **2026-10-28** — UI Manajemen Pengguna `/users`: daftar pengguna toko dengan cari/filter role/status dan paginasi; tambah/ubah nama, email, role; aktif/nonaktif dengan konfirmasi; reset sandi; serta tombol global Ganti sandi untuk semua pengguna. Pembatasan self-role/nonaktif dan batas minimal satu Admin tetap divalidasi backend; sandi tidak dikembalikan. Test logika form/payload dan navigasi ditambahkan. `npm run typecheck`, `npm test` (**161 lulus, 27 berkas**), `npm run build`, dan `git diff --check` lulus; uji klik menunggu.
 - **2026-10-28** — Pengguna mengonfirmasi uji klik Tagihan HRD berjalan lancar.
 - **2026-10-28** — UI Tagihan HRD `/billing`: pengelolaan periode (buka, ubah nama/tanggal gaji, tutup dengan konfirmasi dan pembukaan periode baru), rincian per karyawan, pembuatan invoice untuk periode tertutup, daftar/detail invoice, terbitkan, serah ke HRD, pembayaran sebagian dan riwayatnya, serta cetak invoice A4. Aksi dan permintaan API dipagari permission; nominal pembayaran divalidasi dengan aritmetika sen agar tidak melebihi sisa tagihan. `npm run typecheck`, `npm test` (**157 lulus, 26 berkas**), `npm run build`, dan `git diff --check` lulus; uji klik pengguna menunggu.
+- **2026-10-28** — Integrasi frontend `POST /api/sales/preview` pada `/pos`: pratinjau otomatis setelah debounce, total resmi menggantikan perkiraan, loading/error kontrak ditampilkan, dan halaman struk memperingatkan bila total final posting berubah dari pratinjau. Perhitungan perkiraan subtotal klien dihapus agar aturan bisnis tetap tunggal di backend. `FRONTEND_REQUESTS.md` FR-01 ditutup dari sisi frontend; verifikasi uji klik menunggu.
 - **2026-10-28** — Pengguna mengonfirmasi UI Dashboard tampil dan filter tanggal menampilkan data yang benar.
 - **2026-10-28** — Perbedaan visual sidebar diperjelas: kelompok menu memakai latar abu tipis, sedangkan submenu berlatar putih dengan teks hitam; submenu aktif ditandai teks tebal dan garis tepi agar tetap jelas tanpa latar gelap.
 - **2026-10-28** — UI Dashboard `/dashboard` memakai endpoint laporan gabungan, filter periode WIB dan ID kasir hanya untuk pemegang `shift.review`, kartu penjualan/kas, grafik harian, tabel stok menipis dan batch kedaluwarsa, serta saldo dana hanya bila diizinkan backend. Validasi rentang tanggal dan grafik memakai helper bertest. `npm run typecheck`, `npm test` (**153 lulus, 25 berkas**), `npm run build`, dan `git diff --check` lulus; uji klik pengguna menunggu.

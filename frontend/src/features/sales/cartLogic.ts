@@ -1,6 +1,6 @@
 import type { CreditExceptionInput, Decimal, PaymentMode, Product, SaleInput } from '@/lib/api/types';
 import { normalizeDecimal } from '@/features/products/productForm';
-import { centsToMoney, lineCents, milliToQty, moneyToCents, qtyToMilli } from '@/lib/money';
+import { milliToQty, moneyToCents, qtyToMilli } from '@/lib/money';
 
 /**
  * Logika murni keranjang kasir (tanpa React) agar mudah diuji.
@@ -79,17 +79,12 @@ export function validateCart(lines: CartLine[]): CartErrors {
   return out;
 }
 
-/** Perkiraan jumlah harga baris SEBELUM diskon dan PPN (hanya sampai pratinjau server tersedia). null bila ada baris tak valid. */
-export function estimateSubtotal(lines: CartLine[]): string | null {
-  if (lines.length === 0) return null;
-  let sum = 0n;
-  for (const l of lines) {
-    const q = parseQty(l.qty);
-    const p = moneyToCents(l.product.sell_price);
-    if (q === null || p === null) return null;
-    sum += lineCents(q, p);
-  }
-  return centsToMoney(sum);
+/** Membandingkan total posting yang final dengan pratinjau sebelum keranjang dikunci. */
+export function salePreviewChanged(previewTotal: string | null | undefined, postedTotal: string): boolean {
+  if (previewTotal == null) return false;
+  const preview = moneyToCents(previewTotal);
+  const posted = moneyToCents(postedTotal);
+  return preview !== null && posted !== null && preview !== posted;
 }
 
 /** Pesan galat uang diterima (tunai). `total` = total dari server bila sudah diketahui; null = biarkan server yang menolak. */
