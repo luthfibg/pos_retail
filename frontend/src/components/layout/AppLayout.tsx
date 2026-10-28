@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { ChangePasswordDialog } from '@/features/users/ChangePasswordDialog';
 import { getVisibleNavGroups } from './nav';
 
 export function AppLayout() {
@@ -13,6 +14,7 @@ export function AppLayout() {
     group.items.some(({ to }) => location.pathname === to || location.pathname.startsWith(`${to}/`)),
   )?.label;
   const [expandedGroup, setExpandedGroup] = useState(activeGroup ?? groups[0]?.label ?? '');
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   useEffect(() => {
     if (activeGroup) setExpandedGroup(activeGroup);
@@ -66,6 +68,13 @@ export function AppLayout() {
           <div className="text-xs text-slate-500">{me?.roles.join(', ')}</div>
           <button
             type="button"
+            onClick={() => setChangePasswordOpen(true)}
+            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+          >
+            Ganti sandi
+          </button>
+          <button
+            type="button"
             onClick={() => void logout()}
             className="mt-2 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
           >
@@ -76,6 +85,7 @@ export function AppLayout() {
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         <Outlet />
       </main>
+      {changePasswordOpen && <ChangePasswordDialog onClose={() => setChangePasswordOpen(false)} />}
     </div>
   );
 }

@@ -39,6 +39,23 @@ export interface LoginResponse {
   user: UserSummary;
 }
 
+export interface ManagedUser {
+  id: number;
+  name: string;
+  username: string;
+  email: string | null;
+  is_active: boolean;
+  roles: string[];
+  last_login_at: string | null;
+}
+
+export interface ManagedRole {
+  id: number;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+}
+
 export type BillingPeriodStatus = 'open' | 'closed' | 'invoiced';
 
 export interface BillingPeriodCustomer {

@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres frontend.** Setiap pekerjaan frontend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), seperti `BACKEND_PROGRESS.md` untuk backend. Agent frontend baru cukup membaca berkas ini + `BACKEND_PROGRESS.md` (kontrak) + `HANDOFF_POS_RETAIL_SMK.md` (aturan) + `frontend/FRONTEND.md` (struktur dan konvensi). Kebutuhan yang belum dipenuhi kontrak API ditulis di `FRONTEND_REQUESTS.md` untuk agent backend.
 
-**Diperbarui:** 28 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang dan lampiran privat, alur PR/PO, adjustment/opname, transfer stok, Dashboard, Tagihan HRD
+**Diperbarui:** 28 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang dan lampiran privat, alur PR/PO, adjustment/opname, transfer stok, Dashboard, Tagihan HRD, Manajemen Pengguna
 
 ## Cara membaca status
 
@@ -59,7 +59,9 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/settings/float-policy` | **Kebijakan Endapan** (Admin): nominal/persentase, basis, minimum/maksimum, pembulatan | `float.configure` | 7.1 | ✅ | Wajib diatur agar penutupan shift dapat menghasilkan dokumen setoran |
 | (lonceng di sidebar) | Notifikasi: polling 60 dtk, tandai terbaca | login | 3 | ✅ | Bug "lonceng kosong" pernah dilaporkan; belum diverifikasi ulang |
 | `/dashboard` | Dashboard: filter tanggal/kasir, ringkasan penjualan dan kas, grafik harian, stok menipis/kedaluwarsa, saldo akun dana sesuai izin | `reports.view` | 6.3 | 🟡 | Pengguna mengonfirmasi tampilan dan filter; automated tests/typecheck/build dijalankan agent |
-| `/billing` | Tagihan HRD: periode kredit, tutup periode, rincian per karyawan, invoice, penerbitan/serah HRD, pembayaran sebagian, cetak invoice | `billing_period.manage`, `billing_period.close`, `invoice.generate`, `invoice.issue`, `invoice.record_payment` | 8 | 🟡 | UI tersedia; test/typecheck/build lulus, menunggu uji klik pengguna |
+| `/billing` | Tagihan HRD: periode kredit, tutup periode, rincian per karyawan, invoice, penerbitan/serah HRD, pembayaran sebagian, cetak invoice | `billing_period.manage`, `billing_period.close`, `invoice.generate`, `invoice.issue`, `invoice.record_payment` | 8 | 🟡 | Pengguna mengonfirmasi uji klik berjalan lancar; automated tests/typecheck/build dijalankan agent |
+| `/users` | Manajemen pengguna: cari/filter, tambah/ubah, role, aktif/nonaktif, reset sandi | `user.manage` | 10 | 🟡 | UI tersedia; menunggu uji klik pengguna |
+| (profil sidebar) | Ganti sandi sendiri; sesi lain diakhiri | login | 10 | 🟡 | UI tersedia untuk semua pengguna; sesi saat ini tetap aktif |
 
 ### Backlog frontend (backend sudah siap ✅ kecuali dicatat)
 
@@ -74,7 +76,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Penerimaan barang | 6.3 | 🟡 | `/goods-receipts`: pilih PO `receivable=1`, catat diterima/rusak, pecah batch, validasi kedaluwarsa, simpan Draft, posting, batalkan Draft, unggah/unduh lampiran privat, dan verifikasi surat jalan/faktur (Admin); menunggu uji klik |
 | PR/PO | 6.1, 6.2 | 🟡 | PR Kasir dan Admin: alur Finance/Owner serta PO per supplier tersedia; menunggu uji klik. |
 | Tagihan HRD | 8 | 🟡 | `/billing`: periode buka/ubah/tutup, invoice per periode, terbit/serah HRD, pembayaran sebagian dan cetak invoice; menunggu uji klik |
-| Manajemen pengguna | 10 | ⏳ | Daftar/cari/filter; tambah/ubah role; aktif/nonaktif; reset sandi; ganti sandi sendiri |
+| Manajemen pengguna | 10 | 🟡 | `/users`: daftar/cari/filter; tambah/ubah role; aktif/nonaktif; reset sandi Admin. Tombol “Ganti sandi” tersedia bagi semua pengguna; menunggu uji klik |
 | Denah rak | — | ⛔ | Backend belum ada |
 
 ## 2. Kode bersama (fondasi)
@@ -101,13 +103,14 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Riwayat penjualan | `saleHistoryLogic` | 3 | ✅ |
 | Penerimaan barang | `goodsReceiptForm` | 5 | ✅ |
 | PR/PO | `purchaseRequisitionForm` | 4 | ✅ |
+| Manajemen pengguna | `userForm` | 3 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Tagihan HRD | `billingForm` | 3 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Dashboard | `dashboardFilters` | 4 | 🟡 test dijalankan agent; pengguna mengonfirmasi filter di browser |
 | Adjustment & Opname | `adjustmentForm` | 4 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Transfer stok | `transferForm` | 5 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 28 Okt 2026, setelah tahap Dashboard dan Tagihan HRD, `npm run typecheck`, `npm test` (**157 lulus, 26 berkas**) dan `npm run build` lulus; backend terakhir **231 test (2.058 assertions)**. Test otomatis frontend mencakup logika murni; komponen React masih perlu verifikasi manual di browser. Pengguna telah mengonfirmasi filter Dashboard menampilkan data yang benar, serta alur klik kas masuk/keluar nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan. Tagihan HRD, penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
+Pada 28 Okt 2026, setelah tahap Manajemen Pengguna, `npm run typecheck`, `npm test` (**161 lulus, 27 berkas**) dan `npm run build` lulus; backend terakhir **231 test (2.058 assertions)**. Test otomatis frontend mencakup logika murni; komponen React tetap perlu verifikasi manual. Pengguna mengonfirmasi filter Dashboard menampilkan data yang benar dan uji klik Tagihan HRD berjalan lancar, selain alur kas masuk/keluar nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan. Manajemen Pengguna, penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
 
 ## 4. Celah dan catatan yang diketahui
 
@@ -125,8 +128,9 @@ Pada 28 Okt 2026, setelah tahap Dashboard dan Tagihan HRD, `npm run typecheck`, 
 1. ✅ **Riwayat penjualan** (bagian 5 dan 7.2): pengguna telah menguji daftar/filter, detail, cetak ulang SALINAN, dan void Admin; uji klik berjalan lancar pada 27 Okt 2026.
 2. ✅ **PR/PO** (bagian 6.1–6.2): Kasir membuat/mengajukan PR; Finance dapat meloloskan atau mengembalikan dengan catatan; Owner dapat menyetujui/menolak dengan autentikasi ulang; Purchasing membuat PO per supplier, mengajukan, mengonfirmasi jika butuh Owner, dan menandai PO dikirim. Mendukung role gabungan maupun role terpisah lewat permission. Implementasi dan test lulus; menunggu uji klik pengguna.
 3. **Adjustment/opname** (bagian 1, backend 2.7 sudah selesai): draft snapshot, pengajuan, approval/rejection, re-auth untuk loss/expired, posting atomik.
-4. 🟡 **Tagihan HRD** (bagian 8): `/billing` mendukung periode buka/ubah/tutup, rincian kredit per karyawan, buat dan cetak invoice, terbitkan, serahkan ke HRD, serta pembayaran bertahap dengan validasi jumlah presisi; menunggu uji klik pengguna.
-5. **Transfer stok** (backend 2.6 sudah siap): UI `/inventory/transfers` tersedia; uji klik menunggu. Berikutnya **manajemen pengguna** dan verifikasi klik layar yang masih tertunda.
+4. 🟡 **Tagihan HRD** (bagian 8): `/billing` mendukung periode buka/ubah/tutup, rincian kredit per karyawan, buat/cetak invoice, terbitkan, serahkan ke HRD, dan pembayaran bertahap. Pengguna mengonfirmasi uji klik berjalan lancar.
+5. 🟡 **Manajemen Pengguna** (bagian 10): `/users` mengelola akun toko dan tombol profil menyediakan ganti sandi sendiri; menunggu uji klik.
+6. **Transfer stok** (backend 2.6 sudah siap): UI `/inventory/transfers` tersedia; uji klik menunggu, bersama beberapa layar lain yang sudah tersedia.
 
 Verifikasi tindakan setoran parsial/Finance dan layar penerimaan barang tetap belum dikonfirmasi pengguna; ini adalah sisa uji UI yang sudah ada, bukan fitur backend yang belum tersedia.
 
@@ -134,7 +138,7 @@ Jika jadwal mundur, yang tidak boleh dipotong: layar kasir, setoran + endapan, t
 
 ## 6. Permintaan ke backend
 
-Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). Backend bagian 9 (diskon/PPN) dan bagian 10 (manajemen pengguna) sudah lulus test; UI manajemen pengguna masih belum dibuat.
+Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). Backend bagian 9 (diskon/PPN) dan bagian 10 (manajemen pengguna) sudah lulus test; UI manajemen pengguna tersedia dan menunggu uji klik.
 
 ## 7. Cara memperbarui berkas ini
 
@@ -145,6 +149,8 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 
 ## Riwayat
 
+- **2026-10-28** — UI Manajemen Pengguna `/users`: daftar pengguna toko dengan cari/filter role/status dan paginasi; tambah/ubah nama, email, role; aktif/nonaktif dengan konfirmasi; reset sandi; serta tombol global Ganti sandi untuk semua pengguna. Pembatasan self-role/nonaktif dan batas minimal satu Admin tetap divalidasi backend; sandi tidak dikembalikan. Test logika form/payload dan navigasi ditambahkan. `npm run typecheck`, `npm test` (**161 lulus, 27 berkas**), `npm run build`, dan `git diff --check` lulus; uji klik menunggu.
+- **2026-10-28** — Pengguna mengonfirmasi uji klik Tagihan HRD berjalan lancar.
 - **2026-10-28** — UI Tagihan HRD `/billing`: pengelolaan periode (buka, ubah nama/tanggal gaji, tutup dengan konfirmasi dan pembukaan periode baru), rincian per karyawan, pembuatan invoice untuk periode tertutup, daftar/detail invoice, terbitkan, serah ke HRD, pembayaran sebagian dan riwayatnya, serta cetak invoice A4. Aksi dan permintaan API dipagari permission; nominal pembayaran divalidasi dengan aritmetika sen agar tidak melebihi sisa tagihan. `npm run typecheck`, `npm test` (**157 lulus, 26 berkas**), `npm run build`, dan `git diff --check` lulus; uji klik pengguna menunggu.
 - **2026-10-28** — Pengguna mengonfirmasi UI Dashboard tampil dan filter tanggal menampilkan data yang benar.
 - **2026-10-28** — Perbedaan visual sidebar diperjelas: kelompok menu memakai latar abu tipis, sedangkan submenu berlatar putih dengan teks hitam; submenu aktif ditandai teks tebal dan garis tepi agar tetap jelas tanpa latar gelap.

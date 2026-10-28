@@ -9,6 +9,7 @@ import type {
   StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
+  ManagedRole, ManagedUser,
 } from './types';
 
 export const authApi = {
@@ -44,6 +45,20 @@ export const billingApi = {
     api<{ data: Invoice }>(`/invoices/${id}/hand-over`, { method: 'POST' }).then((r) => r.data),
   recordPayment: (id: number, input: { amount: string; received_on?: string; reference?: string; note?: string }) =>
     api<{ data: Invoice }>(`/invoices/${id}/payments`, { method: 'POST', body: input }).then((r) => r.data),
+};
+
+export const userApi = {
+  list: (filters: { q?: string; status?: 'active' | 'inactive'; role?: string; page?: number } = {}) =>
+    api<Paginated<ManagedUser>>('/users', { query: { ...filters, per_page: 25 } }),
+  roles: () => api<{ data: ManagedRole[] }>('/roles').then((r) => r.data),
+  create: (input: { name: string; username: string; email?: string; password: string; role: string }) =>
+    api<{ data: ManagedUser }>('/users', { method: 'POST', body: input }).then((r) => r.data),
+  update: (id: number, input: { name?: string; email?: string | null; is_active?: boolean; role?: string }) =>
+    api<{ data: ManagedUser }>(`/users/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
+  resetPassword: (id: number, password: string) =>
+    api<{ data: ManagedUser }>(`/users/${id}/reset-password`, { method: 'POST', body: { password } }).then((r) => r.data),
+  changePassword: (input: { current_password: string; password: string }) =>
+    api<{ message: string }>('/auth/change-password', { method: 'POST', body: input }),
 };
 
 export interface ProductFilters {

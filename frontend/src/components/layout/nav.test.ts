@@ -28,6 +28,11 @@ describe('sidebar navigation', () => {
     expect(groups.flatMap((group) => group.items.map((item) => item.to))).toContain('/billing');
   });
 
+  it('shows user management only to users with user.manage', () => {
+    const groups = getVisibleNavGroups((permission) => permission === 'user.manage', true);
+    expect(groups.flatMap((group) => group.items.map((item) => item.to))).toEqual(['/users']);
+  });
+
   it('keeps only groups with at least one permitted menu', () => {
     const groups = getVisibleNavGroups((permission) => permission === 'settings.manage', true);
 
