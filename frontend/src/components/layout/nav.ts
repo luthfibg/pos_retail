@@ -53,6 +53,16 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Keuangan',
+    items: [
+      {
+        to: '/billing',
+        label: 'Tagihan HRD',
+        permission: ['billing_period.manage', 'invoice.generate'],
+      },
+    ],
+  },
+  {
     label: 'Pengaturan',
     items: [
       { to: '/discounts', label: 'Diskon', permission: 'discount.manage' },

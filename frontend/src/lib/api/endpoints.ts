@@ -8,7 +8,7 @@ import type {
   PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
-  DashboardReport,
+  DashboardReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
 } from './types';
 
 export const authApi = {
@@ -21,6 +21,29 @@ export const authApi = {
 export const reportApi = {
   dashboard: (filters: { date_from: string; date_to: string; cashier_id?: number }) =>
     api<{ data: DashboardReport }>('/reports/dashboard', { query: filters }).then((r) => r.data),
+};
+
+export const billingApi = {
+  periods: (page = 1) => api<Paginated<BillingPeriod>>('/billing-periods', { query: { page, per_page: 25 } }),
+  currentPeriod: () => api<{ data: BillingPeriod | null }>('/billing-periods/current').then((r) => r.data),
+  period: (id: number) => api<{ data: BillingPeriod }>(`/billing-periods/${id}`).then((r) => r.data),
+  openPeriod: (input: { label?: string; scheduled_close_date?: string }) =>
+    api<{ data: BillingPeriod }>('/billing-periods', { method: 'POST', body: input }).then((r) => r.data),
+  updatePeriod: (id: number, input: { label?: string; scheduled_close_date?: string | null }) =>
+    api<{ data: BillingPeriod }>(`/billing-periods/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
+  closePeriod: (id: number) =>
+    api<{ data: BillingPeriod }>(`/billing-periods/${id}/close`, { method: 'POST' }).then((r) => r.data),
+  generateInvoice: (periodId: number, input: { bill_to?: string }) =>
+    api<{ data: Invoice }>(`/billing-periods/${periodId}/invoice`, { method: 'POST', body: input }).then((r) => r.data),
+  invoices: (status: InvoiceStatus | '', page = 1) =>
+    api<Paginated<InvoiceSummary>>('/invoices', { query: { status: status || undefined, page, per_page: 25 } }),
+  invoice: (id: number) => api<{ data: Invoice }>(`/invoices/${id}`).then((r) => r.data),
+  issueInvoice: (id: number) =>
+    api<{ data: Invoice }>(`/invoices/${id}/issue`, { method: 'POST' }).then((r) => r.data),
+  handOverInvoice: (id: number) =>
+    api<{ data: Invoice }>(`/invoices/${id}/hand-over`, { method: 'POST' }).then((r) => r.data),
+  recordPayment: (id: number, input: { amount: string; received_on?: string; reference?: string; note?: string }) =>
+    api<{ data: Invoice }>(`/invoices/${id}/payments`, { method: 'POST', body: input }).then((r) => r.data),
 };
 
 export interface ProductFilters {

@@ -24,6 +24,7 @@ const TransfersPage = lazy(() => import('@/features/inventory/TransfersPage').th
 const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
 const PurchasingEntryPage = lazy(() => import('@/features/purchasing/PurchaseBoardPage').then((module) => ({ default: module.PurchasingEntryPage })));
 const DashboardPage = lazy(() => import('@/features/reports/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const BillingPage = lazy(() => import('@/features/billing/BillingPage').then((module) => ({ default: module.BillingPage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<div className="p-6 text-slate-500">Memuat layar…</div>}>{children}</Suspense>;
@@ -60,6 +61,10 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="reports.view" />,
             children: [{ path: 'dashboard', element: <LazyPage><DashboardPage /></LazyPage> }],
+          },
+          {
+            element: <RequireAnyPermission permissions={['billing_period.manage', 'invoice.generate']} />,
+            children: [{ path: 'billing', element: <LazyPage><BillingPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="inventory.view" />,

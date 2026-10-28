@@ -20,6 +20,12 @@ describe('sidebar navigation', () => {
     expect(paths).toContain('/pos');
     expect(paths).toContain('/shift');
     expect(paths).toContain('/sales');
+    expect(paths).not.toContain('/billing');
+  });
+
+  it('shows billing only to users with period or invoice access', () => {
+    const groups = getVisibleNavGroups((permission) => permission === 'invoice.generate', true);
+    expect(groups.flatMap((group) => group.items.map((item) => item.to))).toContain('/billing');
   });
 
   it('keeps only groups with at least one permitted menu', () => {

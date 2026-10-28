@@ -39,6 +39,73 @@ export interface LoginResponse {
   user: UserSummary;
 }
 
+export type BillingPeriodStatus = 'open' | 'closed' | 'invoiced';
+
+export interface BillingPeriodCustomer {
+  customer_id: number;
+  customer_no: string;
+  name: string;
+  department: string | null;
+  sales_count: number;
+  total: Decimal;
+}
+
+export interface BillingPeriod {
+  id: number;
+  label: string;
+  status: BillingPeriodStatus;
+  scheduled_close_date: string | null;
+  starts_at: string;
+  closed_at: string | null;
+  sales_count: number;
+  sales_total: Decimal;
+  invoice_id: number | null;
+  customers?: BillingPeriodCustomer[];
+}
+
+export type InvoiceStatus = 'draft' | 'issued' | 'handed_to_hr' | 'partially_paid' | 'paid' | 'cancelled';
+
+export interface InvoiceSummary {
+  id: number;
+  document_no: string;
+  billing_period_id: number;
+  period_label: string;
+  bill_to: string;
+  subtotal: Decimal;
+  tax_rate: Decimal | null;
+  tax_amount: Decimal;
+  total: Decimal;
+  amount_paid: Decimal;
+  amount_remaining: Decimal;
+  status: InvoiceStatus;
+  issued_at: string | null;
+  handed_at: string | null;
+  created_at: string;
+}
+
+export interface InvoiceCustomer {
+  customer_id: number;
+  customer_no: string;
+  name: string;
+  department: string | null;
+  subtotal: Decimal;
+  sales: Array<{ sale_id: number; doc_number: string; posted_at: string; amount: Decimal }>;
+}
+
+export interface InvoicePayment {
+  id: number;
+  amount: Decimal;
+  received_at: string;
+  reference: string | null;
+  note: string | null;
+  recorded_by_name: string;
+}
+
+export interface Invoice extends InvoiceSummary {
+  customers: InvoiceCustomer[];
+  payments: InvoicePayment[];
+}
+
 export type ProductStatus = 'pending_price' | 'active' | 'inactive';
 export type StockStatus = 'habis' | 'kritis' | 'hampir_habis' | 'aman';
 
