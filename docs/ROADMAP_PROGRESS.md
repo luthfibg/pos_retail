@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 27 Oktober 2026 (test terakhir dijalankan: **228 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 28 Oktober 2026 (test terakhir dijalankan: **231 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
@@ -13,7 +13,7 @@
 
 ## 1. Posisi saat ini
 
-**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 35 tahap — 31 ✅ selesai dan lulus test · 0 🟡 menunggu test · 4 ⏳ belum.**
+**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 35 tahap — 32 ✅ selesai dan lulus test · 0 🟡 menunggu test · 3 ⏳ belum.**
 
 | Fase | ✅ | 🟡 | ⏳ | ⏸ |
 |---|---|---|---|---|
@@ -23,13 +23,13 @@
 | Fase 3 — POS & kas | 7 | 0 | 0 | 1 |
 | Fase 4 — Pembelian | 5 | 0 | 0 | 0 |
 | Fase 5 — Tagihan HRD | 3 | 0 | 0 | 0 |
-| Fase 6 — Cetak, laporan, dashboard | 0 | 0 | 3 | 0 |
+| Fase 6 — Cetak, laporan, dashboard | 1 | 0 | 2 | 0 |
 | Fase 7 — Hardening & UAT | 0 | 0 | 5 | 0 |
 | Fase 8 — Cut-over & go-live | 0 | 0 | 3 | 1 |
 | Di luar Paket 1 (setelah go-live) | 0 | 0 | 0 | 2 |
-| **Total semua fase** | **31** | **0** | **12** | **4** |
+| **Total semua fase** | **32** | **0** | **11** | **4** |
 
-### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test`, terakhir 27 Okt 2026)
+### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test`, terakhir 28 Okt 2026)
 
 - **Masuk dan hak akses:** login/logout, role Admin dan Kasir, izin yang bisa didelegasikan, persetujuan dengan mengetik ulang password pemberi persetujuan. ✅
 - **Master data:** kategori, supplier, produk (harga + riwayat harga, barcode otomatis, status stok). ✅
@@ -50,7 +50,7 @@
 
 ### Belum bisa
 
-usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk tunai dari shift yang sudah ditutup · denah rak · penyempurnaan cetak thermal 58/80 mm dan cetak invoice · koreksi/pembatalan invoice dan credit note · dashboard dan laporan · lampiran foto surat jalan.
+usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk tunai dari shift yang sudah ditutup · denah rak · penyempurnaan cetak thermal 58/80 mm dan cetak invoice · koreksi/pembatalan invoice dan credit note.
 
 ### Langkah berikutnya (urut)
 1. ~~Pasang paket WS-C dan jalankan seluruh test~~ — **selesai 24 Okt 2026: 154 lulus.**
@@ -61,7 +61,8 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 4. ~~Kas masuk/keluar lain (3.6)~~ — **selesai 26 Okt 2026: seluruh 204 test lulus.**
 5. ~~Adjustment dan opname dengan persetujuan (2.7)~~ — **selesai 27 Okt 2026: `StockAdjustmentTest` 9 test; suite saat tahap itu 223 test lulus (1.953 assertions).** Tahap backend berikutnya yang terbuka dicatat di bawah; tahap 2.5 denah rak tetap berprioritas rendah.
 6. ~~Penerimaan ke gudang + putaway (4.4)~~ — **selesai 27 Okt 2026: `GoodsReceiptTest` 12 test; suite saat tahap itu 224 test lulus (1.978 assertions).** Tahap backend berikutnya yang terbuka: denah rak (2.5), cetak dan laporan (6.1–6.3).
-7. ~~Lampiran dokumen penerimaan (4.5)~~ — **selesai 27 Okt 2026: upload/download privat, otorisasi pemilik/approver, validasi format dan ukuran, audit, serta metadata pada detail GR; `GoodsReceiptTest` 16 test dan suite 228 test lulus (2.019 assertions).** Berikutnya: denah rak (2.5, prioritas rendah), cetak dan laporan (6.1–6.3).
+7. ~~Lampiran dokumen penerimaan (4.5)~~ — **selesai 27 Okt 2026: upload/download privat, otorisasi pemilik/approver, validasi format dan ukuran, audit, serta metadata pada detail GR; `GoodsReceiptTest` 16 test dan suite 228 test lulus (2.019 assertions).**
+8. ~~Dashboard dan laporan dasar (6.3)~~ — **selesai 28 Okt 2026: laporan penjualan harian, stok menipis/kedaluwarsa, serta ringkasan kas; empat endpoint, batasan toko/kasir, periode WIB, dan `ReportTest` (3 test); suite 231 test lulus (2.058 assertions).** Berikutnya: denah rak (2.5, prioritas rendah), cetak struk/invoice (6.1–6.2), lalu hardening/UAT.
 
 ### Tahap frontend terbaru
 
@@ -148,13 +149,13 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 |---|---|---|---|
 | 6.1 | Struk thermal 58/80 mm (CSS print browser; data struk sudah dari API) | ⏳ | frontend |
 | 6.2 | Cetak invoice HRD | ⏳ | frontend + 5.2 |
-| 6.3 | Dashboard minimal dan laporan dasar (penjualan harian, stok menipis/kedaluwarsa, ringkasan kas) | ⏳ |  |
+| 6.3 | Dashboard minimal dan laporan dasar (penjualan harian, stok menipis/kedaluwarsa, ringkasan kas) | ✅ | `ReportTest` (3); periode WIB, filter toko/kasir, endpoint detail + dashboard; suite 231 lulus |
 
 ### Fase 7 — Hardening & UAT
 
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
-| 7.1 | Seluruh `php artisan test` hijau di akhir proyek. **Suite saat ini sudah hijau (228 lulus, 27 Okt 2026)**; gerbang ini diulang setiap tahap baru dan dikunci sebelum UAT | ⏳ | tugas pengguna |
+| 7.1 | Seluruh `php artisan test` hijau di akhir proyek. **Suite saat ini sudah hijau (231 lulus, 28 Okt 2026)**; gerbang ini diulang setiap tahap baru dan dikunci sebelum UAT | ⏳ | tugas pengguna |
 | 7.2 | Seeder demo + skrip smoke test alur utama | ⏳ |  |
 | 7.3 | Konfirmasi keputusan klien: R-04 PPN, Q-07/09/10/11/13/14, ASUMSI pembelian | ⏳ | klien |
 | 7.4 | Uji perangkat: scanner barcode dan printer thermal | ⏳ | perangkat klien |
@@ -193,9 +194,10 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | CashMovementTest | 4 | ✅ | backend test run (26 Okt 2026) |
 | StockTransferTest | 6 | ✅ | backend test run (27 Okt 2026) |
 | StockAdjustmentTest | 9 | ✅ | backend test run (27 Okt 2026) |
-| **Total saat ini (28 kelas)** | **228** — 228 lulus | ✅ | backend test run (27 Okt 2026) |
+| ReportTest | 3 | ✅ | backend test run (28 Okt 2026) |
+| **Total saat ini (29 kelas)** | **231** — 231 lulus | ✅ | backend test run (28 Okt 2026) |
 
-Verifikasi terbaru: pada 27 Okt 2026 `php artisan test` dijalankan setelah tahap 4.5; seluruh 228 test lulus (2.019 assertions).
+Verifikasi terbaru: pada 28 Okt 2026 `php artisan test` dijalankan setelah tahap 6.3; seluruh 231 test lulus (2.058 assertions).
 
 Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceiptTest` (satu kelas). Test memakai database `pos_retail_test`; `tests/TestCase.php` menolak berjalan di database yang namanya tidak berakhiran `_test`. Kegagalan paling mungkin: salah ketik nama kolom atau perbedaan format respons kecil — kirim keluaran lengkapnya ke agent yang menulis kodenya.
 
@@ -203,7 +205,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 ## 4. Untuk agent frontend
 
-**Terbaru (27 Okt 2026): backend suite lulus 228 test; UI adjustment/opname (2.7) sudah diimplementasikan dan menunggu uji klik.** Backend inventory juga menyediakan transfer (2.6), yang UI-nya belum dibuat. UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan sudah diuji pengguna. `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway/lampiran belum dibuat; penerimaan, UI PR/PO menunggu uji klik. Uji Finance pada setoran tetap belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
+**Terbaru (28 Okt 2026): backend suite lulus 231 test; laporan dashboard 6.3 tersedia dan UI adjustment/opname (2.7) menunggu uji klik.** Backend inventory juga menyediakan transfer (2.6), yang UI-nya belum dibuat. UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan sudah diuji pengguna. `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway/lampiran belum dibuat; penerimaan, UI PR/PO menunggu uji klik. Uji Finance pada setoran tetap belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|
@@ -224,7 +226,7 @@ Kolom UI menunjukkan folder fitur pada source frontend saat ini; rincian status 
 
 **Pesan siap salin untuk agent frontend:**
 
-> Backend Pembelian (PR → PO → penerimaan barang) sudah mendukung penerimaan ke lokasi gudang aktif bila `warehouse_enabled=true` dan lampiran dokumen penerimaan privat; baca `docs/BACKEND_PROGRESS.md` bagian 6. Layar yang sekarang bisa dibuat, urut prioritas: (1) penerimaan barang oleh Kasir (`GET /api/purchase-orders?receivable=1` → `POST /api/goods-receipts` dengan `post: true` dan `receiving_location_id` opsional), (2) daftar/form PR untuk Kasir, (3) antrean pemeriksaan Finance dan dialog persetujuan Owner (input username + password; salah → 422 `approver_password`), (4) PO untuk Admin, (5) verifikasi dokumen dan unggah lampiran penerimaan. Catatan: Kasir tidak menerima harga beli (`unit_price`, `unit_cost`, `total` = `null`); `qty_damaged` hanya dicatat, tidak menambah stok. Status backend ✅ (228 test lulus). **Layar kasir (penjualan, bagian 5) masih menjadi prioritas utama** bila belum dibuat.
+> Backend Pembelian (PR → PO → penerimaan barang) sudah mendukung penerimaan ke lokasi gudang aktif bila `warehouse_enabled=true` dan lampiran dokumen penerimaan privat; baca `docs/BACKEND_PROGRESS.md` bagian 6. Layar yang sekarang bisa dibuat, urut prioritas: (1) penerimaan barang oleh Kasir (`GET /api/purchase-orders?receivable=1` → `POST /api/goods-receipts` dengan `post: true` dan `receiving_location_id` opsional), (2) daftar/form PR untuk Kasir, (3) antrean pemeriksaan Finance dan dialog persetujuan Owner (input username + password; salah → 422 `approver_password`), (4) PO untuk Admin, (5) verifikasi dokumen dan unggah lampiran penerimaan. Catatan: Kasir tidak menerima harga beli (`unit_price`, `unit_cost`, `total` = `null`); `qty_damaged` hanya dicatat, tidak menambah stok. Status backend ✅ (231 test lulus). **Layar kasir (penjualan, bagian 5) masih menjadi prioritas utama** bila belum dibuat.
 
 ---
 

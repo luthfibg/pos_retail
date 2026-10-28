@@ -46,9 +46,10 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Frontend: PR Kasir | Implementasi tersedia; menunggu uji klik | Buat/ubah Draft/returned, ajukan, detail dan batalkan |
 | Frontend: pemeriksaan PR/PO, adjustment, tagihan HRD, manajemen pengguna, transfer stok | Belum lengkap | Backlog frontend; kontrak backend tersedia |
 | Periode tagihan + invoice HRD + pembayaran HRD | Selesai | **Lolos** test (25 Okt 2026) |
+| Dashboard dan laporan dasar (penjualan harian, stok menipis/kedaluwarsa, ringkasan kas) | Selesai | **Lolos** test (`ReportTest`, 28 Okt 2026); endpoint baca dengan permission `reports.view`, filter WIB, dan batasan per toko/kasir |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
-**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 27 Okt 2026: **228 test lulus (2.019 assertions)**.
+**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 28 Okt 2026: **231 test lulus (2.058 assertions)**.
 
 ---
 
@@ -207,5 +208,5 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 1. ~~Verifikasi test master data~~ — **sudah lolos**.
 2. ~~`git init`, commit baseline, cabang per workstream~~ — **sudah** (root `pos_retail`: backend, frontend, docs).
-3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Tahap manajemen pengguna (1.8), kas masuk/keluar nonpenjualan (3.6), transfer stok (2.6), adjustment/opname (2.7), penerimaan gudang/putaway (4.4), dan lampiran penerimaan (4.5) selesai; suite backend terbaru **228 test lulus (2.019 assertions) pada 27 Okt 2026**. Opname memakai dokumen adjustment `reason=opname`; skema saat ini tidak memiliki sesi opname terpisah. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
+3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Tahap manajemen pengguna (1.8), kas masuk/keluar nonpenjualan (3.6), transfer stok (2.6), adjustment/opname (2.7), penerimaan gudang/putaway (4.4), lampiran penerimaan (4.5), dan dashboard/laporan (6.3) selesai; suite backend terbaru **231 test lulus (2.058 assertions) pada 28 Okt 2026**. Opname memakai dokumen adjustment `reason=opname`; skema saat ini tidak memiliki sesi opname terpisah. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
 4. Mulai paralel: WS-B dan WS-A (backend), WS-F scaffold (frontend).

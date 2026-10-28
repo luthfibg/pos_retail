@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 27 Oktober 2026 · **Test terbaru:** `php artisan test` — **228 lulus (2.019 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 28 Oktober 2026 · **Test terbaru:** `php artisan test` — **231 lulus (2.058 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 27 Okt 2026: 228 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 28 Okt 2026: 231 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -602,11 +602,55 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 - Satu role per pengguna per toko lewat API ini (mengganti role = menimpa).
 - Layar yang bisa dibuat: daftar pengguna (cari, filter role/status), dialog tambah/ubah (dropdown dari `/api/roles`), tombol aktif/nonaktif, dialog reset sandi (Admin), dan menu "Ganti sandi" untuk semua pengguna.
 
+## 11. Dashboard dan laporan dasar (Tahap 6.3) ✅
+
+### Endpoint
+
+- `GET /api/reports/dashboard`
+- `GET /api/reports/sales-daily`
+- `GET /api/reports/inventory`
+- `GET /api/reports/cash-summary`
+
+Semua endpoint memakai `auth:sanctum` dan `reports.view`; data dibatasi ke toko aktif dari konteks `X-Store-Id`.
+
+### Filter periode
+
+- `date_from` dan `date_to`: format `Y-m-d`, default masing-masing tanggal WIB hari ini.
+- Rentang maksimal 365 hari dan `date_from` tidak boleh sesudah `date_to`.
+- `cashier_id` hanya diterima oleh pengguna yang memiliki `shift.review`; Kasir selalu dibatasi ke pengguna itu sendiri.
+- Batas tanggal dikonversi dari awal/akhir hari WIB ke UTC untuk membandingkan `posted_at`, `created_at`, dan `opened_at` yang tersimpan UTC.
+
+### Respons ringkas
+
+- **Penjualan harian:** jumlah transaksi, bruto, diskon, PPN, penjualan bersih, serta pemisahan tunai/kredit gaji; daftar harian menyertakan hari nol agar dashboard stabil.
+- **Inventori:** produk aktif yang stoknya habis/kritis/hampir habis dan baris batch stok aktif yang mendekati atau melewati tanggal kedaluwarsa. Ambang kedaluwarsa memakai `expiry_warning_days` toko (default 30 hari) dan dapat ditimpa `expiry_days` (1–365). Parameter `include_expired=false` menyembunyikan batch kedaluwarsa.
+- **Kas:** penjualan tunai dan kredit gaji, kas masuk/keluar shift, setoran tertimbang/diterima, jumlah shift, dan pergerakan kas bersih. `net_cash_movement = penjualan tunai + kas masuk - kas keluar - setoran final/submitted/diterima`.
+- `fund_balances` hanya dikirim untuk pengguna dengan `shift.review`; Kasir tidak menerima saldo dana lintas kasir/toko.
+- `/dashboard` menggabungkan ketiga bagian di atas. Endpoint khusus tersedia untuk layar yang hanya membutuhkan satu domain.
+
+### Layar yang bisa dibuat
+
+- kartu penjualan bersih dan jumlah transaksi;
+- grafik penjualan harian;
+- daftar stok menipis dan batch mendekati kedaluwarsa;
+- ringkasan kas dan saldo akun dana;
+- filter tanggal dan kasir sesuai permission;
+- empty state untuk periode tanpa transaksi.
+
+### Batasan
+
+- Laporan bersifat baca dan tidak membuat audit log.
+- Kode status penjualan dibatalkan tidak dihitung.
+- PPN pada laporan mengikuti snapshot penjualan yang tersimpan; tidak melakukan kalkulasi ulang dari tarif terbaru.
+- Tidak ada aggregasi lintas toko.
+- Kasir hanya dapat melihat data shift miliknya, tetapi inventori tetap dibatasi pada toko aktif.
+
 ## Perubahan lain yang memengaruhi frontend
-- `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`; URL lama tidak berubah.
+- `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`, `routes/api/reports.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-28** — Tahap 6.3: endpoint dashboard/laporan backend untuk penjualan harian, inventori menipis/kedaluwarsa, dan ringkasan kas. Filter tanggal WIB, 365 hari, toko aktif, pembatasan kasir, serta respons dashboard gabungan. `ReportTest` **3 lulus**; suite `php artisan test`: **231 lulus (2.058 assertions)**; Pint lulus.
 - **2026-10-27** — Tahap 4.5: upload lampiran GR (JPEG/PNG/WebP/PDF, maks. 10 MB), penyimpanan privat, download dengan pemeriksaan akses pemilik/approver, metadata pada detail, audit, dan penutupan upload setelah dokumen diverifikasi atau GR dibatalkan. `GoodsReceiptTest` **16 lulus**; suite `php artisan test`: **228 lulus (2.019 assertions)**; Pint lulus.
 - **2026-10-27** — Tahap 4.4: Goods Receipt dapat diarahkan ke lokasi gudang aktif ketika `warehouse_enabled=true`, dengan opsi posisi rak per item; pilihan lokasi disediakan endpoint khusus dan konfigurasi/lokasi divalidasi ulang saat draft diposting. Uji jalur gudang, posisi, mode mati, dan regresi: `GoodsReceiptTest` **12 lulus**; suite `php artisan test`: **224 lulus (1.978 assertions)**; Pint dan typecheck frontend lulus.
 - **2026-10-27** — Akses baca adjustment diselaraskan untuk role approver: pemegang `inventory.adjust.approve` dapat membaca antrean dan detail tanpa `inventory.adjust.request`; test akses ditambahkan. `StockAdjustmentTest`: **9 lulus**; suite `php artisan test`: **223 lulus (1.953 assertions)**.

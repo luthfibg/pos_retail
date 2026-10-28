@@ -58,7 +58,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/settings/vat` | **Pengaturan PPN** (Admin): saklar, tarif, harga termasuk/tidak, dialog konfirmasi | `settings.manage` | 9 | ✅ | Test frontend dan backend lulus; keputusan bisnis R-04 tetap menunggu klien |
 | `/settings/float-policy` | **Kebijakan Endapan** (Admin): nominal/persentase, basis, minimum/maksimum, pembulatan | `float.configure` | 7.1 | ✅ | Wajib diatur agar penutupan shift dapat menghasilkan dokumen setoran |
 | (lonceng di sidebar) | Notifikasi: polling 60 dtk, tandai terbaca | login | 3 | ✅ | Bug "lonceng kosong" pernah dilaporkan; belum diverifikasi ulang |
-| `/dashboard` | Dashboard | `reports.view` | — | ⛔ | Placeholder; backend belum punya endpoint laporan (ROADMAP 6.3) |
+| `/dashboard` | Dashboard | `reports.view` | 6.3 | 🟡 | Backend selesai: ringkasan penjualan harian, stok menipis/kedaluwarsa, kas, dan endpoint laporan detail; menunggu implementasi/uji klik UI |
 
 ### Backlog frontend (backend sudah siap ✅ kecuali dicatat)
 
@@ -104,7 +104,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Transfer stok | `transferForm` | 5 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 27 Okt 2026, setelah tahap Transfer Stok dan Lampiran Penerimaan, `npm run typecheck`, `npm test` (**149 lulus, 24 berkas**) dan `npm run build` lulus; backend terakhir **228 test (2.019 assertions)**. Test otomatis frontend mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan. Penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
+Pada 28 Okt 2026, setelah tahap Dashboard/Laporan 6.3, `npm run typecheck`, `npm test` (**149 lulus, 24 berkas**) dan `npm run build` lulus; backend terakhir **231 test (2.058 assertions)**. Test otomatis frontend mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan. Penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
 
 ## 4. Celah dan catatan yang diketahui
 
@@ -113,7 +113,7 @@ Pada 27 Okt 2026, setelah tahap Transfer Stok dan Lampiran Penerimaan, `npm run 
 3. **Hasil transaksi tidak diketahui:** bila jaringan putus saat posting, keranjang dikunci dan hanya bisa kirim ulang dengan kunci yang sama. Bila tab ditutup sebelum itu, struk mungkin tersimpan tetapi tidak terlihat; riwayat penjualan kini menyediakan pencarian dan detail struk untuk menemukan transaksi tersebut.
 4. **Cetak struk:** memakai `window.print` dan lebar kecil di layar; penyesuaian kertas thermal 58/80 mm dan uji printer/scanner di perangkat klien belum dilakukan (ROADMAP 6.1, 7.4).
 5. **Karyawan pada penjualan tunai** tidak dipilih di kasir (hanya kredit); backend mengizinkan `customer_id` untuk tunai.
-6. **Menu "Dashboard"** tampil untuk Kasir (izin `reports.view` ada pada subset Kasir) dan membuka placeholder.
+6. **Menu "Dashboard"** tersedia untuk Kasir (izin `reports.view` ada pada subset Kasir); backend menyediakan endpoint gabungan dan detail, tetapi UI dashboard belum diterapkan.
 7. **Diskon `amount`** adalah potongan **per unit** (dikalikan qty di server, dibatasi harga baris); label di form dan tabel sudah menyatakannya.
 8. **Tanggal diskon** berupa batas hari WIB yang disimpan UTC; form hanya mengirim tanggal bila diubah agar jam mulai tidak bergeser.
 
