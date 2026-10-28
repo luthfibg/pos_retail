@@ -492,7 +492,7 @@ function InvoicePrint({ invoice, storeName, onDone }: { invoice: Invoice; storeN
       <article>
         <header className="mb-5 flex items-start justify-between gap-6 border-b-2 border-black pb-3">
           <div><p className="font-bold">{storeName}</p><h1 className="text-2xl font-bold">INVOICE TAGIHAN KARYAWAN</h1></div>
-          <dl className="text-right text-sm leading-6"><dt className="font-mono text-lg font-bold">{invoice.document_no}</dt><dd>Periode: {invoice.period_label}</dd><dd>Tanggal terbit: {invoice.issued_at ? formatDateTime(invoice.issued_at) : 'Draft'}</dd></dl>
+          <dl className="text-right text-sm leading-6"><dt className="font-mono text-lg font-bold">{invoice.document_no}</dt><dd>Periode: {invoice.period_label}</dd><dd>Status: {INVOICE_STATUS_LABEL[invoice.status]}</dd><dd>Tanggal terbit: {invoice.issued_at ? formatDateTime(invoice.issued_at) : 'Draft'}</dd></dl>
         </header>
         <p className="mb-4"><strong>Ditagihkan kepada:</strong> {invoice.bill_to}</p>
         <table>
@@ -507,7 +507,20 @@ function InvoicePrint({ invoice, storeName, onDone }: { invoice: Invoice; storeN
           <dt>Subtotal</dt><dd className="text-right">{formatRupiah(invoice.subtotal)}</dd>
           <dt>PPN{invoice.tax_rate ? ` (${invoice.tax_rate}%)` : ''}</dt><dd className="text-right">{formatRupiah(invoice.tax_amount)}</dd>
           <dt className="border-t border-black pt-2 font-bold">Total</dt><dd className="border-t border-black pt-2 text-right font-bold">{formatRupiah(invoice.total)}</dd>
+          <dt>Sudah dibayar</dt><dd className="text-right">{formatRupiah(invoice.amount_paid)}</dd>
+          <dt>Sisa tagihan</dt><dd className="text-right font-bold">{formatRupiah(invoice.amount_remaining)}</dd>
         </dl>
+        {invoice.payments.length > 0 && (
+          <section className="mt-5">
+            <h2 className="mb-2 font-bold">Riwayat pembayaran</h2>
+            <table>
+              <thead><tr><th>Tanggal</th><th>Referensi</th><th>Pencatat</th><th className="text-right">Jumlah</th></tr></thead>
+              <tbody>{invoice.payments.map((payment) => (
+                <tr key={payment.id}><td>{formatDateTime(payment.received_at)}</td><td>{payment.reference ?? '—'}</td><td>{payment.recorded_by_name}</td><td className="text-right">{formatRupiah(payment.amount)}</td></tr>
+              ))}</tbody>
+            </table>
+          </section>
+        )}
         <div className="mt-16 grid grid-cols-2 gap-16 text-center text-sm">
           <div>Diserahkan oleh<hr className="mx-8 mt-20 border-black" /></div>
           <div>Diterima HRD<hr className="mx-8 mt-20 border-black" /></div>

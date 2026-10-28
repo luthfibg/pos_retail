@@ -2,18 +2,20 @@ import type { Sale } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
 import { moneyToCents } from '@/lib/money';
 
+export type ThermalPaperSize = '58' | '80';
+
 const nonZero = (v: string): boolean => (moneyToCents(v) ?? 0n) !== 0n;
 
 /**
  * Struk dari respons server (tidak ada perhitungan di klien). Lebar tetap kecil agar dekat dengan kertas
  * thermal; cetak lewat CSS print browser (menu dan tombol memakai kelas `no-print`).
  */
-export function ReceiptView({ sale }: { sale: Sale }) {
+export function ReceiptView({ sale, paperSize = '80' }: { sale: Sale; paperSize?: ThermalPaperSize }) {
   const r = sale.receipt;
   const credit = sale.payment_mode === 'payroll_credit';
 
   return (
-    <div className="receipt mx-auto w-full max-w-[22rem] rounded-lg border border-slate-200 bg-white p-4 font-mono text-xs leading-5">
+    <div className={`receipt receipt-${paperSize} mx-auto w-full max-w-[22rem] rounded-lg border border-slate-200 bg-white p-4 font-mono text-xs leading-5`}>
       {r.is_void && (
         <div className="mb-2 border-2 border-red-700 py-1 text-center text-sm font-bold text-red-700">{r.void_label ?? 'DIBATALKAN'}</div>
       )}
@@ -61,6 +63,7 @@ export function ReceiptView({ sale }: { sale: Sale }) {
         {nonZero(sale.tax_amount) && (
           <div className="flex justify-between"><span>PPN{sale.tax_rate ? ` ${formatQty(sale.tax_rate)}%` : ''}</span><span>{formatRupiah(sale.tax_amount)}</span></div>
         )}
+        <div className="print-payment-method flex justify-between"><span>Metode</span><span>{sale.payment_mode === 'cash' ? 'Tunai' : 'Kredit potong gaji'}</span></div>
         <div className="flex justify-between text-sm font-bold"><span>TOTAL</span><span>{formatRupiah(sale.total)}</span></div>
         {sale.payment && (
           <>

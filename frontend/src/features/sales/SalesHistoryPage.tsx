@@ -9,7 +9,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { formatDateTime, formatRupiah } from '@/lib/format';
 import { shiftApi, saleApi } from '@/lib/api/endpoints';
 import type { PaymentMode, Sale, SaleStatus, ShiftStatus } from '@/lib/api/types';
-import { ReceiptView } from './ReceiptView';
+import { ReceiptView, type ThermalPaperSize } from './ReceiptView';
 import { BILLING_STATUS_LABEL, canVoidSale, SALE_STATUS_LABEL, voidUnavailableReason } from './saleHistoryLogic';
 
 interface FilterValues {
@@ -30,6 +30,7 @@ export function SalesHistoryPage() {
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [printSale, setPrintSale] = useState<Sale | null>(null);
+  const [thermalPaperSize, setThermalPaperSize] = useState<ThermalPaperSize>('80');
 
   const query = useQuery({
     queryKey: ['sales', 'history', filters, page],
@@ -67,9 +68,17 @@ export function SalesHistoryPage() {
   return (
     <>
     <div className="sales-history-screen space-y-5 p-6">
-      <div>
-        <h1 className="text-xl font-semibold">Riwayat Penjualan</h1>
-        <p className="mt-1 text-sm text-slate-600">Cari transaksi, lihat detail struk, cetak salinan, atau batalkan transaksi sesuai aturan shift dan tagihan.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Riwayat Penjualan</h1>
+          <p className="mt-1 text-sm text-slate-600">Cari transaksi, lihat detail struk, cetak salinan, atau batalkan transaksi sesuai aturan shift dan tagihan.</p>
+        </div>
+        <Field label="Ukuran kertas cetak">
+          <select className={inputCls} value={thermalPaperSize} onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}>
+            <option value="58">Thermal 58 mm</option>
+            <option value="80">Thermal 80 mm</option>
+          </select>
+        </Field>
       </div>
 
       <form onSubmit={applyFilters} className="no-print grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -149,7 +158,7 @@ export function SalesHistoryPage() {
         />
       )}
     </div>
-    {printSale && <div className="print-only"><ReceiptView sale={printSale} /></div>}
+    {printSale && <div className="print-only"><ReceiptView sale={printSale} paperSize={thermalPaperSize} /></div>}
     </>
   );
 }

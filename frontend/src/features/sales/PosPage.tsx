@@ -21,7 +21,7 @@ import {
 import { CreditExceptionDialog } from './CreditExceptionDialog';
 import { CustomerPicker } from './CustomerPicker';
 import { ProductSearch } from './ProductSearch';
-import { ReceiptView } from './ReceiptView';
+import { ReceiptView, type ThermalPaperSize } from './ReceiptView';
 
 const NO_ERRORS: SaleErrors = { lines: {}, fields: {} };
 const MODE_LABEL: Record<PaymentMode, string> = { cash: 'Tunai', payroll_credit: 'Kredit potong gaji' };
@@ -46,6 +46,7 @@ export function PosPage() {
   /** Permintaan yang hasilnya tidak diketahui (jaringan putus/5xx). Keranjang dikunci; kirim ulang memakai kunci yang sama. */
   const [pending, setPending] = useState<SaleInput | null>(null);
   const [done, setDone] = useState<{ sale: Sale; replayed: boolean } | null>(null);
+  const [thermalPaperSize, setThermalPaperSize] = useState<ThermalPaperSize>('80');
   const [previewMissing, setPreviewMissing] = useState(false);
 
   const shiftQuery = useQuery({ queryKey: ['shifts', 'current'], queryFn: shiftApi.current });
@@ -198,12 +199,18 @@ export function PosPage() {
               Struk ini sudah tercatat sebelumnya; permintaan ulang tidak membuat transaksi ganda.
             </p>
           )}
-          <div className="flex gap-2">
-            <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Cetak struk</button>
-            <button type="button" onClick={reset} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Transaksi baru</button>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Ukuran kertas">
+              <select className={inputCls} value={thermalPaperSize} onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}>
+                <option value="58">Thermal 58 mm</option>
+                <option value="80">Thermal 80 mm</option>
+              </select>
+            </Field>
+            <button type="button" onClick={() => window.print()} className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Cetak struk</button>
+            <button type="button" onClick={reset} className="h-10 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Transaksi baru</button>
           </div>
         </div>
-        <ReceiptView sale={done.sale} />
+        <ReceiptView sale={done.sale} paperSize={thermalPaperSize} />
       </div>
     );
   }

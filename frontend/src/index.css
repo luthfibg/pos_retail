@@ -7,20 +7,37 @@
 html, body, #root { height: 100%; }
 body { @apply bg-slate-50 text-slate-900 antialiased; }
 
+@page receipt58 {
+  size: 58mm auto;
+  margin: 2mm;
+}
+
+@page receipt80 {
+  size: 80mm auto;
+  margin: 3mm;
+}
+
 @media print {
   .no-print { display: none !important; }
   .sales-history-screen { display: none !important; }
   .print-only { display: block !important; }
   body { background: white; }
-  .receipt { border: 0 !important; max-width: none !important; }
+  .receipt { break-inside: auto; border: 0 !important; max-width: none !important; overflow-wrap: anywhere; }
+  .receipt-58 { page: receipt58; width: 54mm; font-size: 9pt; line-height: 1.25; }
+  .receipt-80 { page: receipt80; width: 74mm; font-size: 10pt; line-height: 1.35; }
 }
 
 .print-only { display: none; }
 
-/* Cetak PR/PO (A4). Layar lain memakai .no-print; lembar cetak memakai .print-only.print-doc. */
+/* Cetak PR/PO dan invoice (A4). Layar lain memakai .no-print; lembar cetak memakai .print-only.print-doc. */
+@page printA4 {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
 @media print {
   html, body, #root, #root > div, main { height: auto !important; overflow: visible !important; }
-  .print-doc { color: #000; font-size: 12px; }
+  .print-doc { page: printA4; color: #000; font-size: 12px; }
   .print-doc table { width: 100%; border-collapse: collapse; }
   .print-doc th, .print-doc td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
   .print-doc th { background: #f1f5f9; text-align: left; }
