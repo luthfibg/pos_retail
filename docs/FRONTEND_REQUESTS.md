@@ -9,7 +9,7 @@
 
 | ID | Judul | Prioritas | Status | Diajukan |
 |---|---|---|---|---|
-| FR-01 | Pratinjau penjualan (`POST /api/sales/preview`) | Tinggi (layar kasir) | **Diminta** | 25 Okt 2026 |
+| FR-01 | Pratinjau penjualan (`POST /api/sales/preview`) | Tinggi (layar kasir) | **Selesai backend** | 28 Okt 2026 |
 | FR-02 | Izin Finance untuk daftar/detail setoran | Tinggi (antrean setoran) | **Diminta** | 27 Okt 2026 |
 | FR-03 | Katalog lokasi dan posisi rak untuk transfer stok | Sedang (transfer/putaway) | **Diminta** | 27 Okt 2026 |
 
@@ -17,7 +17,7 @@
 
 ## FR-01 — Pratinjau penjualan
 
-**Status:** Diminta · **Prioritas:** Tinggi · **Dibutuhkan oleh:** layar kasir `/pos` (frontend) · **Perubahan skema:** tidak ada (tanpa migration, tanpa permission baru).
+**Status:** Selesai backend · **Prioritas:** Tinggi · **Dibutuhkan oleh:** layar kasir `/pos` (frontend) · **Perubahan skema:** tidak ada (tanpa migration, tanpa permission baru).
 
 ### Masalah
 

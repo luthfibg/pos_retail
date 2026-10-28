@@ -49,7 +49,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Dashboard dan laporan dasar (penjualan harian, stok menipis/kedaluwarsa, ringkasan kas) | Selesai | **Lolos** test (`ReportTest`, 28 Okt 2026); endpoint baca dengan permission `reports.view`, filter WIB, dan batasan per toko/kasir |
 | Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
 
-**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 28 Okt 2026: **231 test lulus (2.058 assertions)**.
+**Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 28 Okt 2026: **236 test lulus (2.108 assertions)**.
 
 ---
 
@@ -208,5 +208,5 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 1. ~~Verifikasi test master data~~ — **sudah lolos**.
 2. ~~`git init`, commit baseline, cabang per workstream~~ — **sudah** (root `pos_retail`: backend, frontend, docs).
-3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Tahap manajemen pengguna (1.8), kas masuk/keluar nonpenjualan (3.6), transfer stok (2.6), adjustment/opname (2.7), penerimaan gudang/putaway (4.4), lampiran penerimaan (4.5), dan dashboard/laporan (6.3) selesai; suite backend terbaru **231 test lulus (2.058 assertions) pada 28 Okt 2026**. Opname memakai dokumen adjustment `reason=opname`; skema saat ini tidak memiliki sesi opname terpisah. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
+3. ~~Kontrak `InventoryService` dan format nomor dokumen~~ — **sudah** (lihat bagian 4 butir 8–9). Tahap manajemen pengguna (1.8), kas masuk/keluar nonpenjualan (3.6), transfer stok (2.6), adjustment/opname (2.7), penerimaan gudang/putaway (4.4), lampiran penerimaan (4.5), dashboard/laporan (6.3), dan FR-01 pratinjau penjualan selesai; suite backend terbaru **236 test lulus (2.108 assertions) pada 28 Okt 2026**. Opname memakai dokumen adjustment `reason=opname`; skema saat ini tidak memiliki sesi opname terpisah. Backlog frontend terbaru: `docs/FRONTEND_PROGRESS.md`; peta jalan lengkap: `docs/ROADMAP_PROGRESS.md`.
 4. Mulai paralel: WS-B dan WS-A (backend), WS-F scaffold (frontend).

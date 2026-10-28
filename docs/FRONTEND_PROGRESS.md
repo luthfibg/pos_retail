@@ -39,7 +39,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|---|---|---|---|
 | `/login` | Login | — | HANDOFF 6 | ✅ | Throttle 429 ditangani |
 | (layout) | Sidebar: menu Kasir/Shift Saya disembunyikan untuk Admin; kelompok menu abu tipis dan submenu putih; workspace kanan yang dapat discroll | permission | — | 🟡 | Sidebar tetap di viewport; menunggu verifikasi browser |
-| `/pos` | **Kasir**: scan/cari produk, keranjang, tunai dan kredit potong gaji, pemilih karyawan, konfirmasi, struk cetak, pengecualian kredit Admin | `sales.create` | 4, 5 | ✅ diuji manual | Total resmi dari pratinjau server ⛔ FR-01; sementara memakai "perkiraan subtotal" |
+| `/pos` | **Kasir**: scan/cari produk, keranjang, tunai dan kredit potong gaji, pemilih karyawan, konfirmasi, struk cetak, pengecualian kredit Admin | `sales.create` | 4, 5 | ✅ diuji manual | Backend FR-01 tersedia; UI siap memakai total resmi dari pratinjau server |
 | `/shift` | Shift Saya: buka, mulai hitung, tutup (hitung buta), catat kas masuk/keluar, setoran parsial dan serahkan setoran akhir | `shift.open`, `cash_deposit.create`, `cash_movement.create` | 4, 7 | 🟡 | UI parsial baru dibuat; menunggu verifikasi browser |
 | `/shifts` | Tinjau Shift (Admin) | `shift.review` | 4 | ✅ | |
 | `/cash-deposits` | Setoran Masuk: antrean, penerimaan Finance, koreksi selisih, saldo Kas Kecil/Besar | `cash_deposit.receive` | 7.1 | 🟡 | UI baru dibuat; menunggu verifikasi browser |
@@ -110,12 +110,12 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Transfer stok | `transferForm` | 5 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 28 Okt 2026, setelah tahap Manajemen Pengguna, `npm run typecheck`, `npm test` (**161 lulus, 27 berkas**) dan `npm run build` lulus; backend terakhir **231 test (2.058 assertions)**. Test otomatis frontend mencakup logika murni; komponen React tetap perlu verifikasi manual. Pengguna mengonfirmasi filter Dashboard menampilkan data yang benar dan uji klik Tagihan HRD berjalan lancar, selain alur kas masuk/keluar nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan. Manajemen Pengguna, penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
+Pada 28 Okt 2026, setelah tahap Manajemen Pengguna, `npm run typecheck`, `npm test` (**161 lulus, 27 berkas**) dan `npm run build` lulus; backend terakhir **236 test (2.108 assertions)**. Test otomatis frontend mencakup logika murni; komponen React tetap perlu verifikasi manual. Pengguna mengonfirmasi filter Dashboard menampilkan data yang benar dan uji klik Tagihan HRD berjalan lancar, selain alur kas masuk/keluar nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan. Manajemen Pengguna, penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
 
 ## 4. Celah dan catatan yang diketahui
 
 1. **Setoran dan endapan:** Setoran akhir, kebijakan endapan, setoran parsial Kasir, antrean Finance/Admin, penerimaan/koreksi selisih, dan saldo dana tersedia di UI. Pengguna mengonfirmasi pembuatan Draft parsial; uji tindakan lain termasuk antrean Finance masih ditunggu. Tanpa kebijakan endapan aktif, backend mempertahankan seluruh kas terhitung sebagai endapan dan tidak membuat dokumen setoran akhir; atur kebijakan sebelum menguji. **Fitur kas lengkap tetap prasyarat go-live.** Catatan integrasi: route backend daftar/detail setoran masih mewajibkan `cash_deposit.create`, sementara halaman Finance ditampilkan untuk `cash_deposit.receive`; sampai izin route diselaraskan, akun Finance harus memiliki kedua permission.
-2. **Pratinjau penjualan (FR-01) ⛔:** tanpa `POST /api/sales/preview`, kasir tidak melihat total resmi sebelum memproses (diskon dan PPN baru tampak di struk). Layar sudah siap memakainya dan akan berpindah otomatis begitu endpoint ada.
+2. **Pratinjau penjualan (FR-01):** backend `POST /api/sales/preview` sudah tersedia untuk total resmi, diskon, PPN, stok FEFO, dan sinyal batas kredit. Layar kasir siap memakainya dan perlu diverifikasi saat pengujian klik berikutnya.
 3. **Hasil transaksi tidak diketahui:** bila jaringan putus saat posting, keranjang dikunci dan hanya bisa kirim ulang dengan kunci yang sama. Bila tab ditutup sebelum itu, struk mungkin tersimpan tetapi tidak terlihat; riwayat penjualan kini menyediakan pencarian dan detail struk untuk menemukan transaksi tersebut.
 4. **Cetak struk dan invoice:** struk thermal kini memiliki pilihan 58/80 mm dengan ukuran halaman CSS terpisah, dan invoice A4 menampilkan status serta riwayat pembayaran/sisa tagihan. Uji printer fisik, pemilihan printer browser, dan printer/scanner perangkat klien masih wajib dilakukan (ROADMAP 6.1, 6.2, 7.4).
 5. **Karyawan pada penjualan tunai** tidak dipilih di kasir (hanya kredit); backend mengizinkan `customer_id` untuk tunai.
@@ -138,7 +138,7 @@ Jika jadwal mundur, yang tidak boleh dipotong: layar kasir, setoran + endapan, t
 
 ## 6. Permintaan ke backend
 
-Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). Backend bagian 9 (diskon/PPN) dan bagian 10 (manajemen pengguna) sudah lulus test; UI manajemen pengguna tersedia dan menunggu uji klik.
+Lihat `FRONTEND_REQUESTS.md`. **FR-01** pratinjau penjualan sudah selesai di backend dan menunggu verifikasi integrasi/uji klik frontend. Backend bagian 9 (diskon/PPN) dan bagian 10 (manajemen pengguna) sudah lulus test; UI manajemen pengguna tersedia dan menunggu uji klik.
 
 ## 7. Cara memperbarui berkas ini
 

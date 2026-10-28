@@ -77,6 +77,67 @@ class SaleService
         return [$this->find($actor, $storeId, $saleId, true) ?? [], true];
     }
 
+    /** Pratinjau hanya-baca. Tidak memeriksa shift, membuat dokumen, atau mengunci stok. */
+    public function preview(User $actor, int $storeId, array $data): array
+    {
+        $isCredit = $data['payment_mode'] === 'payroll_credit';
+        $customer = null;
+        if (! empty($data['customer_id'])) {
+            $customer = DB::table('customers')->where('store_id', $storeId)->where('id', (int) $data['customer_id'])->first();
+            if ($customer === null) {
+                throw ValidationException::withMessages(['customer_id' => ['Karyawan tidak ditemukan.']]);
+            }
+        }
+        if ($isCredit) {
+            $this->assertCreditCustomer($customer);
+        }
+
+        $calculated = $this->calculateLines($storeId, $data['payment_mode'], $data['items']);
+        $credit = null;
+        if ($isCredit) {
+            $creditState = $this->creditState($customer, $calculated['total']);
+            $credit = [
+                'customer_id' => $customer->id,
+                'remaining_before' => Decimal::moneyString($creditState['remaining_before']),
+                'remaining_after' => Decimal::moneyString($creditState['remaining_after']),
+                'exceeds_limit' => $creditState['exceeds'],
+            ];
+        }
+
+        $lines = [];
+        foreach ($calculated['lines'] as $line) {
+            $available = $this->inventory->availableSellableQty($storeId, $line['product_id']);
+            $product = $calculated['products']->get($line['product_id']);
+            $lines[] = [
+                'index' => $line['index'],
+                'product_id' => $line['product_id'],
+                'sku' => $product->sku,
+                'name' => $product->name,
+                'unit_name' => $product->unit_name,
+                'qty' => Decimal::qtyString($line['qty']),
+                'unit_price' => Decimal::moneyString($line['price']),
+                'gross' => Decimal::moneyString($line['gross']),
+                'discount_amount' => Decimal::moneyString($line['discount']),
+                'discount_name' => $line['discount_name'],
+                'line_total' => Decimal::moneyString($line['line_total']),
+                'stock_available' => Decimal::qtyString(Decimal::qty($available)),
+                'stock_sufficient' => Decimal::qty($available) >= $line['qty'],
+            ];
+        }
+
+        return [
+            'payment_mode' => $data['payment_mode'],
+            'lines' => $lines,
+            'subtotal' => Decimal::moneyString($calculated['subtotal']),
+            'discount_total' => Decimal::moneyString($calculated['discount_total']),
+            'tax_rate' => $calculated['tax_rate'],
+            'tax_amount' => Decimal::moneyString($calculated['tax_amount']),
+            'total' => Decimal::moneyString($calculated['total']),
+            'credit' => $credit,
+            'computed_at' => Carbon::parse($this->now())->format('Y-m-d H:i:s.v'),
+        ];
+    }
+
     /** @return array<string, mixed>|null */
     public function find(User $actor, int $storeId, int $id, bool $canSeeAll, bool $asCopy = false): ?array
     {
@@ -277,71 +338,15 @@ class SaleService
             $this->assertCreditCustomer($customer);
         }
 
-        // 3. baris: gabungkan produk sama, kunci berurutan id
-        $lines = [];
-        foreach ($data['items'] as $index => $item) {
-            $productId = (int) $item['product_id'];
-            if (isset($lines[$productId])) {
-                $lines[$productId]['qty'] += Decimal::qty($item['qty']);
-            } else {
-                $lines[$productId] = ['index' => $index, 'product_id' => $productId, 'qty' => Decimal::qty($item['qty'])];
-            }
-        }
-        ksort($lines);
-
-        $products = DB::table('products')->where('store_id', $storeId)->whereIn('id', array_keys($lines))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
-
-        $errors = [];
-        foreach ($lines as $line) {
-            $product = $products->get($line['product_id']);
-            if ($product === null) {
-                $errors["items.{$line['index']}.product_id"] = ['Produk tidak ditemukan.'];
-            } elseif ($product->status !== 'active' || $product->sell_price === null) {
-                $errors["items.{$line['index']}.product_id"] = ["Produk {$product->name} belum dapat dijual."];
-            }
-        }
-        if ($errors !== []) {
-            throw ValidationException::withMessages($errors);
-        }
-
-        // 4. harga, diskon, total (bilangan bulat sen)
-        $discounts = $this->activeDiscounts($storeId, $products);
-        $computed = [];
-        $subtotal = 0;
-        $discountTotal = 0;
-
-        foreach ($lines as $line) {
-            $product = $products->get($line['product_id']);
-            $price = Decimal::money($product->sell_price);
-            $gross = intdiv($price * $line['qty'] + 500, 1000);
-
-            $best = ['amount' => 0, 'id' => null];
-            foreach ($discounts as $discount) {
-                $matches = ($discount->target_type === 'product' && (int) $discount->target_id === (int) $product->id)
-                    || ($discount->target_type === 'category' && $product->category_id !== null && (int) $discount->target_id === (int) $product->category_id);
-                if (! $matches) {
-                    continue;
-                }
-                $value = Decimal::money($discount->value);
-                $amount = $discount->discount_type === 'percent'
-                    ? intdiv($gross * $value + 5000, 10000)
-                    : intdiv($value * $line['qty'] + 500, 1000);
-                $amount = min($amount, $gross);
-                if ($amount > $best['amount']) {
-                    $best = ['amount' => $amount, 'id' => (int) $discount->id];
-                }
-            }
-
-            $subtotal += $gross;
-            $discountTotal += $best['amount'];
-            $computed[] = $line + [
-                'price' => $price, 'gross' => $gross, 'discount' => $best['amount'], 'discount_id' => $best['id'],
-                'line_total' => $gross - $best['amount'],
-            ];
-        }
-
-        $net = $subtotal - $discountTotal;
-        [$taxAmount, $taxRate, $total] = $isCredit ? [0, null, $net] : $this->cashTax($storeId, $net);
+        // 3–4. baris, harga, diskon, dan pajak memakai sumber logika yang sama dengan pratinjau
+        $calculated = $this->calculateLines($storeId, $data['payment_mode'], $data['items'], lockProducts: true);
+        $computed = $calculated['lines'];
+        $products = $calculated['products'];
+        $subtotal = $calculated['subtotal'];
+        $discountTotal = $calculated['discount_total'];
+        $taxAmount = $calculated['tax_amount'];
+        $taxRate = $calculated['tax_rate'];
+        $total = $calculated['total'];
 
         // 5. pembayaran / kredit
         $tendered = null;
@@ -456,6 +461,97 @@ class SaleService
         return $saleId;
     }
 
+    /**
+     * Gabungan baris, produk, diskon, dan pajak yang dipakai posting dan pratinjau.
+     *
+     * @param array<int, array<string, mixed>> $items
+     * @return array<string, mixed>
+     */
+    private function calculateLines(int $storeId, string $paymentMode, array $items, bool $lockProducts = false): array
+    {
+        $lines = [];
+        foreach ($items as $index => $item) {
+            $productId = (int) $item['product_id'];
+            if (isset($lines[$productId])) {
+                $lines[$productId]['qty'] += Decimal::qty($item['qty']);
+            } else {
+                $lines[$productId] = ['index' => $index, 'product_id' => $productId, 'qty' => Decimal::qty($item['qty'])];
+            }
+        }
+        ksort($lines);
+
+        $query = DB::table('products')->where('store_id', $storeId)->whereIn('id', array_keys($lines))->orderBy('id');
+        $products = ($lockProducts ? $query->lockForUpdate() : $query)->get()->keyBy('id');
+
+        $errors = [];
+        foreach ($lines as $line) {
+            $product = $products->get($line['product_id']);
+            if ($product === null) {
+                $errors["items.{$line['index']}.product_id"] = ['Produk tidak ditemukan.'];
+            } elseif ($product->status !== 'active' || $product->sell_price === null) {
+                $errors["items.{$line['index']}.product_id"] = ["Produk {$product->name} belum dapat dijual."];
+            }
+        }
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $discounts = $this->activeDiscounts($storeId, $products);
+        $computed = [];
+        $subtotal = 0;
+        $discountTotal = 0;
+
+        foreach ($lines as $line) {
+            $product = $products->get($line['product_id']);
+            $price = Decimal::money($product->sell_price);
+            $gross = intdiv($price * $line['qty'] + 500, 1000);
+
+            $best = ['amount' => 0, 'id' => null, 'name' => null];
+            foreach ($discounts as $discount) {
+                $matches = ($discount->target_type === 'product' && (int) $discount->target_id === (int) $product->id)
+                    || ($discount->target_type === 'category' && $product->category_id !== null && (int) $discount->target_id === (int) $product->category_id);
+                if (! $matches) {
+                    continue;
+                }
+
+                $value = Decimal::money($discount->value);
+                $amount = $discount->discount_type === 'percent'
+                    ? intdiv($gross * $value + 5000, 10000)
+                    : intdiv($value * $line['qty'] + 500, 1000);
+                $amount = min($amount, $gross);
+                if ($amount > $best['amount']) {
+                    $best = ['amount' => $amount, 'id' => (int) $discount->id, 'name' => $discount->name];
+                }
+            }
+
+            $subtotal += $gross;
+            $discountTotal += $best['amount'];
+            $computed[] = $line + [
+                'price' => $price,
+                'gross' => $gross,
+                'discount' => $best['amount'],
+                'discount_id' => $best['id'],
+                'discount_name' => $best['name'],
+                'line_total' => $gross - $best['amount'],
+            ];
+        }
+
+        $net = $subtotal - $discountTotal;
+        [$taxAmount, $taxRate, $total] = $paymentMode === 'payroll_credit'
+            ? [0, null, $net]
+            : $this->cashTax($storeId, $net);
+
+        return [
+            'lines' => $computed,
+            'products' => $products,
+            'subtotal' => $subtotal,
+            'discount_total' => $discountTotal,
+            'tax_amount' => $taxAmount,
+            'tax_rate' => $taxRate,
+            'total' => $total,
+        ];
+    }
+
     private function assertCreditCustomer(?object $customer): void
     {
         if ($customer === null) {
@@ -469,8 +565,8 @@ class SaleService
         }
     }
 
-    /** Mengembalikan true bila melebihi batas DAN pengecualian sah; melempar bila melebihi tanpa pengecualian. */
-    private function checkCreditLimit(object $customer, int $total, ?User $approver, ?string $note): bool
+    /** @return array{remaining_before: int, remaining_after: int, exceeds: bool} */
+    private function creditState(object $customer, int $total): array
     {
         $limit = DB::table('customer_credit_limits')->where('customer_id', $customer->id)
             ->orderByDesc('effective_from')->orderByDesc('id')->value('limit_amount');
@@ -481,10 +577,23 @@ class SaleService
 
         $used = DB::table('sales')->where('customer_id', $customer->id)->where('payment_mode', 'payroll_credit')
             ->where('status', 'posted')->whereNull('billing_period_id')->sum('total');
+        $remainingBefore = max(0, Decimal::money((string) $limit) - Decimal::money((string) $used));
+        $exceeds = $total > $remainingBefore;
 
-        $remaining = Decimal::money((string) $limit) - Decimal::money((string) $used);
+        return [
+            'remaining_before' => $remainingBefore,
+            'remaining_after' => $exceeds ? 0 : $remainingBefore - $total,
+            'exceeds' => $exceeds,
+        ];
+    }
 
-        if ($total <= $remaining) {
+    /** Mengembalikan true bila melebihi batas DAN pengecualian sah; melempar bila melebihi tanpa pengecualian. */
+    private function checkCreditLimit(object $customer, int $total, ?User $approver, ?string $note): bool
+    {
+        $creditState = $this->creditState($customer, $total);
+        $remaining = $creditState['remaining_before'];
+
+        if (! $creditState['exceeds']) {
             return false;
         }
 

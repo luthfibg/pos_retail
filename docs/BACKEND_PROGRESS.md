@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 28 Oktober 2026 · **Test terbaru:** `php artisan test` — **231 lulus (2.058 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 28 Oktober 2026 · **Test terbaru:** `php artisan test` — **236 lulus (2.108 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 28 Okt 2026: 231 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 28 Okt 2026: 236 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -247,12 +247,41 @@ Respons shift (`data`):
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
+| POST | `/api/sales/preview` | `sales.create` | Pratinjau read-only: total, diskon, PPN, stok FEFO, dan batas kredit (FR-01) |
 | POST | `/api/sales` | `sales.create` | **Posting penjualan** (tunai atau kredit potong gaji) |
 | GET | `/api/sales` | `sales.create` | Riwayat. Kasir: hanya miliknya; Admin: semua. Filter `q` (nomor struk), `shift_id`, `customer_id`, `status`, `payment_mode`, `date_from`, `date_to`, `per_page` |
 | GET | `/api/sales/{id}` | `sales.create` | Struk lengkap (item, pembayaran, `receipt`) |
 | POST | `/api/sales/{id}/reprint` | `receipt.reprint` | Cetak ulang: struk sama dengan `receipt.is_copy = true`, `copy_label = "SALINAN"`; tercatat di log cetak + audit |
 
 Void: lihat bagian 7.2. Retur pelanggan dan credit note ⏳ (Paket 2).
+
+### POST `/api/sales/preview` ✅ FR-01
+
+Endpoint read-only untuk kasir/administrator yang memiliki `sales.create`, dengan throttle 120 permintaan per menit:
+
+```json
+{ "payment_mode": "cash", "customer_id": null,
+  "items": [ { "product_id": 12, "qty": "2" }, { "product_id": 15, "qty": "0.5" } ] }
+```
+
+Respons memuat baris tergabung, nama diskon terpilih, subtotal, diskon, PPN tunai, total, stok layak jual FEFO saat ini, dan status kecukupan stok. Untuk kredit potong gaji, respons juga memuat `credit.remaining_before`, `remaining_after`, dan `exceeds_limit` tanpa mengirim batas kredit mentah. Melebihi batas adalah sinyal UI (`exceeds_limit: true`) dan bukan error; pengecualian Admin tetap dilakukan hanya saat posting.
+
+Semua aturan harga, diskon, PPN, pembulatan, dan penggabungan baris memakai sumber perhitungan yang sama dengan `POST /api/sales`. Pratinjau tidak memeriksa shift, tidak mengunci/menurunkan stok, tidak membuat nomor dokumen, sale/item/payment, ledger, idempotensi, atau audit. Nomor baris dipertahankan sebagai indeks baris pertama agar kunci error tetap sama, misalnya `items.N.product_id`. Stok kadaluarsa tidak dihitung sebagai tersedia, tetapi stok kurang tidak menolak pratinjau.
+
+Contoh respons:
+
+```json
+{ "data": {
+  "payment_mode": "cash",
+  "lines": [ { "index": 0, "product_id": 12, "sku": "P-000012", "name": "Air Mineral", "unit_name": "pcs",
+    "qty": "2.000", "unit_price": "10000.00", "gross": "20000.00", "discount_amount": "0.00",
+    "discount_name": null, "line_total": "20000.00", "stock_available": "24.000", "stock_sufficient": true } ],
+  "subtotal": "20000.00", "discount_total": "0.00", "tax_rate": null, "tax_amount": "0.00", "total": "20000.00",
+  "credit": null, "computed_at": "2026-10-28 10:15:00.000"
+} }
+```
+
+Validasi dan error 422 sama dengan posting untuk `payment_mode`, `customer_id`, dan `items.*`, kecuali field posting `idempotency_key`, `amount_tendered`, dan `credit_exception` tidak diperlukan. `SalePreviewTest` memeriksa paritas dengan posting, diskon PPN tunai, sinyal batas kredit, stok kadaluarsa, serta sifat read-only.
 
 ### POST `/api/sales`
 
@@ -650,7 +679,8 @@ Semua endpoint memakai `auth:sanctum` dan `reports.view`; data dibatasi ke toko 
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
-- **2026-10-28** — Tahap 6.3: endpoint dashboard/laporan backend untuk penjualan harian, inventori menipis/kedaluwarsa, dan ringkasan kas. Filter tanggal WIB, 365 hari, toko aktif, pembatasan kasir, serta respons dashboard gabungan. `ReportTest` **3 lulus**; suite `php artisan test`: **231 lulus (2.058 assertions)**; Pint lulus.
+- **2026-10-28** — FR-01: endpoint `POST /api/sales/preview` read-only dengan paritas perhitungan posting, diskon/PPN, batas kredit, dan stok FEFO. `SalePreviewTest` 5 lulus; mekanisme tidak menulis sale, payment, stok, ledger, idempotensi, atau audit. Kontrak lengkap di bagian 5.
+- **2026-10-28** — Tahap 6.3: endpoint dashboard/laporan backend untuk penjualan harian, inventori menipis/kedaluwarsa, dan ringkasan kas. Filter tanggal WIB, 365 hari, toko aktif, pembatasan kasir, serta respons dashboard gabungan. `ReportTest` **3 lulus**; suite `php artisan test`: **236 lulus (2.108 assertions)**; style pemeriksaan terarah lulus.
 - **2026-10-27** — Tahap 4.5: upload lampiran GR (JPEG/PNG/WebP/PDF, maks. 10 MB), penyimpanan privat, download dengan pemeriksaan akses pemilik/approver, metadata pada detail, audit, dan penutupan upload setelah dokumen diverifikasi atau GR dibatalkan. `GoodsReceiptTest` **16 lulus**; suite `php artisan test`: **228 lulus (2.019 assertions)**; Pint lulus.
 - **2026-10-27** — Tahap 4.4: Goods Receipt dapat diarahkan ke lokasi gudang aktif ketika `warehouse_enabled=true`, dengan opsi posisi rak per item; pilihan lokasi disediakan endpoint khusus dan konfigurasi/lokasi divalidasi ulang saat draft diposting. Uji jalur gudang, posisi, mode mati, dan regresi: `GoodsReceiptTest` **12 lulus**; suite `php artisan test`: **224 lulus (1.978 assertions)**; Pint dan typecheck frontend lulus.
 - **2026-10-27** — Akses baca adjustment diselaraskan untuk role approver: pemegang `inventory.adjust.approve` dapat membaca antrean dan detail tanpa `inventory.adjust.request`; test akses ditambahkan. `StockAdjustmentTest`: **9 lulus**; suite `php artisan test`: **223 lulus (1.953 assertions)**.

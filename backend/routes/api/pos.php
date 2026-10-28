@@ -23,6 +23,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('shift')->middleware('can:cash_movement.create');
 
     // Penjualan. Kasir hanya melihat struknya sendiri; Admin (shift.review) melihat semua.
+    Route::post('sales/preview', [SaleController::class, 'preview'])
+        ->middleware(['can:sales.create', 'throttle:120,1']);
     Route::post('sales', [SaleController::class, 'store'])->middleware('can:sales.create');
     Route::get('sales', [SaleController::class, 'index'])->middleware('can:sales.create');
     Route::get('sales/{sale}', [SaleController::class, 'show'])->whereNumber('sale')->middleware('can:sales.create');

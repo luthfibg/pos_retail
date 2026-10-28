@@ -198,6 +198,23 @@ class InventoryService
 
     // ------------------------------------------------------------------ penjualan (FEFO)
 
+    /** Jumlah stok layak jual FEFO saat ini; tidak mengunci atau mengubah stok. */
+    public function availableSellableQty(int $storeId, int $productId): string
+    {
+        $locationId = $this->sellingLocationId($storeId);
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
+
+        return DB::table('inventory_balances as bal')
+            ->leftJoin('product_batches as pb', 'pb.id', '=', 'bal.batch_id')
+            ->where('bal.product_id', $productId)
+            ->where('bal.location_id', $locationId)
+            ->where('bal.qty_sellable', '>', 0)
+            ->where(function ($q) use ($today) {
+                $q->whereNull('pb.expiry_date')->orWhere('pb.expiry_date', '>=', $today);
+            })
+            ->sum('bal.qty_sellable');
+    }
+
     /**
      * Mengurangi stok sellable secara FEFO. Mengembalikan alokasi per batch untuk disimpan
      * di sale_item_batches (dan dipakai void). Gagal (ValidationException) bila stok kurang.

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\PreviewSaleRequest;
 use App\Http\Requests\StoreSaleRequest;
 use App\Services\SaleService;
 use App\Services\StoreContext;
@@ -13,6 +14,16 @@ class SaleController extends Controller
 {
     public function __construct(private SaleService $sales, private StoreContext $stores)
     {
+    }
+
+    /** Pratinjau read-only; total persis mengikuti service posting. */
+    public function preview(PreviewSaleRequest $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'data' => $this->sales->preview($user, $this->stores->requireIdFor($user), $request->validated()),
+        ]);
     }
 
     /** 201 = struk baru; 200 + replayed=true = permintaan ulang dengan idempotency_key yang sama. */
