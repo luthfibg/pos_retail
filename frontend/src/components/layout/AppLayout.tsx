@@ -37,7 +37,7 @@ export function AppLayout() {
                   type="button"
                   aria-expanded={isExpanded}
                   onClick={() => setExpandedGroup(isExpanded ? '' : group.label)}
-                  className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100"
+                  className="flex w-full items-center justify-between rounded-md bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-700 hover:bg-slate-200"
                 >
                   <span>{group.label}</span>
                   <span aria-hidden="true">{isExpanded ? '-' : '+'}</span>
@@ -49,7 +49,7 @@ export function AppLayout() {
                         key={item.to}
                         to={item.to}
                         className={({ isActive }) =>
-                          `block rounded-md px-3 py-2 text-sm ${isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`
+                          `block rounded-md border-l-2 bg-white px-3 py-2 text-sm text-slate-900 hover:bg-slate-50 ${isActive ? 'border-slate-900 font-semibold' : 'border-transparent'}`
                         }
                       >
                         {item.label}

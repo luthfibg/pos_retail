@@ -38,7 +38,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Route | Layar | Izin | Bagian `BACKEND_PROGRESS` | Status | Catatan |
 |---|---|---|---|---|---|
 | `/login` | Login | — | HANDOFF 6 | ✅ | Throttle 429 ditangani |
-| (layout) | Sidebar: menu Kasir/Shift Saya disembunyikan untuk Admin; menu dikelompokkan dan workspace kanan yang dapat discroll | permission | — | 🟡 | Sidebar tetap di viewport; menunggu verifikasi browser |
+| (layout) | Sidebar: menu Kasir/Shift Saya disembunyikan untuk Admin; kelompok menu abu tipis dan submenu putih; workspace kanan yang dapat discroll | permission | — | 🟡 | Sidebar tetap di viewport; menunggu verifikasi browser |
 | `/pos` | **Kasir**: scan/cari produk, keranjang, tunai dan kredit potong gaji, pemilih karyawan, konfirmasi, struk cetak, pengecualian kredit Admin | `sales.create` | 4, 5 | ✅ diuji manual | Total resmi dari pratinjau server ⛔ FR-01; sementara memakai "perkiraan subtotal" |
 | `/shift` | Shift Saya: buka, mulai hitung, tutup (hitung buta), catat kas masuk/keluar, setoran parsial dan serahkan setoran akhir | `shift.open`, `cash_deposit.create`, `cash_movement.create` | 4, 7 | 🟡 | UI parsial baru dibuat; menunggu verifikasi browser |
 | `/shifts` | Tinjau Shift (Admin) | `shift.review` | 4 | ✅ | |
@@ -142,6 +142,7 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 
 ## Riwayat
 
+- **2026-10-28** — Perbedaan visual sidebar diperjelas: kelompok menu memakai latar abu tipis, sedangkan submenu berlatar putih dengan teks hitam; submenu aktif ditandai teks tebal dan garis tepi agar tetap jelas tanpa latar gelap.
 - **2026-10-27** — Lampiran privat pada detail `/goods-receipts`: unggah JPEG/PNG/WebP/PDF maksimal 10 MB per berkas, tampilkan metadata, dan unduh melalui endpoint privat dengan Bearer token. Upload ditutup untuk GR batal atau sudah diverifikasi; API menangani multipart tanpa merusak request JSON yang ada. Typecheck, 149 test frontend, dan build lulus; menunggu verifikasi browser.
 - **2026-10-27** — UI Transfer Stok `/inventory/transfers`: daftar/filter dokumen, pembuatan Draft dari saldo sellable per batch/posisi, detail, posting atomik, dan pembatalan Draft dengan alasan opsional. Katalog posisi tujuan belum memiliki endpoint backend, jadi ID posisi tujuan berupa input opsional dan transfer antar lokasi tetap dapat digunakan tanpa posisi. Typecheck, test, dan build lulus; menunggu verifikasi klik browser.
 - **2026-10-27** — Perapihan navigasi: menu Kasir dan Shift Saya disembunyikan dari navigasi Admin, sidebar dikelompokkan dalam bagian yang dapat dibuka-tutup, dan scroll dibatasi pada workspace kanan agar sidebar tetap di tempat. Typecheck dan test lulus; menunggu verifikasi browser.
