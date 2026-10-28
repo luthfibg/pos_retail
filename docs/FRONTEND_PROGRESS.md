@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres frontend.** Setiap pekerjaan frontend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), seperti `BACKEND_PROGRESS.md` untuk backend. Agent frontend baru cukup membaca berkas ini + `BACKEND_PROGRESS.md` (kontrak) + `HANDOFF_POS_RETAIL_SMK.md` (aturan) + `frontend/FRONTEND.md` (struktur dan konvensi). Kebutuhan yang belum dipenuhi kontrak API ditulis di `FRONTEND_REQUESTS.md` untuk agent backend.
 
-**Diperbarui:** 27 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang dan lampiran privat, alur PR/PO, adjustment/opname, transfer stok
+**Diperbarui:** 28 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang dan lampiran privat, alur PR/PO, adjustment/opname, transfer stok, Dashboard
 
 ## Cara membaca status
 
@@ -58,7 +58,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/settings/vat` | **Pengaturan PPN** (Admin): saklar, tarif, harga termasuk/tidak, dialog konfirmasi | `settings.manage` | 9 | ✅ | Test frontend dan backend lulus; keputusan bisnis R-04 tetap menunggu klien |
 | `/settings/float-policy` | **Kebijakan Endapan** (Admin): nominal/persentase, basis, minimum/maksimum, pembulatan | `float.configure` | 7.1 | ✅ | Wajib diatur agar penutupan shift dapat menghasilkan dokumen setoran |
 | (lonceng di sidebar) | Notifikasi: polling 60 dtk, tandai terbaca | login | 3 | ✅ | Bug "lonceng kosong" pernah dilaporkan; belum diverifikasi ulang |
-| `/dashboard` | Dashboard | `reports.view` | 6.3 | 🟡 | Backend selesai: ringkasan penjualan harian, stok menipis/kedaluwarsa, kas, dan endpoint laporan detail; menunggu implementasi/uji klik UI |
+| `/dashboard` | Dashboard: filter tanggal/kasir, ringkasan penjualan dan kas, grafik harian, stok menipis/kedaluwarsa, saldo akun dana sesuai izin | `reports.view` | 6.3 | 🟡 | Backend dan UI tersedia; typecheck/test/build agent lulus, menunggu uji klik pengguna |
 
 ### Backlog frontend (backend sudah siap ✅ kecuali dicatat)
 
@@ -100,11 +100,12 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Riwayat penjualan | `saleHistoryLogic` | 3 | ✅ |
 | Penerimaan barang | `goodsReceiptForm` | 5 | ✅ |
 | PR/PO | `purchaseRequisitionForm` | 4 | ✅ |
+| Dashboard | `dashboardFilters` | 4 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Adjustment & Opname | `adjustmentForm` | 4 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Transfer stok | `transferForm` | 5 | 🟡 test dijalankan agent; belum dikonfirmasi pengguna |
 | Diskon dan PPN | `discountForm`, `vatForm` (+ 2 test `toWibDate` di `format`) | 12 · 9 | ✅ |
 
-Pada 28 Okt 2026, setelah tahap Dashboard/Laporan 6.3, `npm run typecheck`, `npm test` (**149 lulus, 24 berkas**) dan `npm run build` lulus; backend terakhir **231 test (2.058 assertions)**. Test otomatis frontend mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan. Penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
+Pada 28 Okt 2026, setelah tahap Dashboard/Laporan 6.3, `npm run typecheck`, `npm test` (**153 lulus, 25 berkas**) dan `npm run build` lulus; backend terakhir **231 test (2.058 assertions)**. Test otomatis frontend mencakup logika murni; komponen React belum diuji otomatis dan tetap perlu verifikasi manual di browser. Pengguna telah mengonfirmasi alur klik kas masuk/keluar nonpenjualan, pembuatan Draft setoran parsial, dan Riwayat Penjualan. Dashboard, penerimaan barang, alur Admin PR/PO, Adjustment & Opname, Transfer Stok, dan lampiran penerimaan menunggu uji klik.
 
 ## 4. Celah dan catatan yang diketahui
 
@@ -113,7 +114,7 @@ Pada 28 Okt 2026, setelah tahap Dashboard/Laporan 6.3, `npm run typecheck`, `npm
 3. **Hasil transaksi tidak diketahui:** bila jaringan putus saat posting, keranjang dikunci dan hanya bisa kirim ulang dengan kunci yang sama. Bila tab ditutup sebelum itu, struk mungkin tersimpan tetapi tidak terlihat; riwayat penjualan kini menyediakan pencarian dan detail struk untuk menemukan transaksi tersebut.
 4. **Cetak struk:** memakai `window.print` dan lebar kecil di layar; penyesuaian kertas thermal 58/80 mm dan uji printer/scanner di perangkat klien belum dilakukan (ROADMAP 6.1, 7.4).
 5. **Karyawan pada penjualan tunai** tidak dipilih di kasir (hanya kredit); backend mengizinkan `customer_id` untuk tunai.
-6. **Menu "Dashboard"** tersedia untuk Kasir (izin `reports.view` ada pada subset Kasir); backend menyediakan endpoint gabungan dan detail, tetapi UI dashboard belum diterapkan.
+6. **Dashboard** tersedia untuk Kasir yang memiliki `reports.view`; UI memakai endpoint gabungan, membatasi pilihan ID kasir ke pemegang `shift.review`, dan hanya menampilkan saldo dana bila dikirim backend. Uji klik masih menunggu.
 7. **Diskon `amount`** adalah potongan **per unit** (dikalikan qty di server, dibatasi harga baris); label di form dan tabel sudah menyatakannya.
 8. **Tanggal diskon** berupa batas hari WIB yang disimpan UTC; form hanya mengirim tanggal bila diubah agar jam mulai tidak bergeser.
 
@@ -143,6 +144,7 @@ Lihat `FRONTEND_REQUESTS.md`. Terbuka: **FR-01** pratinjau penjualan (Diminta). 
 ## Riwayat
 
 - **2026-10-28** — Perbedaan visual sidebar diperjelas: kelompok menu memakai latar abu tipis, sedangkan submenu berlatar putih dengan teks hitam; submenu aktif ditandai teks tebal dan garis tepi agar tetap jelas tanpa latar gelap.
+- **2026-10-28** — UI Dashboard `/dashboard` memakai endpoint laporan gabungan, filter periode WIB dan ID kasir hanya untuk pemegang `shift.review`, kartu penjualan/kas, grafik harian, tabel stok menipis dan batch kedaluwarsa, serta saldo dana hanya bila diizinkan backend. Validasi rentang tanggal dan grafik memakai helper bertest. `npm run typecheck`, `npm test` (**153 lulus, 25 berkas**), `npm run build`, dan `git diff --check` lulus; uji klik pengguna menunggu.
 - **2026-10-27** — Lampiran privat pada detail `/goods-receipts`: unggah JPEG/PNG/WebP/PDF maksimal 10 MB per berkas, tampilkan metadata, dan unduh melalui endpoint privat dengan Bearer token. Upload ditutup untuk GR batal atau sudah diverifikasi; API menangani multipart tanpa merusak request JSON yang ada. Typecheck, 149 test frontend, dan build lulus; menunggu verifikasi browser.
 - **2026-10-27** — UI Transfer Stok `/inventory/transfers`: daftar/filter dokumen, pembuatan Draft dari saldo sellable per batch/posisi, detail, posting atomik, dan pembatalan Draft dengan alasan opsional. Katalog posisi tujuan belum memiliki endpoint backend, jadi ID posisi tujuan berupa input opsional dan transfer antar lokasi tetap dapat digunakan tanpa posisi. Typecheck, test, dan build lulus; menunggu verifikasi klik browser.
 - **2026-10-27** — Perapihan navigasi: menu Kasir dan Shift Saya disembunyikan dari navigasi Admin, sidebar dikelompokkan dalam bagian yang dapat dibuka-tutup, dan scroll dibatasi pada workspace kanan agar sidebar tetap di tempat. Typecheck dan test lulus; menunggu verifikasi browser.

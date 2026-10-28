@@ -4,7 +4,6 @@ import { RequireAnyPermission, RequireAuth, RequirePermission } from '@/features
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
-import { Placeholder } from '@/pages/Placeholder';
 import { NotFound } from '@/pages/NotFound';
 import { ProductsPage } from '@/features/products/ProductsPage';
 import { CategoriesPage } from '@/features/categories/CategoriesPage';
@@ -24,6 +23,7 @@ const AdjustmentsPage = lazy(() => import('@/features/inventory/AdjustmentsPage'
 const TransfersPage = lazy(() => import('@/features/inventory/TransfersPage').then((module) => ({ default: module.TransfersPage })));
 const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
 const PurchasingEntryPage = lazy(() => import('@/features/purchasing/PurchaseBoardPage').then((module) => ({ default: module.PurchasingEntryPage })));
+const DashboardPage = lazy(() => import('@/features/reports/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<div className="p-6 text-slate-500">Memuat layar…</div>}>{children}</Suspense>;
@@ -59,7 +59,7 @@ export const router = createBrowserRouter([
           },
           {
             element: <RequirePermission permission="reports.view" />,
-            children: [{ path: 'dashboard', element: <Placeholder title="Dashboard" /> }],
+            children: [{ path: 'dashboard', element: <LazyPage><DashboardPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="inventory.view" />,

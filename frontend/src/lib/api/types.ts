@@ -286,6 +286,83 @@ export interface StockTransferInput {
   }>;
 }
 
+export interface DailySalesReportRow {
+  date: string;
+  transaction_count: number;
+  gross_sales: Decimal;
+  discount_total: Decimal;
+  tax_amount: Decimal;
+  net_sales: Decimal;
+}
+
+export interface SalesDailyReport {
+  summary: {
+    transaction_count: number;
+    gross_sales: Decimal;
+    discount_total: Decimal;
+    tax_amount: Decimal;
+    net_sales: Decimal;
+  };
+  by_payment_mode: {
+    cash: { transaction_count: number; net_sales: Decimal };
+    payroll_credit: { transaction_count: number; net_sales: Decimal };
+  };
+  daily: DailySalesReportRow[];
+}
+
+export interface LowStockReportItem {
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  qty_sellable: Decimal;
+  min_stock: Decimal;
+  critical_stock: Decimal;
+  status: StockStatus;
+}
+
+export interface ExpiringBatchReportItem {
+  balance_id: number;
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  batch_id: number;
+  batch_code: string | null;
+  expiry_date: string;
+  days_to_expiry: number;
+  qty_sellable: Decimal;
+  status: 'kedaluwarsa' | 'hari_ini' | 'akan_kedaluwarsa';
+}
+
+export interface InventoryReport {
+  warning_days: number;
+  low_stock: LowStockReportItem[];
+  expiring_batches: ExpiringBatchReportItem[];
+  counts: { low_stock: number; expiring_batches: number };
+}
+
+export interface CashSummaryReport {
+  sales: { transaction_count: number; cash: Decimal; payroll_credit: Decimal };
+  movements: { cash_in: Decimal; cash_out: Decimal };
+  deposits: { counted_amount: Decimal; settled_amount: Decimal; received_amount: Decimal };
+  net_cash_movement: Decimal;
+  shift_count: number;
+  fund_balances: Array<{
+    id: number;
+    type: FundAccountType;
+    name: string;
+    balance: Decimal;
+  }>;
+}
+
+export interface DashboardReport {
+  period: { date_from: string; date_to: string };
+  sales: SalesDailyReport;
+  inventory: InventoryReport;
+  cash: CashSummaryReport;
+}
+
 export type CustomerStatus = 'pending_verification' | 'active' | 'inactive';
 export type CreditState = 'not_verified' | 'limit_not_set' | 'available' | 'exhausted' | 'inactive';
 

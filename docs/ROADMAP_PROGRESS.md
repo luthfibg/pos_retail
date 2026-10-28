@@ -66,15 +66,17 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 
 ### Tahap frontend terbaru
 
-Tahap terbaru mencakup UI Transfer Stok `/inventory/transfers` (daftar/filter, Draft dari saldo sellable per batch/posisi, detail, posting, pembatalan) dan lampiran privat di detail `/goods-receipts` (unggah/unduh JPEG, PNG, WebP, PDF). Backend belum menyediakan katalog posisi rak, jadi posisi tujuan transfer dapat diisi sebagai ID opsional; transfer antar lokasi tetap berfungsi tanpa posisi tujuan. Typecheck, 149 test frontend, dan build produksi lulus; uji klik pengguna masih menunggu.
+UI Dashboard `/dashboard` kini menggunakan endpoint laporan gabungan backend dengan filter periode WIB dan pilihan ID kasir hanya untuk pemegang `shift.review`; menampilkan ringkasan penjualan/kas, grafik harian, tabel stok menipis dan batch yang mendekati kedaluwarsa, serta saldo dana hanya bila dikirim backend. Validasi filter dan skala grafik memiliki test logika. Typecheck, test frontend, dan build produksi dijalankan pada tahap ini; verifikasi klik pengguna masih menunggu.
+
+Tahap sebelumnya mencakup UI Transfer Stok `/inventory/transfers` (daftar/filter, Draft dari saldo sellable per batch/posisi, detail, posting, pembatalan) dan lampiran privat di detail `/goods-receipts` (unggah/unduh JPEG, PNG, WebP, PDF). Backend belum menyediakan katalog posisi rak, jadi posisi tujuan transfer dapat diisi sebagai ID opsional; transfer antar lokasi tetap berfungsi tanpa posisi tujuan.
 
 Tahap PR/PO sebelumnya menutup gap alur pembelian yang hanya mencakup penerimaan PO yang sudah tersedia. `/purchase-requisitions` mendukung Kasir membuat/mengubah/mengajukan PR; Finance memeriksa dan mengembalikan dengan catatan; Owner menyetujui/menolak dengan autentikasi ulang; dan Purchasing membuat PO per supplier, mengajukan, melakukan konfirmasi Owner bila nilai PO memerlukan persetujuan, serta menandai PO dikirim.
 
 Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga dapat dipakai pada model Admin gabungan maupun konfigurasi Kasir/Finance/Purchasing/Owner terpisah. Akses GET PR backend juga mendukung permission pengelolaan tanpa mewajibkan permission `purchase_requisition.create`. `npm run typecheck`, `npm test` (130 test), `npm run build`, dan `php artisan test` (222 test saat tahap tersebut) lulus. Uji klik tahap Admin PR/PO belum dikonfirmasi.
 
-**Langkah frontend berikutnya:** uji klik Transfer Stok, lampiran Penerimaan Barang, dan Adjustment/Opname. Sesudahnya, lanjutkan Tagihan HRD dan Manajemen Pengguna; `/goods-receipts` tetap menunggu uji klik. Penyelesaian penerimaan barang dan Tagihan HRD tetap penting untuk go-live.
+**Langkah frontend berikutnya:** uji klik Dashboard, Transfer Stok, lampiran Penerimaan Barang, dan Adjustment/Opname. Sesudahnya, lanjutkan Tagihan HRD dan Manajemen Pengguna; `/goods-receipts` tetap menunggu uji klik. Penyelesaian penerimaan barang dan Tagihan HRD tetap penting untuk go-live.
 
-**Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → transfer antar-rak → dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
+**Jika jadwal mundur, potong dalam urutan ini** (dari `HANDOFF` bagian 7): denah rak visual (pakai daftar) → transfer antar-rak. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 
 ---
 
@@ -205,14 +207,15 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 ## 4. Untuk agent frontend
 
-**Terbaru (28 Okt 2026): backend suite lulus 231 test; laporan dashboard 6.3 tersedia dan UI adjustment/opname (2.7) menunggu uji klik.** Backend inventory juga menyediakan transfer (2.6), yang UI-nya belum dibuat. UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan sudah diuji pengguna. `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway/lampiran belum dibuat; penerimaan, UI PR/PO menunggu uji klik. Uji Finance pada setoran tetap belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
+**Terbaru (28 Okt 2026): backend suite lulus 231 test; UI Dashboard dan Transfer Stok tersedia, menunggu uji klik.** UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan sudah diuji pengguna. `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway belum dibuat, sementara unggah/unduh lampiran tersedia dan menunggu uji klik. Penerimaan, UI PR/PO dan Adjustment/Opname juga menunggu uji klik. Uji Finance pada setoran tetap belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|
 | Auth, kategori, supplier, produk | HANDOFF bagian 6 | ✅ | auth, categories, suppliers, products |
 | Inventory (stok awal, stok per batch, pergerakan) | 1 | ✅ | inventory |
 | Adjustment & Opname | 1 | ✅ backend / 🟡 UI | `inventory/AdjustmentsPage.tsx` (menunggu uji klik) |
-| Transfer stok antarposisi / putaway | 1 | ✅ | UI belum ada |
+| Transfer stok antarposisi / putaway | 1 | ✅ | `inventory/TransfersPage.tsx` (menunggu uji klik; katalog posisi rak belum ada) |
+| Dashboard dan laporan | 11 | ✅ | `reports/DashboardPage.tsx` (menunggu uji klik) |
 | Karyawan + batas kredit | 2 | ✅ | customers |
 | Notifikasi | 3 | ✅ | notifications |
 | Shift kasir | 4 | ✅ | shifts |

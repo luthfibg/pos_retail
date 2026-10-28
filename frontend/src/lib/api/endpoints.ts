@@ -8,6 +8,7 @@ import type {
   PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
+  DashboardReport,
 } from './types';
 
 export const authApi = {
@@ -15,6 +16,11 @@ export const authApi = {
     api<LoginResponse>('/auth/login', { method: 'POST', body: { username, password } }),
   logout: () => api<{ message: string }>('/auth/logout', { method: 'POST' }),
   me: () => api<Me>('/auth/me'),
+};
+
+export const reportApi = {
+  dashboard: (filters: { date_from: string; date_to: string; cashier_id?: number }) =>
+    api<{ data: DashboardReport }>('/reports/dashboard', { query: filters }).then((r) => r.data),
 };
 
 export interface ProductFilters {
