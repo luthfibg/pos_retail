@@ -33,8 +33,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Setoran kasir (Kas Kecil -> Kas Besar) dan kebijakan endapan
     Route::post('shifts/{shift}/deposits', [CashDepositController::class, 'storePartial'])->whereNumber('shift')->middleware('can:cash_deposit.create');
-    Route::get('cash-deposits', [CashDepositController::class, 'index'])->middleware('can:cash_deposit.create');
-    Route::get('cash-deposits/{deposit}', [CashDepositController::class, 'show'])->whereNumber('deposit')->middleware('can:cash_deposit.create');
+    // Kasir (create) dan Finance (receive) perlu membaca antrean setoran.
+    Route::get('cash-deposits', [CashDepositController::class, 'index']);
+    Route::get('cash-deposits/{deposit}', [CashDepositController::class, 'show'])->whereNumber('deposit');
     Route::post('cash-deposits/{deposit}/submit', [CashDepositController::class, 'submit'])->whereNumber('deposit')->middleware('can:cash_deposit.create');
     Route::post('cash-deposits/{deposit}/cancel', [CashDepositController::class, 'cancel'])->whereNumber('deposit')->middleware('can:cash_deposit.create');
     Route::post('cash-deposits/{deposit}/receive', [CashDepositController::class, 'receive'])->whereNumber('deposit')->middleware('can:cash_deposit.receive');

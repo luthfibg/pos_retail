@@ -10,12 +10,12 @@ use Illuminate\Validation\Rule;
 
 class CashDepositController extends Controller
 {
-    public function __construct(private CashDepositService $deposits, private StoreContext $stores)
-    {
-    }
+    public function __construct(private CashDepositService $deposits, private StoreContext $stores) {}
 
     public function index(Request $request): JsonResponse
     {
+        $this->authorizeViewing($request);
+
         $filters = $request->validate([
             'status' => ['nullable', Rule::in(['draft', 'submitted', 'received', 'discrepancy', 'corrected'])],
             'kind' => ['nullable', Rule::in(['partial', 'final'])],
@@ -31,12 +31,20 @@ class CashDepositController extends Controller
 
     public function show(Request $request, int $deposit): JsonResponse
     {
+        $this->authorizeViewing($request);
+
         $user = $request->user();
         $found = $this->deposits->find($user, $this->stores->requireIdFor($user), $deposit, $user->can('cash_deposit.receive'));
 
         abort_if($found === null, 404, 'Setoran tidak ditemukan.');
 
         return response()->json(['data' => $found]);
+    }
+
+    private function authorizeViewing(Request $request): void
+    {
+        $user = $request->user();
+        abort_unless($user->can('cash_deposit.create') || $user->can('cash_deposit.receive'), 403);
     }
 
     /** Setoran parsial di tengah shift. */

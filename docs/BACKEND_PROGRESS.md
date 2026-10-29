@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 28 Oktober 2026 · **Test terbaru:** `php artisan test` — **236 lulus (2.108 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 28 Oktober 2026 · **Test terbaru:** `php artisan test` — **238 lulus (2.129 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 28 Okt 2026: 236 test lulus) |
+| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 28 Okt 2026: 238 test lulus) |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -493,8 +493,8 @@ Endapan = uang yang sengaja tetap di laci dan menjadi saldo awal shift berikutny
 | GET | `/api/float-policies` | `float.propose` | Kebijakan aktif: `{ "data": { "petty_cash": {…}\|null, "main_cash": {…}\|null } }` |
 | PUT | `/api/float-policies/{scope}` | `float.configure` (Admin) | Tetapkan versi baru (`scope` = `petty_cash`\|`main_cash`); versi lama dinonaktifkan, tercatat di audit |
 | POST | `/api/shifts/{id}/deposits` | `cash_deposit.create` | **Setoran parsial** tengah shift: `{ "counted_amount": "800000", "note"? }` → Draft |
-| GET | `/api/cash-deposits?status=&kind=&shift_id=&per_page=` | `cash_deposit.create` | Daftar (Kasir: hanya shift sendiri; Finance/Admin: semua) |
-| GET | `/api/cash-deposits/{id}` | idem | Detail |
+| GET | `/api/cash-deposits?status=&kind=&shift_id=&per_page=` | `cash_deposit.create` **atau** `cash_deposit.receive` | Daftar (pemegang `create`: hanya shift sendiri; pemegang `receive`: semua) |
+| GET | `/api/cash-deposits/{id}` | `cash_deposit.create` **atau** `cash_deposit.receive` | Detail (pemegang `create` dibatasi ke shift sendiri; pemegang `receive` dapat melihat semua) |
 | POST | `/api/cash-deposits/{id}/submit` | `cash_deposit.create` | Kasir menyerahkan uang: `draft` → `submitted` |
 | POST | `/api/cash-deposits/{id}/cancel` | idem | Batalkan Draft **parsial** (dokumen dihapus; setoran akhir tidak bisa dibatalkan) |
 | POST | `/api/cash-deposits/{id}/receive` | `cash_deposit.receive` (Admin) | Finance menghitung ulang: `{ "received_amount": "734000", "note"? }` |
@@ -680,7 +680,8 @@ Semua endpoint memakai `auth:sanctum` dan `reports.view`; data dibatasi ke toko 
 
 ## Riwayat
 - **2026-10-28** — FR-01: endpoint `POST /api/sales/preview` read-only dengan paritas perhitungan posting, diskon/PPN, batas kredit, dan stok FEFO. `SalePreviewTest` 5 lulus; mekanisme tidak menulis sale, payment, stok, ledger, idempotensi, atau audit. Kontrak lengkap di bagian 5.
-- **2026-10-28** — Tahap 6.3: endpoint dashboard/laporan backend untuk penjualan harian, inventori menipis/kedaluwarsa, dan ringkasan kas. Filter tanggal WIB, 365 hari, toko aktif, pembatasan kasir, serta respons dashboard gabungan. `ReportTest` **3 lulus**; suite `php artisan test`: **236 lulus (2.108 assertions)**; style pemeriksaan terarah lulus.
+- **2026-10-28** — FR-02: daftar/detail antrean setoran mengizinkan `cash_deposit.create` atau `cash_deposit.receive`; pemegang `receive` dapat membaca semua shift tanpa mendapat hak membuat/menyerahkan setoran. `CashDepositTest` 16 lulus, termasuk Finance receive-only dan penolakan tanpa kedua izin. Suite `php artisan test`: **238 lulus (2.129 assertions)**.
+- **2026-10-28** — Tahap 6.3: endpoint dashboard/laporan backend untuk penjualan harian, inventori menipis/kedaluwarsa, dan ringkasan kas. Filter tanggal WIB, 365 hari, toko aktif, pembatasan kasir, serta respons dashboard gabungan. `ReportTest` **3 lulus**; suite saat tahap selesai: **231 lulus (2.058 assertions)**.
 - **2026-10-27** — Tahap 4.5: upload lampiran GR (JPEG/PNG/WebP/PDF, maks. 10 MB), penyimpanan privat, download dengan pemeriksaan akses pemilik/approver, metadata pada detail, audit, dan penutupan upload setelah dokumen diverifikasi atau GR dibatalkan. `GoodsReceiptTest` **16 lulus**; suite `php artisan test`: **228 lulus (2.019 assertions)**; Pint lulus.
 - **2026-10-27** — Tahap 4.4: Goods Receipt dapat diarahkan ke lokasi gudang aktif ketika `warehouse_enabled=true`, dengan opsi posisi rak per item; pilihan lokasi disediakan endpoint khusus dan konfigurasi/lokasi divalidasi ulang saat draft diposting. Uji jalur gudang, posisi, mode mati, dan regresi: `GoodsReceiptTest` **12 lulus**; suite `php artisan test`: **224 lulus (1.978 assertions)**; Pint dan typecheck frontend lulus.
 - **2026-10-27** — Akses baca adjustment diselaraskan untuk role approver: pemegang `inventory.adjust.approve` dapat membaca antrean dan detail tanpa `inventory.adjust.request`; test akses ditambahkan. `StockAdjustmentTest`: **9 lulus**; suite `php artisan test`: **223 lulus (1.953 assertions)**.

@@ -10,7 +10,7 @@
 | ID | Judul | Prioritas | Status | Diajukan |
 |---|---|---|---|---|
 | FR-01 | Pratinjau penjualan (`POST /api/sales/preview`) | Tinggi (layar kasir) | **Selesai backend** | 28 Okt 2026 |
-| FR-02 | Izin Finance untuk daftar/detail setoran | Tinggi (antrean setoran) | **Diminta** | 27 Okt 2026 |
+| FR-02 | Izin Finance untuk daftar/detail setoran | Tinggi (antrean setoran) | **Selesai backend** | 28 Okt 2026 |
 | FR-03 | Katalog lokasi dan posisi rak untuk transfer stok | Sedang (transfer/putaway) | **Diminta** | 27 Okt 2026 |
 
 ---
@@ -111,11 +111,11 @@ Bila lebih mudah, nama rute boleh diubah (mis. `POST /api/sales/quote`); kabari 
 
 ## FR-02 — Izin Finance untuk daftar/detail setoran
 
-**Status:** Diminta · **Prioritas:** Tinggi · **Dibutuhkan oleh:** halaman `/cash-deposits` · **Perubahan skema:** tidak ada.
+**Status:** Selesai backend · **Prioritas:** Tinggi · **Dibutuhkan oleh:** halaman `/cash-deposits` · **Perubahan skema:** tidak ada.
 
-Route `GET /api/cash-deposits` dan `GET /api/cash-deposits/{id}` saat ini memakai middleware `can:cash_deposit.create`, sedangkan halaman antrean Finance/Admin dan saldo dana seharusnya dapat digunakan pemegang `cash_deposit.receive`. `POST receive`, `POST correct`, dan `GET /api/fund-accounts` sudah memakai `cash_deposit.receive`. Akibatnya akun Finance yang hanya diberi izin menerima setoran akan mendapat 403 saat mengambil antrean/detail.
+`GET /api/cash-deposits` dan `GET /api/cash-deposits/{id}` menerima salah satu permission `cash_deposit.create` atau `cash_deposit.receive`. Pemegang `create` tetap terbatas pada shift sendiri; pemegang `receive` dapat melihat semua setoran. Izin untuk membuat/menyerahkan setoran tetap terpisah dari izin Finance untuk menerima/mengoreksi dan membaca saldo dana.
 
-Mohon izinkan `cash_deposit.receive` untuk daftar dan detail setoran, sambil mempertahankan `cash_deposit.create` untuk Kasir. Otorisasi data tetap mengikuti aturan service: Kasir hanya melihat setoran shift sendiri, Finance/Admin dengan `cash_deposit.receive` dapat melihat semua. Tambahkan test Finance yang hanya memiliki permission `cash_deposit.receive` untuk daftar, detail, penerimaan, koreksi, dan saldo; pastikan Kasir tidak dapat melihat setoran milik shift lain.
+`CashDepositTest` menguji akses Finance dengan `cash_deposit.receive` saja untuk daftar, detail lintas shift, penerimaan, koreksi, dan saldo; juga memastikan Finance tidak dapat membuat/menyerahkan setoran dan pengguna tanpa kedua izin ditolak.
 
 ---
 

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\InventoryService;
+use App\Services\PermissionResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -25,6 +26,17 @@ class CashDepositTest extends SeededTestCase
     private function as(User $user): void
     {
         Sanctum::actingAs($user, ['*']);
+    }
+
+    private function setPermission(User $user, string $code, string $effect): void
+    {
+        DB::table('user_permissions')->insert([
+            'user_id' => $user->id,
+            'permission_id' => DB::table('permissions')->where('code', $code)->value('id'),
+            'store_id' => $this->storeId(),
+            'effect' => $effect,
+        ]);
+        app(PermissionResolver::class)->flush();
     }
 
     private function policy(array $override = []): void
@@ -180,6 +192,43 @@ class CashDepositTest extends SeededTestCase
         $this->getJson('/api/cash-deposits')->assertOk()->assertJsonPath('total', 1);
         $this->getJson('/api/cash-deposits?status=draft&kind=final')->assertOk()->assertJsonPath('total', 1);
         $this->getJson('/api/cash-deposits?status=bogus')->assertUnprocessable();
+    }
+
+    public function test_finance_can_read_deposit_queue_with_receive_permission_only(): void
+    {
+        [, $depositId] = $this->closedShiftWithDeposit();
+        $this->as($this->cashier);
+        $this->postJson("/api/cash-deposits/{$depositId}/submit")->assertOk();
+
+        $finance = $this->makeUser('Kasir', 'finance-setoran');
+        $this->setPermission($finance, 'cash_deposit.create', 'deny');
+        $this->setPermission($finance, 'cash_deposit.receive', 'allow');
+        $this->as($finance);
+
+        $this->getJson('/api/cash-deposits')->assertOk()->assertJsonPath('total', 1);
+        $this->getJson("/api/cash-deposits/{$depositId}")->assertOk()
+            ->assertJsonPath('data.id', $depositId);
+        $this->getJson('/api/fund-accounts')->assertOk();
+
+        $shiftId = (int) DB::table('cash_deposits')->where('id', $depositId)->value('shift_id');
+        $this->postJson("/api/shifts/{$shiftId}/deposits", ['counted_amount' => '800000'])->assertForbidden();
+        $this->postJson("/api/cash-deposits/{$depositId}/submit")->assertForbidden();
+        $this->postJson("/api/cash-deposits/{$depositId}/receive", ['received_amount' => '734000'])
+            ->assertOk()->assertJsonPath('data.status', 'received');
+        $this->postJson("/api/cash-deposits/{$depositId}/correct", ['reason' => 'koreksi'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+    }
+
+    public function test_user_without_either_deposit_permission_cannot_read_queue_or_detail(): void
+    {
+        [, $depositId] = $this->closedShiftWithDeposit();
+        $user = $this->makeUser('Kasir', 'tanpa-izin-setoran');
+        $this->setPermission($user, 'cash_deposit.create', 'deny');
+        $this->setPermission($user, 'cash_deposit.receive', 'deny');
+        $this->as($user);
+
+        $this->getJson('/api/cash-deposits')->assertForbidden();
+        $this->getJson("/api/cash-deposits/{$depositId}")->assertForbidden();
     }
 
     // ------------------------------------------------------------------ penerimaan Finance
