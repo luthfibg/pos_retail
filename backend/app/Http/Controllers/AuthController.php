@@ -6,6 +6,7 @@ use App\Http\Requests\LoginRequest;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\PermissionResolver;
+use App\Services\PlatformAccess;
 use App\Services\StoreContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,8 +21,8 @@ class AuthController extends Controller
         private PermissionResolver $permissions,
         private StoreContext $stores,
         private AuditLogger $audit,
-    ) {
-    }
+        private PlatformAccess $platformAccess,
+    ) {}
 
     public function login(LoginRequest $request): JsonResponse
     {
@@ -58,6 +59,7 @@ class AuthController extends Controller
             'token_type' => 'Bearer',
             'expires_at' => $expiresAt->toIso8601String(),
             'user' => $this->userPayload($user),
+            'platform_operator' => $this->platformAccess->isOperator($user),
         ]);
     }
 
@@ -78,8 +80,19 @@ class AuthController extends Controller
     {
         $user = $request->user();
         $storeId = $this->stores->idFor($user);
+        $isPlatformOperator = $this->platformAccess->isOperator($user);
 
-        abort_if($storeId === null, 403, 'Pengguna belum ditugaskan ke toko ini.');
+        abort_if($storeId === null && ! $isPlatformOperator, 403, 'Pengguna belum ditugaskan ke toko aktif.');
+
+        if ($storeId === null) {
+            return response()->json([
+                'user' => $this->userPayload($user),
+                'platform_operator' => true,
+                'store' => null,
+                'roles' => [],
+                'permissions' => [],
+            ]);
+        }
 
         $roles = DB::table('user_roles as ur')
             ->join('roles as r', 'r.id', '=', 'ur.role_id')
@@ -93,6 +106,7 @@ class AuthController extends Controller
             'store' => DB::table('stores')->where('id', $storeId)->first(['id', 'code', 'name', 'timezone', 'currency']),
             'roles' => $roles,
             'permissions' => $this->permissions->codes($user, $storeId),
+            'platform_operator' => $isPlatformOperator,
         ]);
     }
 

@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 28 Oktober 2026 · **Test terbaru:** `php artisan test` — **238 lulus (2.129 assertions)** · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna)
+**Diperbarui:** 30 Oktober 2026 · **Validasi terbaru:** Management Retail 6 test lulus; Auth/Seeder/RBAC 18 test lulus. Suite penuh: 243 lulus, 1 gagal pada `ReportTest` karena fixture tanggal `2026-10-30` diklasifikasikan `hari_ini` alih-alih `akan_kedaluwarsa` (gagal juga saat dijalankan tersendiri). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -10,7 +10,7 @@
 
 | Tanda | Arti |
 |---|---|
-| ✅ Lolos | `php artisan test` sudah dijalankan dan hijau (terakhir 28 Okt 2026: 238 test lulus) |
+| ✅ Lolos | Test untuk fitur terkait sudah dijalankan dan hijau; status suite penuh terbaru dirangkum di header |
 | 🟡 Belum dijalankan | Kode + test sudah ditulis, **belum** dijalankan (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontrak ini, tapi respons nyata bisa sedikit berbeda sampai test hijau |
 | ⏳ Belum | Belum dikerjakan |
 
@@ -24,6 +24,45 @@
 - Izin di UI hanya menyembunyikan menu/tombol; backend tetap menolak (tangani 403/422).
 
 ---
+
+## Management Retail (operator platform)
+
+API ini khusus operator sistem, terpisah dari RBAC toko. Admin toko tidak otomatis mendapat akses. Operator platform dibuat lewat CLI setelah migration dan seeder dijalankan:
+
+```sh
+php artisan platform:operator-create <username> "<nama>"
+```
+
+Password dimasukkan dan dikonfirmasi secara interaktif (minimal 12 karakter), tidak sebagai argumen. Akun disimpan terpisah pada `platform_operators`; operator tidak perlu ditugaskan ke toko. Login tetap memakai `/api/auth/login` dan respons menyertakan `platform_operator`. `/api/auth/me` operator tanpa penugasan toko mengembalikan `store: null`, `roles: []`, dan `permissions: []`. Lindungi kredensial operator seperti akses administratif tingkat sistem.
+
+Semua endpoint berikut memerlukan `auth:sanctum` dan status operator platform aktif:
+
+| Method | Path | Fungsi |
+|---|---|---|
+| GET | `/api/platform/stores` | Daftar tenant; filter opsional `q`, `status=active|inactive`, `per_page` (1–100, default 25) |
+| POST | `/api/platform/stores` | Buat tenant serta akun Admin awal secara atomik |
+| GET | `/api/platform/stores/{id}` | Detail tenant, daftar `admin_users`, dan `user_count` |
+| PATCH | `/api/platform/stores/{id}/status` | Aktifkan/nonaktifkan tenant tanpa menghapus datanya |
+
+Contoh onboarding:
+```json
+{
+  "code": "CLIENT-01",
+  "name": "Toko Klien",
+  "timezone": "Asia/Jakarta",
+  "currency": "IDR",
+  "owner": {
+    "name": "Pemilik Toko",
+    "username": "pemilik",
+    "email": "pemilik@example.com",
+    "password": "minimal-12-karakter"
+  }
+}
+```
+
+`timezone` dan `currency` opsional (default `Asia/Jakarta` dan `IDR`); email owner opsional. Username dan kode tenant unik. Provisioning membuat toko aktif, akun owner dengan role `Admin`, lokasi toko dan gudang (gudang nonaktif), register, akun dana, serta setting default termasuk `warehouse_enabled=false`. Respons onboarding mengembalikan `initial_owner` untuk ditampilkan sekali saat setup; jangan menyimpan atau mencatat password di log/UI.
+
+Ubah status dengan `{ "is_active": false, "reason": "..." }`. Tenant nonaktif tidak dapat dipilih sebagai konteks toko dan permintaan pengguna toko akan ditolak, tetapi akun maupun data tenant tetap utuh. Perubahan status dan onboarding dicatat dalam audit log. Operator platform mengelola tenant lewat prefix API ini; endpoint toko tetap memakai authorization toko biasa.
 
 ## 1. Inventory ✅
 
@@ -679,6 +718,7 @@ Semua endpoint memakai `auth:sanctum` dan `reports.view`; data dibatasi ke toko 
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-30** — Management Retail: operator platform terpisah dari RBAC toko; bootstrap operator via CLI interaktif; onboarding tenant atomik bersama akun Admin awal dan konfigurasi default; daftar/detail tenant serta aktivasi/nonaktivasi dengan audit tanpa penghapusan data. `PlatformStoreManagementTest` 6 lulus; Auth/Seeder/RBAC 18 lulus; Pint lulus. Suite penuh: 243 lulus, 1 gagal pada fixture kedaluwarsa `ReportTest` (juga gagal tersendiri; tidak berkaitan dengan Management Retail).
 - **2026-10-28** — FR-01: endpoint `POST /api/sales/preview` read-only dengan paritas perhitungan posting, diskon/PPN, batas kredit, dan stok FEFO. `SalePreviewTest` 5 lulus; mekanisme tidak menulis sale, payment, stok, ledger, idempotensi, atau audit. Kontrak lengkap di bagian 5.
 - **2026-10-28** — FR-02: daftar/detail antrean setoran mengizinkan `cash_deposit.create` atau `cash_deposit.receive`; pemegang `receive` dapat membaca semua shift tanpa mendapat hak membuat/menyerahkan setoran. `CashDepositTest` 16 lulus, termasuk Finance receive-only dan penolakan tanpa kedua izin. Suite `php artisan test`: **238 lulus (2.129 assertions)**.
 - **2026-10-28** — Tahap 6.3: endpoint dashboard/laporan backend untuk penjualan harian, inventori menipis/kedaluwarsa, dan ringkasan kas. Filter tanggal WIB, 365 hari, toko aktif, pembatasan kasir, serta respons dashboard gabungan. `ReportTest` **3 lulus**; suite saat tahap selesai: **231 lulus (2.058 assertions)**.

@@ -22,10 +22,12 @@ class StoreContext
         }
 
         $ids = DB::table('user_roles')
+            ->join('stores', 'stores.id', '=', 'user_roles.store_id')
             ->where('user_id', $user->id)
+            ->where('stores.is_active', 1)
             ->distinct()
-            ->orderBy('store_id')
-            ->pluck('store_id')
+            ->orderBy('user_roles.store_id')
+            ->pluck('user_roles.store_id')
             ->map(fn ($id) => (int) $id)
             ->all();
 
