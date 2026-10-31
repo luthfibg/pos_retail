@@ -101,6 +101,50 @@ class PlatformStoreManagementTest extends SeededTestCase
         ]);
     }
 
+    public function test_operator_can_recover_username_and_password_from_cli_and_old_tokens_are_revoked(): void
+    {
+        $login = $this->postJson('/api/auth/login', [
+            'username' => 'platform-operator',
+            'password' => 'operator-password-123',
+        ])->assertOk();
+        $this->assertSame(1, DB::table('personal_access_tokens')
+            ->where('tokenable_id', $this->operator->id)
+            ->count());
+
+        $this->artisan('platform:operator-credentials-reset')
+            ->expectsQuestion('Masukkan ID operator yang akan dipulihkan', (string) $this->operator->id)
+            ->expectsQuestion('Username baru', 'recovered-operator')
+            ->expectsQuestion('Password operator baru (minimal 12 karakter)', 'recovered-password-123')
+            ->expectsQuestion('Ulangi password operator baru', 'recovered-password-123')
+            ->expectsOutputToContain('Semua token lama telah dicabut')
+            ->assertExitCode(0);
+
+        $this->assertSame('recovered-operator', DB::table('users')->where('id', $this->operator->id)->value('username'));
+        $this->assertTrue(Hash::check('recovered-password-123', DB::table('users')->where('id', $this->operator->id)->value('password_hash')));
+        $this->assertSame(0, DB::table('personal_access_tokens')
+            ->where('tokenable_id', $this->operator->id)
+            ->count());
+        $this->app['auth']->forgetGuards();
+        $this->withToken($login->json('token'))->getJson('/api/auth/me')->assertUnauthorized();
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'platform.operator_credentials_reset',
+            'entity_type' => 'platform_operator',
+            'entity_id' => $this->operator->id,
+            'actor_id' => null,
+        ]);
+        $audit = DB::table('audit_logs')->where('action', 'platform.operator_credentials_reset')->first();
+        $this->assertStringNotContainsString('recovered-password-123', $audit->before_json.$audit->after_json);
+
+        $this->postJson('/api/auth/login', [
+            'username' => 'platform-operator',
+            'password' => 'operator-password-123',
+        ])->assertUnprocessable();
+        $this->postJson('/api/auth/login', [
+            'username' => 'recovered-operator',
+            'password' => 'recovered-password-123',
+        ])->assertOk()->assertJsonPath('platform_operator', true);
+    }
+
     public function test_operator_creates_store_and_initial_admin_atomically_with_defaults(): void
     {
         $this->asOperator();

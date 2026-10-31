@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 30 Oktober 2026 · **Validasi terbaru:** Management Retail 6 test lulus; Auth/Seeder/RBAC 18 test lulus. Suite penuh: 243 lulus, 1 gagal pada `ReportTest` karena fixture tanggal `2026-10-30` diklasifikasikan `hari_ini` alih-alih `akan_kedaluwarsa` (gagal juga saat dijalankan tersendiri). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+**Diperbarui:** 31 Oktober 2026 · **Validasi fitur terbaru:** `PlatformStoreManagementTest` + `AuthTest` — 15 lulus (117 assertions), termasuk recovery kredensial CLI dan pencabutan token. Suite penuh terakhir sebelum perubahan ini: 243 lulus, 1 gagal pada `ReportTest` karena fixture tanggal `2026-10-30` diklasifikasikan `hari_ini` alih-alih `akan_kedaluwarsa` (gagal juga saat dijalankan tersendiri). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -63,6 +63,8 @@ Contoh onboarding:
 `timezone` dan `currency` opsional (default `Asia/Jakarta` dan `IDR`); email owner opsional. Username dan kode tenant unik. Provisioning membuat toko aktif, akun owner dengan role `Admin`, lokasi toko dan gudang (gudang nonaktif), register, akun dana, serta setting default termasuk `warehouse_enabled=false`. Respons onboarding mengembalikan `initial_owner` untuk ditampilkan sekali saat setup; jangan menyimpan atau mencatat password di log/UI.
 
 Ubah status dengan `{ "is_active": false, "reason": "..." }`. Tenant nonaktif tidak dapat dipilih sebagai konteks toko dan permintaan pengguna toko akan ditolak, tetapi akun maupun data tenant tetap utuh. Perubahan status dan onboarding dicatat dalam audit log. Operator platform mengelola tenant lewat prefix API ini; endpoint toko tetap memakai authorization toko biasa.
+
+Frontend mengarahkan operator yang berhasil login ke layar `/platform/stores`. Pemulihan username/password operator tidak mempunyai endpoint publik: pada login gagal, UI menawarkan instruksi untuk menghubungi administrator server dan menjalankan `php artisan platform:operator-credentials-reset`. Command menampilkan operator aktif untuk dipilih berdasarkan ID, menetapkan username/password baru, mencabut semua token operator, dan mencatat audit tanpa menyimpan password.
 
 ## 1. Inventory ✅
 
@@ -718,6 +720,7 @@ Semua endpoint memakai `auth:sanctum` dan `reports.view`; data dibatasi ke toko 
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-10-31** — Management Retail: API tenant yang sudah ada kini terhubung ke layar operator `/platform/stores`; login dan `/auth/me` mengarahkan operator global tanpa toko. CLI recovery memilih operator aktif berdasarkan ID (termasuk saat username terlupa), mengubah username/password, mencabut token lama, dan mencatat audit tanpa menyimpan password; UI login memberi instruksi recovery CLI tanpa endpoint publik. `PlatformStoreManagementTest` 7 lulus.
 - **2026-10-30** — Management Retail: operator platform terpisah dari RBAC toko; bootstrap operator via CLI interaktif; onboarding tenant atomik bersama akun Admin awal dan konfigurasi default; daftar/detail tenant serta aktivasi/nonaktivasi dengan audit tanpa penghapusan data. `PlatformStoreManagementTest` 6 lulus; Auth/Seeder/RBAC 18 lulus; Pint lulus. Suite penuh: 243 lulus, 1 gagal pada fixture kedaluwarsa `ReportTest` (juga gagal tersendiri; tidak berkaitan dengan Management Retail).
 - **2026-10-28** — FR-01: endpoint `POST /api/sales/preview` read-only dengan paritas perhitungan posting, diskon/PPN, batas kredit, dan stok FEFO. `SalePreviewTest` 5 lulus; mekanisme tidak menulis sale, payment, stok, ledger, idempotensi, atau audit. Kontrak lengkap di bagian 5.
 - **2026-10-28** — FR-02: daftar/detail antrean setoran mengizinkan `cash_deposit.create` atau `cash_deposit.receive`; pemegang `receive` dapat membaca semua shift tanpa mendapat hak membuat/menyerahkan setoran. `CashDepositTest` 16 lulus, termasuk Finance receive-only dan penolakan tanpa kedua izin. Suite `php artisan test`: **238 lulus (2.129 assertions)**.

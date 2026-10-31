@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
-import { RequireAnyPermission, RequireAuth, RequirePermission } from '@/features/auth/guards';
+import { RequireAnyPermission, RequireAuth, RequirePermission, RequirePlatformOperator } from '@/features/auth/guards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
@@ -26,6 +26,7 @@ const PurchasingEntryPage = lazy(() => import('@/features/purchasing/PurchaseBoa
 const DashboardPage = lazy(() => import('@/features/reports/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 const BillingPage = lazy(() => import('@/features/billing/BillingPage').then((module) => ({ default: module.BillingPage })));
 const UsersPage = lazy(() => import('@/features/users/UsersPage').then((module) => ({ default: module.UsersPage })));
+const PlatformStoresPage = lazy(() => import('@/features/platform/PlatformStoresPage').then((module) => ({ default: module.PlatformStoresPage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<div className="p-6 text-slate-500">Memuat layar…</div>}>{children}</Suspense>;
@@ -36,6 +37,10 @@ export const router = createBrowserRouter([
   {
     element: <RequireAuth />,
     children: [
+      {
+        element: <RequirePlatformOperator />,
+        children: [{ path: 'platform/stores', element: <LazyPage><PlatformStoresPage /></LazyPage> }],
+      },
       {
         element: <AppLayout />,
         children: [

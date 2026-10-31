@@ -333,7 +333,7 @@ export function PurchaseBoardPage() {
         />}
       </div>
 
-      {printJob && <PurchasePrintSheet job={printJob} storeName={me?.store.name ?? 'POS Retail SMK'} onDone={finishPrint} />}
+      {printJob && <PurchasePrintSheet job={printJob} storeName={me?.store?.name ?? 'POS Retail SMK'} onDone={finishPrint} />}
     </>
   );
 }

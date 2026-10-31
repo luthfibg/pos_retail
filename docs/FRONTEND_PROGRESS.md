@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres frontend.** Setiap pekerjaan frontend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), seperti `BACKEND_PROGRESS.md` untuk backend. Agent frontend baru cukup membaca berkas ini + `BACKEND_PROGRESS.md` (kontrak) + `HANDOFF_POS_RETAIL_SMK.md` (aturan) + `frontend/FRONTEND.md` (struktur dan konvensi). Kebutuhan yang belum dipenuhi kontrak API ditulis di `FRONTEND_REQUESTS.md` untuk agent backend.
 
-**Diperbarui:** 28 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang dan lampiran privat, alur PR/PO, adjustment/opname, transfer stok, Dashboard, Tagihan HRD, Manajemen Pengguna
+**Diperbarui:** 31 Oktober 2026 · **Dikerjakan:** F#1 (fondasi, master data, inventory, karyawan, shift), F#2 (layar kasir, pengaturan diskon dan PPN), konfigurasi kebijakan endapan Admin, setoran, riwayat penjualan, penerimaan barang dan lampiran privat, alur PR/PO, adjustment/opname, transfer stok, Dashboard, Tagihan HRD, Manajemen Pengguna, Management Retail
 
 ## Cara membaca status
 
@@ -61,6 +61,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/dashboard` | Dashboard: filter tanggal/kasir, ringkasan penjualan dan kas, grafik harian, stok menipis/kedaluwarsa, saldo akun dana sesuai izin | `reports.view` | 6.3 | 🟡 | Pengguna mengonfirmasi tampilan dan filter; automated tests/typecheck/build dijalankan agent |
 | `/billing` | Tagihan HRD: periode kredit, tutup periode, rincian per karyawan, invoice, penerbitan/serah HRD, pembayaran sebagian, cetak invoice | `billing_period.manage`, `billing_period.close`, `invoice.generate`, `invoice.issue`, `invoice.record_payment` | 8 | 🟡 | Pengguna mengonfirmasi uji klik berjalan lancar; automated tests/typecheck/build dijalankan agent |
 | `/users` | Manajemen pengguna: cari/filter, tambah/ubah, role, aktif/nonaktif, reset sandi | `user.manage` | 10 | 🟡 | UI tersedia; menunggu uji klik pengguna |
+| `/platform/stores` | Management Retail: daftar/cari/filter tenant, detail dan Admin toko, onboarding tenant + akun Admin awal, aktif/nonaktif tenant | `platform_operator` | Backend Management Retail | 🟡 | Operator langsung diarahkan ke sini setelah login; pemulihan username/password di layar login hanya memberi instruksi CLI server, bukan endpoint publik. Typecheck, 161 test, dan build lulus; menunggu uji klik |
 | (profil sidebar) | Ganti sandi sendiri; sesi lain diakhiri | login | 10 | 🟡 | UI tersedia untuk semua pengguna; sesi saat ini tetap aktif |
 
 ### Backlog frontend (backend sudah siap ✅ kecuali dicatat)
@@ -148,6 +149,8 @@ Lihat `FRONTEND_REQUESTS.md`. **FR-01** pratinjau penjualan sudah diintegrasikan
 4. Jangan menandai ✅ sebelum pengguna menjalankan test (aturan kerja HANDOFF bagian 8 butir 5, berlaku juga untuk frontend).
 
 ## Riwayat
+
+- **2026-10-31** — Layar operator `/platform/stores`: daftar tenant dengan pencarian/filter/paginasi, detail dan akun Admin toko, onboarding tenant beserta Admin awal, serta aktivasi/nonaktivasi dengan konfirmasi. Login sukses sebagai operator langsung diarahkan ke layar ini. Pada kegagalan login, tersedia opsi lupa username/password yang mengarahkan ke recovery melalui CLI server (tidak ada API publik untuk pemulihan). `npm run typecheck`, `npm test` (**161 lulus, 27 berkas**), dan `npm run build` lulus; uji klik menunggu.
 
 - **2026-10-28** — UI Manajemen Pengguna `/users`: daftar pengguna toko dengan cari/filter role/status dan paginasi; tambah/ubah nama, email, role; aktif/nonaktif dengan konfirmasi; reset sandi; serta tombol global Ganti sandi untuk semua pengguna. Pembatasan self-role/nonaktif dan batas minimal satu Admin tetap divalidasi backend; sandi tidak dikembalikan. Test logika form/payload dan navigasi ditambahkan. `npm run typecheck`, `npm test` (**161 lulus, 27 berkas**), `npm run build`, dan `git diff --check` lulus; uji klik menunggu.
 - **2026-10-28** — Pengguna mengonfirmasi uji klik Tagihan HRD berjalan lancar.

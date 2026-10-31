@@ -27,9 +27,10 @@ export interface StoreInfo {
 
 export interface Me {
   user: UserSummary;
-  store: StoreInfo;
+  store: StoreInfo | null;
   roles: string[];
   permissions: string[];
+  platform_operator: boolean;
 }
 
 export interface LoginResponse {
@@ -37,6 +38,41 @@ export interface LoginResponse {
   token_type: 'Bearer';
   expires_at: string;
   user: UserSummary;
+  platform_operator: boolean;
+}
+
+export interface PlatformStore {
+  id: number;
+  code: string;
+  name: string;
+  timezone: string;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PlatformStoreDetail extends PlatformStore {
+  admin_users: Array<{
+    id: number;
+    name: string;
+    username: string;
+    email: string | null;
+    is_active: boolean;
+  }>;
+  user_count: number;
+}
+
+export interface PlatformTenantInput {
+  code: string;
+  name: string;
+  timezone: string;
+  currency: string;
+  owner: {
+    name: string;
+    username: string;
+    email?: string;
+    password: string;
+  };
 }
 
 export interface ManagedUser {

@@ -26,7 +26,7 @@ export function AppLayout() {
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-4">
           <div className="min-w-0">
             <div className="text-sm font-semibold">POS Retail SMK</div>
-            <div className="truncate text-xs text-slate-500">{me?.store.name}</div>
+            <div className="truncate text-xs text-slate-500">{me?.store?.name}</div>
           </div>
           <NotificationBell />
         </div>

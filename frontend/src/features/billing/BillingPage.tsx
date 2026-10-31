@@ -290,7 +290,7 @@ export function BillingPage() {
           />
         )}
       </div>
-      {printInvoice && <InvoicePrint invoice={printInvoice} storeName={me?.store.name ?? ''} onDone={clearPrintInvoice} />}
+      {printInvoice && <InvoicePrint invoice={printInvoice} storeName={me?.store?.name ?? ''} onDone={clearPrintInvoice} />}
     </>
   );
 }

@@ -9,7 +9,7 @@ import type {
   StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
-  ManagedRole, ManagedUser,
+  ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
 } from './types';
 
 export const authApi = {
@@ -17,6 +17,22 @@ export const authApi = {
     api<LoginResponse>('/auth/login', { method: 'POST', body: { username, password } }),
   logout: () => api<{ message: string }>('/auth/logout', { method: 'POST' }),
   me: () => api<Me>('/auth/me'),
+};
+
+export const platformStoreApi = {
+  list: (filters: { q?: string; status?: 'active' | 'inactive'; page?: number; per_page?: number } = {}) =>
+    api<Paginated<PlatformStore>>('/platform/stores', { query: { ...filters } }),
+  get: (id: number) => api<{ data: PlatformStoreDetail }>(`/platform/stores/${id}`).then((r) => r.data),
+  create: (input: PlatformTenantInput) =>
+    api<{ data: PlatformStore & { initial_owner: { id: number; name: string; username: string; role: string } } }>(
+      '/platform/stores',
+      { method: 'POST', body: input },
+    ).then((r) => r.data),
+  setActive: (id: number, is_active: boolean, reason?: string) =>
+    api<{ data: PlatformStore }>(`/platform/stores/${id}/status`, {
+      method: 'PATCH',
+      body: { is_active, reason },
+    }).then((r) => r.data),
 };
 
 export const reportApi = {

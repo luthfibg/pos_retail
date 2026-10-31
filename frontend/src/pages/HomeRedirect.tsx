@@ -4,7 +4,8 @@ import { getVisibleNavGroups } from '@/components/layout/nav';
 
 /** Halaman awal mengikuti kewenangan: Kasir -> /pos, Admin -> dashboard, dst. */
 export function HomeRedirect() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
+  if (me?.platform_operator) return <Navigate to="/platform/stores" replace />;
   const isAdmin = can('shift.review');
   const items = getVisibleNavGroups(can, isAdmin).flatMap((group) => group.items);
   const preferred = items.find((item) => item.to === (isAdmin ? '/dashboard' : '/pos'));

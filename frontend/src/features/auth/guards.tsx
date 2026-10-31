@@ -11,6 +11,13 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
+export function RequirePlatformOperator() {
+  const { me } = useAuth();
+
+  if (!me?.platform_operator) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 /** Menyembunyikan halaman bila permission tidak ada. Backend tetap menjadi penentu akhir. */
 export function RequirePermission({ permission }: { permission: string }) {
   const { can } = useAuth();

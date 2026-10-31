@@ -9,7 +9,7 @@ type Status = 'loading' | 'authed' | 'anon';
 interface AuthValue {
   status: Status;
   me: Me | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<Me>;
   logout: () => Promise<void>;
   /** UI saja. Keputusan akhir tetap di backend (403). */
   can: (permission: string) => boolean;
@@ -48,8 +48,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await authApi.login(username, password);
     tokenStore.set(res.token);
     try {
-      setMe(await authApi.me());
+      const currentUser = await authApi.me();
+      setMe(currentUser);
       setStatus('authed');
+      return currentUser;
     } catch (e) {
       tokenStore.clear();
       throw e;

@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 28 Oktober 2026 (test terakhir dijalankan: **238 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 28 Oktober 2026 (test terakhir dijalankan: **238 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|

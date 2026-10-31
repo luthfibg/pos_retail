@@ -4,7 +4,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { ApiError } from '@/lib/api/client';
 
 export function LoginPage() {
-  const { status, login } = useAuth();
+  const { status, me, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from ?? '/';
@@ -13,22 +13,27 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
 
-  if (status === 'authed') return <Navigate to={from} replace />;
+  if (status === 'authed') return <Navigate to={me?.platform_operator ? '/platform/stores' : from} replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (busy) return; // cegah kirim ganda
     setBusy(true);
     setError(null);
+    setRecoveryOpen(false);
+    setRecoveryAvailable(false);
     try {
-      await login(username.trim(), password);
-      navigate(from, { replace: true });
+      const currentUser = await login(username.trim(), password);
+      navigate(currentUser.platform_operator ? '/platform/stores' : from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         setError('Terlalu banyak percobaan. Coba lagi sebentar.');
       } else {
         setError(err instanceof ApiError ? err.firstError('username') : 'Gagal masuk.');
+        if (err instanceof ApiError && err.status === 422) setRecoveryAvailable(true);
       }
     } finally {
       setBusy(false);
@@ -47,6 +52,22 @@ export function LoginPage() {
           <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
             {error}
           </div>
+        )}
+        {recoveryOpen && (
+          <section className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <p className="font-medium">Lupa username atau password operator sistem?</p>
+            <p>
+              Pemulihan hanya dapat dilakukan oleh administrator server melalui CLI. Hubungi administrator dan minta
+              mereka menjalankan command berikut pada backend:
+            </p>
+            <code className="block overflow-x-auto rounded bg-white px-2 py-1 font-mono text-xs">
+              php artisan platform:operator-credentials-reset
+            </code>
+            <p>
+              Administrator akan memilih akun operator dari daftar, lalu menetapkan username dan password baru.
+              Untuk akun toko, hubungi Admin toko.
+            </p>
+          </section>
         )}
 
         <label className="block text-sm">
@@ -80,6 +101,15 @@ export function LoginPage() {
         >
           {busy ? 'Memproses…' : 'Masuk'}
         </button>
+        {recoveryAvailable && !recoveryOpen && (
+          <button
+            type="button"
+            onClick={() => setRecoveryOpen(true)}
+            className="w-full text-sm text-slate-700 underline"
+          >
+            Lupa username atau password?
+          </button>
+        )}
       </form>
     </div>
   );
