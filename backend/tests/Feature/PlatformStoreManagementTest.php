@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\SeededTestCase;
 
@@ -143,6 +144,79 @@ class PlatformStoreManagementTest extends SeededTestCase
             'username' => 'recovered-operator',
             'password' => 'recovered-password-123',
         ])->assertOk()->assertJsonPath('platform_operator', true);
+    }
+
+    public function test_operator_cli_login_opens_ticket_that_exchanges_once_for_a_session(): void
+    {
+        $ticket = str_repeat('A', 64);
+        Str::createRandomStringsUsing(fn (int $length): string => str_repeat('A', $length));
+        try {
+            $this->artisan('platform:operator-login', ['--no-browser' => true])
+                ->expectsQuestion('Username operator', 'platform-operator')
+                ->expectsQuestion('Password operator', 'operator-password-123')
+                ->expectsOutputToContain('Tiket login satu kali telah disiapkan')
+                ->assertExitCode(0);
+        } finally {
+            Str::createRandomStringsUsing();
+        }
+
+        $this->assertDatabaseHas('platform_cli_login_tickets', [
+            'ticket_hash' => hash('sha256', $ticket),
+            'user_id' => $this->operator->id,
+        ]);
+
+        $exchange = $this->postJson('/api/platform/cli-login/exchange', ['ticket' => $ticket])
+            ->assertOk()
+            ->assertJsonPath('token_type', 'Bearer');
+        $plainTextToken = $exchange->json('token');
+        $this->assertNotEmpty($plainTextToken);
+        $this->assertDatabaseMissing('platform_cli_login_tickets', ['ticket_hash' => hash('sha256', $ticket)]);
+
+        $this->withToken($plainTextToken)->getJson('/api/auth/me')
+            ->assertOk()
+            ->assertJsonPath('platform_operator', true)
+            ->assertJsonPath('store', null);
+        $this->postJson('/api/platform/cli-login/exchange', ['ticket' => $ticket])->assertUnauthorized();
+    }
+
+    public function test_cli_login_rejects_non_operator_and_wrong_password_without_issuing_ticket(): void
+    {
+        $this->artisan('platform:operator-login', ['--no-browser' => true])
+            ->expectsQuestion('Username operator', 'admin')
+            ->expectsQuestion('Password operator', 'incorrect-password')
+            ->expectsOutputToContain('Username atau password operator tidak valid.')
+            ->assertExitCode(1);
+
+        $this->artisan('platform:operator-login', ['--no-browser' => true])
+            ->expectsQuestion('Username operator', 'platform-operator')
+            ->expectsQuestion('Password operator', 'incorrect-password')
+            ->expectsOutputToContain('Username atau password operator tidak valid.')
+            ->assertExitCode(1);
+
+        $this->assertSame(0, DB::table('platform_cli_login_tickets')->count());
+    }
+
+    public function test_cli_login_ticket_cannot_be_used_after_expiry_or_operator_deactivation(): void
+    {
+        $expiredTicket = str_repeat('E', 64);
+        DB::table('platform_cli_login_tickets')->insert([
+            'ticket_hash' => hash('sha256', $expiredTicket),
+            'user_id' => $this->operator->id,
+            'expires_at' => now()->subSecond(),
+        ]);
+        $this->postJson('/api/platform/cli-login/exchange', ['ticket' => $expiredTicket])->assertUnauthorized();
+        $this->assertDatabaseMissing('platform_cli_login_tickets', ['ticket_hash' => hash('sha256', $expiredTicket)]);
+
+        $revokedTicket = str_repeat('R', 64);
+        DB::table('platform_cli_login_tickets')->insert([
+            'ticket_hash' => hash('sha256', $revokedTicket),
+            'user_id' => $this->operator->id,
+            'expires_at' => now()->addMinute(),
+        ]);
+        DB::table('platform_operators')->where('user_id', $this->operator->id)->update(['is_active' => 0]);
+
+        $this->postJson('/api/platform/cli-login/exchange', ['ticket' => $revokedTicket])->assertUnauthorized();
+        $this->assertDatabaseMissing('platform_cli_login_tickets', ['ticket_hash' => hash('sha256', $revokedTicket)]);
     }
 
     public function test_operator_creates_store_and_initial_admin_atomically_with_defaults(): void

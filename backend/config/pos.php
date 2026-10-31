@@ -6,6 +6,7 @@ return [
 
     // Masa berlaku token API (jam)
     'token_ttl_hours' => (int) env('POS_TOKEN_TTL_HOURS', 12),
+    'platform_ui_url' => env('PLATFORM_UI_URL', 'http://127.0.0.1:5173'),
 
     // Batas percobaan gagal autentikasi ulang (persetujuan) per username sebelum dikunci 5 menit
     'reauth_max_attempts' => (int) env('POS_REAUTH_MAX_ATTEMPTS', 5),

@@ -6,7 +6,9 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Symfony\Component\Process\Process;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -150,3 +152,74 @@ Artisan::command('platform:operator-credentials-reset', function () {
 
     return 0;
 })->purpose('Pulihkan username dan password operator platform secara interaktif');
+
+Artisan::command('platform:operator-login {--no-browser : Siapkan tiket tanpa membuka browser (untuk otomasi/test)}', function () {
+    $username = $this->ask('Username operator');
+    $password = $this->secret('Password operator', false);
+
+    $user = DB::table('users')
+        ->join('platform_operators', 'platform_operators.user_id', '=', 'users.id')
+        ->where('users.username', $username)
+        ->where('users.is_active', 1)
+        ->where('platform_operators.is_active', 1)
+        ->select('users.id', 'users.username', 'users.password_hash')
+        ->first();
+
+    if ($user === null || ! Hash::check($password, $user->password_hash)) {
+        $this->error('Username atau password operator tidak valid.');
+
+        return 1;
+    }
+
+    $uiUrl = rtrim((string) config('pos.platform_ui_url'), '/');
+    $parsedUrl = parse_url($uiUrl);
+    if (
+        ! is_array($parsedUrl)
+        || ! in_array($parsedUrl['scheme'] ?? null, ['http', 'https'], true)
+        || empty($parsedUrl['host'])
+        || isset($parsedUrl['user'])
+        || isset($parsedUrl['pass'])
+        || isset($parsedUrl['query'])
+        || isset($parsedUrl['fragment'])
+    ) {
+        $this->error('PLATFORM_UI_URL harus berupa URL HTTP/HTTPS origin atau base path yang valid.');
+
+        return 1;
+    }
+
+    $ticket = Str::random(64);
+    $expiresAt = now()->addMinute();
+    DB::transaction(function () use ($user, $ticket, $expiresAt) {
+        DB::table('platform_cli_login_tickets')->where('expires_at', '<=', now())->delete();
+        DB::table('platform_cli_login_tickets')->insert([
+            'ticket_hash' => hash('sha256', $ticket),
+            'user_id' => $user->id,
+            'expires_at' => $expiresAt,
+        ]);
+    });
+
+    $loginUrl = $uiUrl.'/platform/cli-login#ticket='.rawurlencode($ticket);
+    if ($this->option('no-browser')) {
+        $this->info('Tiket login satu kali telah disiapkan (berlaku 60 detik); mode --no-browser aktif.');
+
+        return 0;
+    }
+
+    $browserCommand = match (PHP_OS_FAMILY) {
+        'Windows' => ['explorer.exe', $loginUrl],
+        'Darwin' => ['open', $loginUrl],
+        default => ['xdg-open', $loginUrl],
+    };
+    $process = new Process($browserCommand);
+    $process->run();
+    if (! $process->isSuccessful()) {
+        DB::table('platform_cli_login_tickets')->where('ticket_hash', hash('sha256', $ticket))->delete();
+        $this->error('Browser gagal dibuka. Pastikan PLATFORM_UI_URL benar dan jalankan ulang command.');
+
+        return 1;
+    }
+
+    $this->info('Login berhasil. Browser dibuka menuju daftar tenant.');
+
+    return 0;
+})->purpose('Login operator dan buka UI daftar tenant');
