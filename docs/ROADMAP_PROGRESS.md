@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 28 Oktober 2026 (test terakhir dijalankan: **238 test backend lulus**) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 31 Oktober 2026 (suite backend terakhir: **243 lulus, 1 gagal** pada fixture tanggal `ReportTest`; detail di `BACKEND_PROGRESS.md`) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
@@ -65,6 +65,8 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 8. ~~Dashboard dan laporan dasar (6.3)~~ — **selesai 28 Okt 2026: laporan penjualan harian, stok menipis/kedaluwarsa, serta ringkasan kas; empat endpoint, batasan toko/kasir, periode WIB, dan `ReportTest` (3 test); suite 231 test lulus (2.058 assertions).** Berikutnya: denah rak (2.5, prioritas rendah), cetak struk/invoice (6.1–6.2), lalu hardening/UAT.
 
 ### Tahap frontend terbaru
+
+UI Operator Platform `/platform/stores` terpisah dari layout dan permission tenant POS: operator dapat mencari/filter/membuka detail tenant, onboarding tenant beserta Admin awal, serta mengaktifkan/nonaktifkan tenant. Login CLI menukar tiket sekali pakai dan membuka layar operator; akses operator ke rute tenant dialihkan kembali ke console platform. Password Admin awal dibersihkan setelah request dan tidak disimpan dalam cache mutation. Typecheck, 161 test frontend, dan build produksi lulus; uji klik login CLI dan layar operator menunggu.
 
 UI Kasir `/pos` kini terintegrasi dengan `POST /api/sales/preview`: total, diskon, PPN, stok FEFO, dan sinyal batas kredit berasal dari backend setelah debounce; frontend tidak lagi menghitung perkiraan subtotal. Struk menampilkan peringatan jika total final posting berbeda dari pratinjau. Typecheck, 161 test frontend, build produksi, dan `git diff --check` lulus; uji klik setelah integrasi ini masih menunggu pengguna.
 

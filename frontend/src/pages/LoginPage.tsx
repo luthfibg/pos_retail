@@ -11,7 +11,11 @@ export function LoginPage() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    const handoffError = sessionStorage.getItem('platform-cli-login-error');
+    sessionStorage.removeItem('platform-cli-login-error');
+    return handoffError;
+  });
   const [busy, setBusy] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [recoveryAvailable, setRecoveryAvailable] = useState(false);

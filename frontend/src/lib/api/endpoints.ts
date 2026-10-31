@@ -19,6 +19,14 @@ export const authApi = {
   me: () => api<Me>('/auth/me'),
 };
 
+export const platformCliLoginApi = {
+  exchange: (ticket: string) =>
+    api<{ token: string; token_type: 'Bearer' }>('/platform/cli-login/exchange', {
+      method: 'POST',
+      body: { ticket },
+    }),
+};
+
 export const platformStoreApi = {
   list: (filters: { q?: string; status?: 'active' | 'inactive'; page?: number; per_page?: number } = {}) =>
     api<Paginated<PlatformStore>>('/platform/stores', { query: { ...filters } }),

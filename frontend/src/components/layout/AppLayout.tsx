@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { ChangePasswordDialog } from '@/features/users/ChangePasswordDialog';
@@ -19,6 +19,8 @@ export function AppLayout() {
   useEffect(() => {
     if (activeGroup) setExpandedGroup(activeGroup);
   }, [activeGroup]);
+
+  if (me?.platform_operator) return <Navigate to="/platform/stores" replace />;
 
   return (
     <div className="flex h-dvh overflow-hidden">

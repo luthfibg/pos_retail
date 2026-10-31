@@ -17,6 +17,8 @@ export function PlatformStoresPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [createdOwner, setCreatedOwner] = useState<{ storeName: string; username: string } | null>(null);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<unknown>(null);
   const debouncedQ = useDebounce(q);
 
   const stores = useQuery({
@@ -24,15 +26,22 @@ export function PlatformStoresPage() {
     queryFn: () => platformStoreApi.list({ q: debouncedQ || undefined, status: status || undefined, page }),
     placeholderData: (previous) => previous,
   });
-  const createStore = useMutation({
-    mutationFn: platformStoreApi.create,
-    onSuccess: (created) => {
+  async function createTenant(input: PlatformTenantInput) {
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      const created = await platformStoreApi.create(input);
       setCreateOpen(false);
       setCreatedOwner({ storeName: created.name, username: created.initial_owner.username });
       setPage(1);
       void queryClient.invalidateQueries({ queryKey: ['platform-stores'] });
-    },
-  });
+    } catch (error) {
+      setCreateError(error);
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
   const setStoreStatus = useMutation({
     mutationFn: ({ store, active }: { store: PlatformStore; active: boolean }) =>
       platformStoreApi.setActive(store.id, active),
@@ -76,7 +85,7 @@ export function PlatformStoresPage() {
           </div>
           <button
             type="button"
-            onClick={() => { setCreatedOwner(null); setCreateOpen(true); }}
+            onClick={() => { setCreatedOwner(null); setCreateError(null); setCreateOpen(true); }}
             className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
           >
             Tenant baru
@@ -170,10 +179,10 @@ export function PlatformStoresPage() {
 
       {createOpen && (
         <TenantCreateDialog
-          busy={createStore.isPending}
-          error={createStore.error}
-          onClose={() => setCreateOpen(false)}
-          onSubmit={(input) => createStore.mutateAsync(input)}
+          busy={createBusy}
+          error={createError}
+          onClose={() => { if (!createBusy) setCreateOpen(false); }}
+          onSubmit={createTenant}
         />
       )}
       {detailId !== null && <TenantDetailDialog storeId={detailId} onClose={() => setDetailId(null)} />}
@@ -205,18 +214,23 @@ function TenantCreateDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    await onSubmit({
-      code: values.code.trim(),
-      name: values.name.trim(),
-      timezone: values.timezone,
-      currency: values.currency.toUpperCase(),
-      owner: {
-        name: values.ownerName.trim(),
-        username: values.ownerUsername.trim(),
-        ...(values.ownerEmail.trim() ? { email: values.ownerEmail.trim() } : {}),
-        password: values.ownerPassword,
-      },
-    });
+    if (busy) return;
+    try {
+      await onSubmit({
+        code: values.code.trim(),
+        name: values.name.trim(),
+        timezone: values.timezone,
+        currency: values.currency.toUpperCase(),
+        owner: {
+          name: values.ownerName.trim(),
+          username: values.ownerUsername.trim(),
+          ...(values.ownerEmail.trim() ? { email: values.ownerEmail.trim() } : {}),
+          password: values.ownerPassword,
+        },
+      });
+    } finally {
+      setValues((current) => ({ ...current, ownerPassword: '' }));
+    }
   }
 
   function update(field: keyof typeof values, value: string) {
@@ -231,7 +245,7 @@ function TenantCreateDialog({
             <h2 id="tenant-create-title" className="text-lg font-semibold">Onboarding tenant</h2>
             <p className="text-sm text-slate-500">Tenant dibuat bersama akun Admin awal dan konfigurasi dasar.</p>
           </div>
-          <button type="button" onClick={onClose} className="text-sm underline">Tutup</button>
+          <button type="button" disabled={busy} onClick={onClose} className="text-sm underline disabled:opacity-50">Tutup</button>
         </div>
         <ErrorNotice error={error} />
 
@@ -254,7 +268,7 @@ function TenantCreateDialog({
 
         <p className="text-xs text-slate-500">Password hanya dikirim saat onboarding dan tidak ditampilkan kembali oleh API.</p>
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
+          <button type="button" disabled={busy} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">Batal</button>
           <button type="submit" disabled={busy} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
             {busy ? 'Membuat…' : 'Buat tenant'}
           </button>
