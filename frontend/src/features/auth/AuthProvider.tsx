@@ -11,6 +11,8 @@ interface AuthValue {
   me: Me | null;
   login: (username: string, password: string) => Promise<Me>;
   logout: () => Promise<void>;
+  /** Muat ulang /auth/me (mis. setelah izin berubah) agar menu mengikuti permission terbaru. */
+  refreshMe: () => Promise<void>;
   /** UI saja. Keputusan akhir tetap di backend (403). */
   can: (permission: string) => boolean;
 }
@@ -63,10 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     reset();
   }, [reset]);
 
+  const refreshMe = useCallback(async () => {
+    setMe(await authApi.me());
+  }, []);
+
   const value = useMemo<AuthValue>(() => {
     const perms = new Set(me?.permissions ?? []);
-    return { status, me, login, logout, can: (p) => perms.has(p) };
-  }, [status, me, login, logout]);
+    return { status, me, login, logout, refreshMe, can: (p) => perms.has(p) };
+  }, [status, me, login, logout, refreshMe]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

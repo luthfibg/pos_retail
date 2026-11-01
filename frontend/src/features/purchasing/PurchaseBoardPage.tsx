@@ -78,7 +78,7 @@ export function PurchaseBoardPage() {
   const pos = useQuery({
     queryKey: ['purchase-orders', 'board'],
     queryFn: () => purchaseOrderApi.list({ per_page: 100 }),
-    enabled: canManagePo || canFinanceCheck,
+    enabled: canManagePo,
   });
 
   const refetchAll = useCallback(() => {
@@ -86,6 +86,8 @@ export function PurchaseBoardPage() {
     void pos.refetch();
   }, [prs, pos]);
 
+  // Tab PO hanya untuk peran yang boleh melihat PO (buat/kirim/setujui); Finance murni hanya memeriksa PR.
+  const visibleStages = FLOW_STAGES.filter((stage) => canManagePo || (stage.key !== 'po_process' && stage.key !== 'po_out'));
   const needle = search.trim().toLowerCase();
   const board = useMemo(
     () => buildBoard(
@@ -210,7 +212,7 @@ export function PurchaseBoardPage() {
         </header>
 
         <div role="tablist" aria-label="Tahap pembelian" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          {FLOW_STAGES.map((stage, index) => {
+          {visibleStages.map((stage, index) => {
             const count = tabCount(board, stage.key);
             const selected = tab === stage.key;
             return (
@@ -287,10 +289,10 @@ export function PurchaseBoardPage() {
                 <h2 className="mb-2 text-sm font-semibold">PR ({board.archivePr.length})</h2>
                 <PrTable rows={board.archivePr} stage="archive" highlightId={highlight?.kind === 'pr' ? highlight.id : null} busyKey={busyKey} canAct={false} onOpen={openPr} onCreatePo={() => undefined} onPrint={(pr) => void printPrById(pr.id)} />
               </div>
-              <div>
+              {canManagePo && <div>
                 <h2 className="mb-2 text-sm font-semibold">PO dibatalkan ({board.archivePo.length})</h2>
                 <PoTable rows={board.archivePo} stage="archive" highlightId={highlight?.kind === 'po' ? highlight.id : null} busyKey={busyKey} canAct={false} onOpen={openPo} onPrint={(po) => void printPoById(po.id)} />
-              </div>
+              </div>}
             </div>
           )}
 

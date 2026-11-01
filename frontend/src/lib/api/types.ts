@@ -31,6 +31,8 @@ export interface Me {
   roles: string[];
   permissions: string[];
   platform_operator: boolean;
+  /** Model administrasi toko aktif (`simple` bila belum diatur). Tidak ada untuk operator platform. */
+  admin_model?: AdminModelId;
 }
 
 export interface LoginResponse {
@@ -92,6 +94,45 @@ export interface ManagedUser {
   is_active: boolean;
   roles: string[];
   last_login_at: string | null;
+}
+
+export type AdminModelId = 'simple' | 'standard';
+
+export interface AdminModelRole {
+  name: string;
+  description: string | null;
+  assignable: boolean;
+  total_users: number;
+  active_users: number;
+}
+
+export interface AdminModelBlocker {
+  code: string;
+  role: string;
+  message: string;
+}
+
+export interface AdminModelConversion {
+  from: string;
+  to: string;
+  users: Array<{ id: number; name: string; username: string; is_active: boolean }>;
+}
+
+export interface AdminModelOption {
+  model: AdminModelId;
+  label: string;
+  current: boolean;
+  can_switch: boolean;
+  blockers: AdminModelBlocker[];
+  conversions: AdminModelConversion[];
+}
+
+export interface AdminModelSetting {
+  model: AdminModelId;
+  controlling_role: string;
+  assignable_roles: string[];
+  roles: AdminModelRole[];
+  options: AdminModelOption[];
 }
 
 export interface ManagedRole {

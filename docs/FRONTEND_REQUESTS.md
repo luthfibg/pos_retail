@@ -12,6 +12,7 @@
 | FR-01 | Pratinjau penjualan (`POST /api/sales/preview`) | Tinggi (layar kasir) | **Selesai backend** | 28 Okt 2026 |
 | FR-02 | Izin Finance untuk daftar/detail setoran | Tinggi (antrean setoran) | **Selesai backend** | 28 Okt 2026 |
 | FR-03 | Katalog lokasi dan posisi rak untuk transfer stok | Sedang (transfer/putaway) | **Diminta** | 27 Okt 2026 |
+| FR-04 | Owner perlu melihat PO `pending_confirmation` pada daftar PO | Sedang (konfirmasi PO model standar) | **Diminta** | 1 Nov 2026 |
 
 ---
 
@@ -141,3 +142,15 @@ Mohon sediakan endpoint baca dengan izin `stock_transfer.create`, misalnya `GET 
 ```
 
 Hanya sertakan lokasi aktif pada toko pengguna. Bila `warehouse_enabled=false`, gudang tidak disertakan; posisi hanya dari rak/posisi aktif pada lokasi yang disertakan. Pastikan pengguna dengan `stock_transfer.create` saja dapat mengakses endpoint ini tanpa `goods_receipt.create`; tambahkan test otorisasi dan penyaringan lokasi/rak nonaktif.
+
+---
+
+## FR-04 — Owner perlu melihat PO `pending_confirmation` pada daftar PO
+
+**Status:** Diminta · **Prioritas:** Sedang · **Dibutuhkan oleh:** papan `/purchase-requisitions` tab "PO Diproses" · **Perubahan skema:** tidak ada.
+
+### Masalah
+`PurchaseOrderService::search` hanya mengembalikan semua status bila pengguna memegang `purchase_order.create`; selain itu daftar dipaksa ke `approved, sent, partially_received` (`RECEIVABLE`). Pada model standar retail, Owner memegang `purchase_requisition.approve` (yang dipakai `POST /api/purchase-orders/{id}/confirm`) tetapi tidak memegang `purchase_order.create`. Akibatnya PO berstatus `pending_confirmation` tidak muncul di daftar Owner, sehingga Owner tidak punya jalan di UI untuk menemukan PO yang harus ia konfirmasi. `find()` sudah memperlakukan `purchase_requisition.approve` sebagai pengelola (detail PO dapat dibuka), jadi hanya daftar yang tertinggal.
+
+### Permintaan
+Samakan `$manager` pada `search()` dengan `$canManage` pada `find()` (`purchase_order.create` atau `purchase_order.send` atau `purchase_requisition.approve`). Opsional: `seesPrices` juga mencakup `purchase_requisition.approve`, karena Owner mengonfirmasi PO tanpa melihat total/harga saat ini. Tambahkan test otorisasi untuk Owner pada model standar.

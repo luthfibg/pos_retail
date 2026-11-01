@@ -38,6 +38,6 @@ describe('sidebar navigation', () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.label).toBe('Pengaturan');
-    expect(groups[0]?.items.map((item) => item.to)).toEqual(['/settings/vat', '/settings/warehouse']);
+    expect(groups[0]?.items.map((item) => item.to)).toEqual(['/settings/vat', '/settings/warehouse', '/settings/admin-model']);
   });
 });

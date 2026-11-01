@@ -10,7 +10,7 @@ import type {
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
-  WarehouseSetting,
+  WarehouseSetting, AdminModelId, AdminModelSetting,
 } from './types';
 
 export const authApi = {
@@ -403,4 +403,8 @@ export const settingsApi = {
   warehouse: () => api<{ data: WarehouseSetting }>('/settings/warehouse').then((r) => r.data),
   saveWarehouse: (enabled: boolean) =>
     api<{ data: WarehouseSetting }>('/settings/warehouse', { method: 'PUT', body: { enabled } }).then((r) => r.data),
+  adminModel: () => api<{ data: AdminModelSetting }>('/settings/admin-model').then((r) => r.data),
+  /** `confirm: true` wajib (konfirmasi eksplisit); backend menolak tanpa itu. */
+  saveAdminModel: (model: AdminModelId) =>
+    api<{ data: AdminModelSetting }>('/settings/admin-model', { method: 'PUT', body: { model, confirm: true } }).then((r) => r.data),
 };

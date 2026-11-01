@@ -16,6 +16,7 @@ const SalesHistoryPage = lazy(() => import('@/features/sales/SalesHistoryPage').
 import { DiscountsPage } from '@/features/pricing/DiscountsPage';
 import { VatSettingsPage } from '@/features/pricing/VatSettingsPage';
 import { WarehouseSettingsPage } from '@/features/settings/WarehouseSettingsPage';
+const AdminModelSettingsPage = lazy(() => import('@/features/settings/AdminModelSettingsPage').then((module) => ({ default: module.AdminModelSettingsPage })));
 const FloatPolicyPage = lazy(() => import('@/features/shifts/FloatPolicyPage').then((module) => ({ default: module.FloatPolicyPage })));
 const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module) => ({ default: module.ShiftPage })));
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
@@ -132,6 +133,7 @@ export const router = createBrowserRouter([
             children: [
               { path: 'settings/vat', element: <VatSettingsPage /> },
               { path: 'settings/warehouse', element: <WarehouseSettingsPage /> },
+              { path: 'settings/admin-model', element: <LazyPage><AdminModelSettingsPage /></LazyPage> },
             ],
           },
           {
