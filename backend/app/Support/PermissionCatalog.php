@@ -27,6 +27,7 @@ final class PermissionCatalog
             'shelf_layout.manage' => 'Kelola denah rak',
             'shelf_layout.view' => 'Melihat denah rak',
             'inventory.view' => 'Melihat stok dan pergerakan stok',
+            'inventory.opening_balance' => 'Memasukkan stok awal (dikendalikan matriks kewenangan stok)',
             'discount.manage' => 'Kelola diskon',
             'customer.create' => 'Menambah data karyawan (status menunggu verifikasi)',
             'customer.verify' => 'Memverifikasi karyawan',

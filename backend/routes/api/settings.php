@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminModelController;
 use App\Http\Controllers\DiscountController;
+use App\Http\Controllers\StockAuthorityController;
 use App\Http\Controllers\VatSettingController;
 use App\Http\Controllers\WarehouseSettingController;
 use Illuminate\Support\Facades\Route;
@@ -21,4 +22,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Model administrasi toko: simple (Admin + Kasir) atau standar retail (Kasir, Finance, Purchasing, Accounting, Owner)
     Route::get('settings/admin-model', [AdminModelController::class, 'show'])->middleware('can:settings.manage');
     Route::put('settings/admin-model', [AdminModelController::class, 'update'])->middleware('can:settings.manage');
+
+    // Matriks kewenangan stok: siapa boleh stok awal, penerimaan, transfer, adjustment (per toko, bebas model dan gudang)
+    Route::get('settings/stock-authority', [StockAuthorityController::class, 'show'])->middleware('can:settings.manage');
+    Route::put('settings/stock-authority', [StockAuthorityController::class, 'update'])->middleware('can:settings.manage');
 });

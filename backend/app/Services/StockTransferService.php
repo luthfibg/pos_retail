@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Support\Decimal;
+use App\Support\StockAuthorityPolicy;
 use App\Support\DocumentNumber;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -23,6 +24,8 @@ class StockTransferService
             $fromLocationId = (int) $data['from_location_id'];
             $toLocationId = (int) $data['to_location_id'];
             $this->locations($storeId, $fromLocationId, $toLocationId, true);
+            StockAuthorityPolicy::assertScope($actor, $storeId, 'transfer', $fromLocationId);
+            StockAuthorityPolicy::assertScope($actor, $storeId, 'transfer', $toLocationId);
             $items = $this->validateItems($storeId, $fromLocationId, $toLocationId, $data['items']);
 
             $number = $this->sequences->next($storeId, 'TRF');
@@ -79,6 +82,8 @@ class StockTransferService
             ])->all();
 
             $this->locations($storeId, (int) $transfer->from_location_id, (int) $transfer->to_location_id, true);
+            StockAuthorityPolicy::assertScope($actor, $storeId, 'transfer', (int) $transfer->from_location_id);
+            StockAuthorityPolicy::assertScope($actor, $storeId, 'transfer', (int) $transfer->to_location_id);
             $items = $this->validateItems(
                 $storeId,
                 (int) $transfer->from_location_id,

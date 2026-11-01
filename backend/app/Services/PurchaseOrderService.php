@@ -53,7 +53,9 @@ class PurchaseOrderService
             ->where('po.store_id', $storeId)
             ->select('po.*', 's.name as supplier_name', 'pr.doc_number as pr_doc_number');
 
-        $manager = $this->permissions->allows($user, 'purchase_order.create', $storeId);
+        $manager = $this->permissions->allows($user, 'purchase_order.create', $storeId)
+            || $this->permissions->allows($user, 'purchase_order.send', $storeId)
+            || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId);
 
         if (! $manager || ! empty($filters['receivable'])) {
             $query->whereIn('po.status', self::RECEIVABLE);
@@ -486,6 +488,7 @@ class PurchaseOrderService
     private function seesPrices(User $user, int $storeId): bool
     {
         return $this->permissions->allows($user, 'purchase_order.create', $storeId)
+            || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId)
             || $this->permissions->allows($user, 'goods_receipt.verify_documents', $storeId);
     }
 

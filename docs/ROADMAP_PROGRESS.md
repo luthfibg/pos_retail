@@ -13,12 +13,12 @@
 
 ## 1. Posisi saat ini
 
-**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 36 tahap — 32 ✅ selesai dan lulus test · 1 🟡 menunggu test · 3 ⏳ belum.**
+**Backend Paket 1 (Fase 0–6; tidak termasuk hardening/UAT/go-live dan Paket 2/3): 37 tahap — 32 ✅ selesai dan lulus test · 2 🟡 menunggu test · 3 ⏳ belum.**
 
 | Fase | ✅ | 🟡 | ⏳ | ⏸ |
 |---|---|---|---|---|
 | Fase 0 — Analisis & desain | 2 | 0 | 0 | 0 |
-| Fase 1 — Fondasi backend (tahap 1a–1c) | 8 | 1 | 0 | 0 |
+| Fase 1 — Fondasi backend (tahap 1a–1c) | 8 | 2 | 0 | 0 |
 | Fase 2 — Inventory & karyawan | 6 | 0 | 1 | 0 |
 | Fase 3 — POS & kas | 7 | 0 | 0 | 1 |
 | Fase 4 — Pembelian | 5 | 0 | 0 | 0 |
@@ -27,7 +27,7 @@
 | Fase 7 — Hardening & UAT | 0 | 0 | 5 | 0 |
 | Fase 8 — Cut-over & go-live | 0 | 0 | 3 | 1 |
 | Di luar Paket 1 (setelah go-live) | 0 | 0 | 0 | 2 |
-| **Total semua fase** | **32** | **1** | **11** | **4** |
+| **Total semua fase** | **32** | **2** | **11** | **4** |
 
 ### Aplikasi sekarang sudah bisa apa (✅ = lulus `php artisan test`, terakhir 28 Okt 2026)
 
@@ -46,6 +46,7 @@
 - **Tagihan HRD:** Admin membuka/menutup periode tagihan pada hari gaji (struk kredit terikat, periode berikutnya terbuka otomatis), membuat satu invoice gabungan per periode dengan rincian per karyawan (PPN kredit bila dikonfigurasi), menerbitkan, menandai diserahkan ke HRD, dan mencatat pembayaran HRD (boleh sebagian). ✅
 
 - **Model administrasi toko (🟡):** toko memilih model simple (Admin + Kasir) atau standar retail (Kasir, Finance, Purchasing, Accounting, Owner); peralihan divalidasi (tiap role wajib punya akun aktif) dan mengonversi Admin↔Owner; menu per role mengikuti permission.
+- **Kewenangan stok (🟡):** per toko, Admin/Owner menentukan role yang boleh stok awal, penerimaan, transfer, dan ajuan/persetujuan adjustment, terpisah untuk lokasi toko dan gudang, di toko dengan atau tanpa gudang dan di model administrasi mana pun.
 - **Manajemen pengguna:** Admin menambah akun Kasir/Admin, mengubah nama/email/role, menonaktifkan/mengaktifkan, dan mereset sandi (sesi lama diakhiri) tanpa menyentuh database; setiap pengguna dapat mengganti sandinya sendiri. ✅
 - **Diskon dan PPN:** Admin membuat/mengubah/menonaktifkan diskon per produk atau kategori (persen/nominal, rentang tanggal) dan mengatur saklar PPN dengan tarif berversi, tanpa menyentuh database. ✅
 
@@ -64,7 +65,7 @@ usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk 
 6. ~~Penerimaan ke gudang + putaway (4.4)~~ — **selesai 27 Okt 2026: `GoodsReceiptTest` 12 test; suite saat tahap itu 224 test lulus (1.978 assertions).** Tahap backend berikutnya yang terbuka: denah rak (2.5), cetak dan laporan (6.1–6.3).
 7. ~~Lampiran dokumen penerimaan (4.5)~~ — **selesai 27 Okt 2026: upload/download privat, otorisasi pemilik/approver, validasi format dan ukuran, audit, serta metadata pada detail GR; `GoodsReceiptTest` 16 test dan suite 228 test lulus (2.019 assertions).**
 8. ~~Dashboard dan laporan dasar (6.3)~~ — **selesai 28 Okt 2026: laporan penjualan harian, stok menipis/kedaluwarsa, serta ringkasan kas; empat endpoint, batasan toko/kasir, periode WIB, dan `ReportTest` (3 test); suite 231 test lulus (2.058 assertions).** Berikutnya: denah rak (2.5, prioritas rendah), cetak struk/invoice (6.1–6.2), lalu hardening/UAT.
-9. **Finalisasi Paket 1 — prioritas disepakati (B#4):** (1) Management Retail/operator platform ✅ ada (login CLI → layar operator masih bermasalah, ditangani agent lain); (2) **model administrasi toko 1.9 🟡** — jalankan `php artisan test` untuk `AdminModelTest`; (3) matriks kewenangan stok (siapa boleh stok awal / penerimaan / transfer / adjustment, per toko, tanpa bergantung gudang atau model) ⏳ berikutnya; (4) saklar Warehouse ✅ sudah ada (`WarehouseSettingsTest`); (5) kunci otorisasi Owner (hash, batas percobaan, rotasi, audit; perlu keputusan menggantikan atau melengkapi re-auth) ⏳. Frontend: satu workspace Pengaturan (termasuk model administrasi) dan navigasi alur kerja per role mengikuti `permissions` dari `/api/auth/me`.
+9. **Finalisasi Paket 1 — prioritas disepakati (B#4):** (1) Management Retail/operator platform ✅ ada (login CLI → layar operator masih bermasalah, ditangani agent lain); (2) **model administrasi toko 1.9 🟡** — jalankan `php artisan test` untuk `AdminModelTest`; (3) **matriks kewenangan stok 1.10 🟡** (siapa boleh stok awal / penerimaan / transfer / adjustment, per toko, tanpa bergantung gudang atau model) — jalankan `php artisan test` untuk `StockAuthorityTest`; (4) saklar Warehouse ✅ sudah ada (`WarehouseSettingsTest`); (5) kunci otorisasi Owner (hash, batas percobaan, rotasi, audit; perlu keputusan menggantikan atau melengkapi re-auth) ⏳. Frontend: satu workspace Pengaturan (termasuk model administrasi) dan navigasi alur kerja per role mengikuti `permissions` dari `/api/auth/me`.
 
 ### Tahap frontend terbaru
 
@@ -112,6 +113,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | 1.7 | Master data — produk (riwayat harga, barcode otomatis, status stok) | ✅ | ProductTest |
 | 1.8 | Manajemen pengguna (Admin): tambah Kasir/Admin, ubah, aktif/nonaktif, reset sandi; ganti sandi sendiri | ✅ | UserManagementTest |
 | 1.9 | Model administrasi toko: simple (Admin + Kasir) atau standar retail (Kasir, Finance, Purchasing, Accounting, Owner); validasi akun per role, konversi Admin↔Owner, role baru + matriks permission, `can.any` | 🟡 | AdminModelTest (8) |
+| 1.10 | Matriks kewenangan stok per toko: siapa boleh stok awal, penerimaan, transfer, ajuan dan persetujuan adjustment (lingkup toko/gudang); permission stok diturunkan dari matriks; `inventory.opening_balance`; FR-04 | 🟡 | StockAuthorityTest (12) |
 
 ### Fase 2 — Inventory & karyawan
 
@@ -206,11 +208,12 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | PricingSettingsTest | 6 | ✅ | pengguna (25 Okt 2026) |
 | UserManagementTest | 10 | ✅ | pengguna (26 Okt 2026); sesuaikan daftar role di `/api/roles` — jalankan ulang |
 | AdminModelTest | 8 | 🟡 | menunggu `php artisan test` |
+| StockAuthorityTest | 12 | 🟡 | menunggu `php artisan test` |
 | CashMovementTest | 4 | ✅ | backend test run (26 Okt 2026) |
 | StockTransferTest | 6 | ✅ | backend test run (27 Okt 2026) |
 | StockAdjustmentTest | 9 | ✅ | backend test run (27 Okt 2026) |
 | ReportTest | 3 | ✅ | backend test run (28 Okt 2026) |
-| **Total saat ini (31 kelas)** | Suite penuh terakhir 244 test (243 lulus, 1 gagal `ReportTest`); **+ 8 test `AdminModelTest` belum dijalankan** | 🟡 | backend test run (31 Okt 2026) |
+| **Total saat ini (31 kelas)** | Suite penuh terakhir 244 test (243 lulus, 1 gagal `ReportTest`); **+ 8 test `AdminModelTest` dan 12 test `StockAuthorityTest` belum dijalankan** | 🟡 | backend test run (31 Okt 2026) |
 
 Verifikasi terbaru: pada 28 Okt 2026 `php artisan test` dijalankan setelah FR-02; seluruh 238 test lulus (2.129 assertions).
 

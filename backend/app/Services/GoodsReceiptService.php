@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\User;
 use App\Services\Concerns\PurchasingSupport;
 use App\Support\Decimal;
+use App\Support\StockAuthorityPolicy;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -152,6 +153,7 @@ class GoodsReceiptService
                 $storeId,
                 isset($data['receiving_location_id']) ? (int) $data['receiving_location_id'] : null,
             );
+            StockAuthorityPolicy::assertScope($actor, $storeId, 'receipt', $locationId);
             $poItems = DB::table('purchase_order_items')->where('po_id', $po->id)->get()->keyBy('id');
             $rows = $this->normalizeItems($actor, $storeId, $locationId, $poItems, $data['items']);
 
@@ -320,6 +322,7 @@ class GoodsReceiptService
             }
 
             $this->receivingLocationId($storeId, (int) $gr->receiving_location_id);
+            StockAuthorityPolicy::assertScope($actor, $storeId, 'receipt', (int) $gr->receiving_location_id);
             $poItems = DB::table('purchase_order_items')->where('po_id', $po->id)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $items = DB::table('goods_receipt_items')->where('gr_id', $id)->orderBy('id')->get();
             $products = DB::table('products')->whereIn('id', $items->pluck('product_id')->unique()->all())->get(['id', 'name', 'status'])->keyBy('id');

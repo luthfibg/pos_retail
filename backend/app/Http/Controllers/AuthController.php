@@ -9,6 +9,7 @@ use App\Services\AuditLogger;
 use App\Services\PermissionResolver;
 use App\Services\PlatformAccess;
 use App\Services\StoreContext;
+use App\Support\StockAuthorityPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -109,6 +110,7 @@ class AuthController extends Controller
             'roles' => $roles,
             'permissions' => $this->permissions->codes($user, $storeId),
             'admin_model' => $this->adminModel->current($storeId),
+            'stock_authority' => StockAuthorityPolicy::userMap($user, $storeId),
             'platform_operator' => $isPlatformOperator,
         ]);
     }

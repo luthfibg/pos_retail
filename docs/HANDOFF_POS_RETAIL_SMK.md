@@ -38,6 +38,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Setoran kasir + kebijakan endapan (parsial/final, penerimaan Finance, selisih/koreksi, saldo dana) dan void penjualan | Selesai | **Lolos** test (24 Okt 2026) |
 | Manajemen pengguna (CRUD akun, aktif/nonaktif, reset/ganti sandi) | Selesai | **Lolos** test (`UserManagementTest`, 26 Okt 2026) |
 | Model administrasi toko (simple / standar retail; role Owner, Finance, Purchasing, Accounting; validasi akun per role; `can.any`) | Ditulis | 🟡 Belum dijalankan (`AdminModelTest`, 8 test); kontrak: `BACKEND_PROGRESS.md` bagian 12 |
+| Matriks kewenangan stok per toko (stok awal, penerimaan, transfer, ajuan/persetujuan adjustment; lingkup toko/gudang; permission `inventory.opening_balance`; FR-04) | Ditulis | 🟡 Belum dijalankan (`StockAuthorityTest`, 12 test); kontrak: `BACKEND_PROGRESS.md` bagian 13 |
 | Frontend: POS dan pengaturan diskon/PPN | Sudah dibuat | Test frontend lulus; lihat `docs/FRONTEND_PROGRESS.md` |
 | Frontend: penyerahan setoran akhir Kasir dan konfigurasi kebijakan endapan Admin | Selesai | `npm run typecheck`, `npm test` dan build lulus; lihat riwayat `docs/FRONTEND_PROGRESS.md` |
 | Frontend: kas masuk/keluar nonpenjualan | Selesai | Otomatisasi lulus dan pengguna sudah menguji alur klik |

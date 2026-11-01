@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Support\PermissionCatalog;
+use App\Support\StockAuthorityPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -123,6 +124,8 @@ class AdminModelService
                 DB::table('user_roles')->where('store_id', $storeId)->where('role_id', $fromId)->whereIn('user_id', $ids)
                     ->update(['role_id' => $toId]);
                 $converted[] = ['from' => $c['from'], 'to' => $c['to'], 'user_ids' => $ids];
+                // aturan matriks kewenangan stok yang disetel ikut berganti nama role (Admin <-> Owner)
+                StockAuthorityPolicy::remapRole($storeId, $c['from'], $c['to'], $actor->id);
             }
 
             DB::table('settings')->updateOrInsert(

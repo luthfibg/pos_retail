@@ -12,9 +12,9 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
 
     Route::get('movements', [InventoryController::class, 'movements'])->middleware('can:inventory.view');
 
-    // Stok awal: hanya Admin. Memakai inventory.adjust.approve (belum ada permission khusus) [ASUMSI].
+    // Stok awal: permission khusus inventory.opening_balance, diberikan lewat matriks kewenangan stok (settings/stock-authority).
     Route::post('opening-balances', [InventoryController::class, 'openingBalance'])
-        ->middleware('can:inventory.adjust.approve');
+        ->middleware('can:inventory.opening_balance');
 
     // Adjustment dan opname; perubahan saldo terjadi setelah persetujuan.
     Route::get('adjustments', [StockAdjustmentController::class, 'index']);

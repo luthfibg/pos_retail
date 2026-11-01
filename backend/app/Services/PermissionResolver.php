@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\StockAuthorityPolicy;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Permission efektif = permission dari role (per toko) + override `allow` - override `deny`.
+ * Lima permission stok (StockAuthorityPolicy::controlledPermissions) TIDAK diambil dari role_permissions, melainkan dari
+ * matriks kewenangan stok toko (settings.stock_authority atau default menurut model administrasi).
  * Hasil di-cache per instance (per request).
  */
 class PermissionResolver
@@ -58,6 +61,13 @@ class PermissionResolver
             ->all();
 
         $set = array_fill_keys($granted, true);
+
+        foreach (StockAuthorityPolicy::controlledPermissions() as $code) {
+            unset($set[$code]);
+        }
+        foreach (StockAuthorityPolicy::permissionsFor($storeId, StockAuthorityPolicy::roleNames($userId, $storeId)) as $code) {
+            $set[$code] = true;
+        }
 
         $overrides = DB::table('user_permissions as up')
             ->join('permissions as p', 'p.id', '=', 'up.permission_id')

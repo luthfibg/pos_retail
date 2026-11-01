@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Support\Decimal;
+use App\Support\StockAuthorityPolicy;
 use App\Support\DocumentNumber;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -97,6 +98,9 @@ class StockAdjustmentService
         $id = DB::transaction(function () use ($actor, $storeId, $data) {
             $items = array_values($data['items']);
             $this->validateLocations($storeId, $items, true);
+            foreach (collect($items)->pluck('location_id')->map(fn ($l) => (int) $l)->unique()->sort()->values() as $scopeLocationId) {
+                StockAuthorityPolicy::assertScope($actor, $storeId, 'adjustment_request', $scopeLocationId);
+            }
 
             $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)
                 ->unique()->sort()->values()->all();
