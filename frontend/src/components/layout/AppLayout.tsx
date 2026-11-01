@@ -98,7 +98,7 @@ export function AppLayout() {
           </button>
         </div>
       </aside>
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
         <Outlet />
       </main>
       {changePasswordOpen && <ChangePasswordDialog onClose={() => setChangePasswordOpen(false)} />}
