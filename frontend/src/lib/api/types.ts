@@ -75,6 +75,15 @@ export interface PlatformTenantInput {
   };
 }
 
+export interface WarehouseSetting {
+  enabled: boolean;
+  locations: Array<{
+    id: number;
+    name: string;
+    is_active: boolean;
+  }>;
+}
+
 export interface ManagedUser {
   id: number;
   name: string;

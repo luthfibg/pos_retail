@@ -21,18 +21,37 @@ const queryClient = new QueryClient({
 
 async function startApp() {
   if (window.location.pathname === '/platform/cli-login') {
-    const ticket = new URLSearchParams(window.location.hash.slice(1)).get('ticket');
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const ticket = fragment.get('ticket');
+    const issuedFingerprint = fragment.get('fingerprint') ?? '';
     window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     tokenStore.clear();
 
     try {
       if (!ticket) throw new Error('Tiket login CLI tidak ditemukan.');
-      const { token } = await platformCliLoginApi.exchange(ticket);
+      if (!/^[a-f0-9]{12}$/.test(issuedFingerprint)) {
+        throw new Error('Tautan ini berasal dari command CLI lama. Jalankan ulang platform:operator-login dari backend terbaru dan gunakan tab browser yang baru terbuka.');
+      }
+
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ticket));
+      const clientFingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+        .slice(0, 12);
+      if (clientFingerprint !== issuedFingerprint) {
+        throw new Error('Tiket pada tautan berbeda dari tiket yang diterbitkan CLI. Jalankan ulang platform:operator-login dan gunakan tab browser yang baru terbuka.');
+      }
+
+      const { token } = await platformCliLoginApi.exchange(ticket, issuedFingerprint, clientFingerprint);
       tokenStore.set(token);
       window.location.replace('/platform/stores');
       return;
-    } catch {
-      sessionStorage.setItem('platform-cli-login-error', 'Login CLI gagal atau tiket sudah kedaluwarsa. Jalankan kembali command login.');
+    } catch (error) {
+      const message = error instanceof ApiError
+        ? `Login CLI gagal (HTTP ${error.status}): ${error.message}`
+        : error instanceof Error
+          ? `Login CLI gagal: ${error.message}`
+          : 'Login CLI gagal. Browser tidak dapat menghubungi backend; periksa koneksi dan konfigurasi API.';
+      sessionStorage.setItem('platform-cli-login-error', message);
       window.location.replace('/login');
       return;
     }

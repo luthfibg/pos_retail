@@ -48,9 +48,9 @@ php artisan platform:operator-login
 
 Masukkan username dan password pada prompt; password tidak ditampilkan. Jika autentikasi gagal atau akun bukan operator platform aktif, command menolak login tanpa membuat tiket. Jika berhasil, command membuka browser langsung ke layar daftar tenant (`/platform/stores`).
 
-Atur `PLATFORM_UI_URL` di environment backend ke origin/base URL frontend yang digunakan, misalnya `http://127.0.0.1:5173` untuk Vite lokal atau `https://retail.example.com` untuk deployment. Default-nya `http://127.0.0.1:5173`. Jangan menyetel URL berisi username/password, query, atau fragment.
+Atur `PLATFORM_UI_URL` di environment backend ke origin/base URL frontend yang digunakan, misalnya `http://localhost:5173` untuk Vite lokal atau `https://retail.example.com` untuk deployment. Default-nya `http://localhost:5173`. Jangan menyetel URL berisi username/password, query, atau fragment.
 
-Login browser menggunakan tiket acak sekali pakai yang disimpan dalam bentuk hash di database, berlaku 60 detik, dan ditukar melalui API ber-rate-limit. Tiket ditempatkan pada URL fragment (tidak dikirim sebagai request ke web server); frontend segera menghapus fragment dan menukarnya dengan sesi Sanctum. Password dan token API tidak dicetak ke terminal atau dikirim di URL. Jika browser gagal dibuka atau tiket kedaluwarsa, jalankan ulang command. Opsi `--no-browser` hanya menyiapkan tiket tanpa membuka browser dan ditujukan untuk otomasi/test.
+Login browser menggunakan tiket terenkripsi berformat Base64 URL-safe dengan masa berlaku 5 menit, sehingga karakter tiket tidak berubah saat melewati URL fragment dan parser browser. Fragment tidak dikirim sebagai request ke web server; frontend segera menghapusnya dan menukarnya dengan sesi Sanctum. Endpoint memverifikasi tiket menggunakan `APP_KEY` lalu mencatat nonce secara atomik di database agar tiket hanya dapat digunakan sekali. Karena tiket tidak perlu disimpan saat diterbitkan, alur ini tidak bergantung pada pembacaan row tiket yang baru ditulis oleh proses CLI. Pastikan `APP_KEY` CLI dan server Laravel sama. Password dan token API tidak dicetak ke terminal atau dikirim di URL. Log tidak menyimpan tiket/password. Untuk diagnosis, bandingkan `ticket_fingerprint` pada log penerbitan dengan `issued_ticket_fingerprint`, `client_ticket_fingerprint`, dan `ticket_fingerprint` pada log penolakan exchange; nilai-nilai ini menunjukkan apakah tiket berubah di CLI/browser/request. Opsi `--no-browser` hanya menyiapkan tiket tanpa membuka browser dan ditujukan untuk otomasi/test.
 
 ## Command Artisan untuk operasi terkait
 
@@ -84,6 +84,6 @@ API berikut memerlukan autentikasi Sanctum dan operator platform aktif. Frontend
 | `POST` | `/api/platform/stores` | Membuat tenant beserta akun Admin awal dan konfigurasi dasar secara atomik. |
 | `GET` | `/api/platform/stores/{id}` | Melihat detail tenant. |
 | `PATCH` | `/api/platform/stores/{id}/status` | Mengaktifkan atau menonaktifkan tenant tanpa menghapus datanya. |
-| `POST` | `/api/platform/cli-login/exchange` | Menukar tiket CLI sekali pakai berumur 60 detik dengan token Sanctum; khusus handoff browser, jangan dipanggil UI sebagai alur login biasa. |
+| `POST` | `/api/platform/cli-login/exchange` | Menukar tiket CLI terenkripsi berumur 5 menit yang hanya dapat digunakan sekali dengan token Sanctum; khusus handoff browser, jangan dipanggil UI sebagai alur login biasa. |
 
 Untuk inventaris command Laravel/vendor terbaru, jalankan `php artisan list --raw`; command yang tersedia dapat berubah mengikuti versi framework dan paket.

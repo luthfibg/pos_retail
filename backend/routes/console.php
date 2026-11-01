@@ -1,12 +1,13 @@
 <?php
 
 use App\Models\User;
+use App\Services\PlatformCliLoginTicket;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\Process\Process;
 
@@ -187,20 +188,24 @@ Artisan::command('platform:operator-login {--no-browser : Siapkan tiket tanpa me
         return 1;
     }
 
-    $ticket = Str::random(64);
-    $expiresAt = now()->addMinute();
-    DB::transaction(function () use ($user, $ticket, $expiresAt) {
-        DB::table('platform_cli_login_tickets')->where('expires_at', '<=', now())->delete();
-        DB::table('platform_cli_login_tickets')->insert([
-            'ticket_hash' => hash('sha256', $ticket),
-            'user_id' => $user->id,
-            'expires_at' => $expiresAt,
-        ]);
-    });
+    $expiresAt = now()->addMinutes(5);
+    DB::table('platform_cli_login_tickets')->where('expires_at', '<=', now())->delete();
+    $ticket = app(PlatformCliLoginTicket::class)->issue((int) $user->id, $expiresAt->timestamp);
+    $ticketFingerprint = substr(hash('sha256', $ticket), 0, 12);
+    Log::info('Platform CLI login ticket issued.', [
+        'user_id' => (int) $user->id,
+        'ticket_fingerprint' => $ticketFingerprint,
+        'expires_at' => $expiresAt->toDateTimeString(),
+        'ui_host' => $parsedUrl['host'],
+        'database_connection' => DB::connection()->getName(),
+        'database_host' => DB::connection()->getConfig('host'),
+        'database_port' => DB::connection()->getConfig('port'),
+        'database' => DB::connection()->getDatabaseName(),
+    ]);
 
-    $loginUrl = $uiUrl.'/platform/cli-login#ticket='.rawurlencode($ticket);
+    $loginUrl = $uiUrl.'/platform/cli-login#ticket='.rawurlencode($ticket).'&fingerprint='.$ticketFingerprint;
     if ($this->option('no-browser')) {
-        $this->info('Tiket login satu kali telah disiapkan (berlaku 60 detik); mode --no-browser aktif.');
+        $this->info('Tiket login terenkripsi telah disiapkan (berlaku 5 menit); mode --no-browser aktif.');
 
         return 0;
     }
@@ -213,7 +218,6 @@ Artisan::command('platform:operator-login {--no-browser : Siapkan tiket tanpa me
     $process = new Process($browserCommand);
     $process->run();
     if (! $process->isSuccessful()) {
-        DB::table('platform_cli_login_tickets')->where('ticket_hash', hash('sha256', $ticket))->delete();
         $this->error('Browser gagal dibuka. Pastikan PLATFORM_UI_URL benar dan jalankan ulang command.');
 
         return 1;

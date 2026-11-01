@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\VatSettingController;
+use App\Http\Controllers\WarehouseSettingController;
 use Illuminate\Support\Facades\Route;
 
 // Dimuat dari routes/api.php (prefix /api sudah terpasang). Admin saja. Diskon tidak dihapus; gunakan is_active.
@@ -13,4 +14,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('settings/vat', [VatSettingController::class, 'show'])->middleware('can:settings.manage');
     Route::put('settings/vat', [VatSettingController::class, 'update'])->middleware('can:settings.manage');
+    Route::get('settings/warehouse', [WarehouseSettingController::class, 'show'])->middleware('can:settings.manage');
+    Route::put('settings/warehouse', [WarehouseSettingController::class, 'update'])->middleware('can:settings.manage');
 });

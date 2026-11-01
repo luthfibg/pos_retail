@@ -15,6 +15,7 @@ import { PosPage } from '@/features/sales/PosPage';
 const SalesHistoryPage = lazy(() => import('@/features/sales/SalesHistoryPage').then((module) => ({ default: module.SalesHistoryPage })));
 import { DiscountsPage } from '@/features/pricing/DiscountsPage';
 import { VatSettingsPage } from '@/features/pricing/VatSettingsPage';
+import { WarehouseSettingsPage } from '@/features/settings/WarehouseSettingsPage';
 const FloatPolicyPage = lazy(() => import('@/features/shifts/FloatPolicyPage').then((module) => ({ default: module.FloatPolicyPage })));
 const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module) => ({ default: module.ShiftPage })));
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
@@ -128,7 +129,10 @@ export const router = createBrowserRouter([
           },
           {
             element: <RequirePermission permission="settings.manage" />,
-            children: [{ path: 'settings/vat', element: <VatSettingsPage /> }],
+            children: [
+              { path: 'settings/vat', element: <VatSettingsPage /> },
+              { path: 'settings/warehouse', element: <WarehouseSettingsPage /> },
+            ],
           },
           {
             element: <RequirePermission permission="float.configure" />,

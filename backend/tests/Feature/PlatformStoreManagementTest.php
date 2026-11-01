@@ -3,9 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\PlatformCliLoginTicket;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\SeededTestCase;
 
@@ -148,29 +148,28 @@ class PlatformStoreManagementTest extends SeededTestCase
 
     public function test_operator_cli_login_opens_ticket_that_exchanges_once_for_a_session(): void
     {
-        $ticket = str_repeat('A', 64);
-        Str::createRandomStringsUsing(fn (int $length): string => str_repeat('A', $length));
-        try {
-            $this->artisan('platform:operator-login', ['--no-browser' => true])
-                ->expectsQuestion('Username operator', 'platform-operator')
-                ->expectsQuestion('Password operator', 'operator-password-123')
-                ->expectsOutputToContain('Tiket login satu kali telah disiapkan')
-                ->assertExitCode(0);
-        } finally {
-            Str::createRandomStringsUsing();
-        }
+        $this->artisan('platform:operator-login', ['--no-browser' => true])
+            ->expectsQuestion('Username operator', 'platform-operator')
+            ->expectsQuestion('Password operator', 'operator-password-123')
+            ->expectsOutputToContain('Tiket login terenkripsi telah disiapkan')
+            ->assertExitCode(0);
+        $this->assertSame(0, DB::table('platform_cli_login_tickets')->count());
 
-        $this->assertDatabaseHas('platform_cli_login_tickets', [
-            'ticket_hash' => hash('sha256', $ticket),
-            'user_id' => $this->operator->id,
-        ]);
+        $tickets = app(PlatformCliLoginTicket::class);
+        $ticket = $tickets->issue((int) $this->operator->id, now()->addMinutes(5)->timestamp);
+        $this->assertMatchesRegularExpression('/^[A-Za-z0-9_-]+$/', $ticket);
+        $ticketPayload = $tickets->decode($ticket);
+        $this->assertNotNull($ticketPayload);
 
         $exchange = $this->postJson('/api/platform/cli-login/exchange', ['ticket' => $ticket])
             ->assertOk()
             ->assertJsonPath('token_type', 'Bearer');
         $plainTextToken = $exchange->json('token');
         $this->assertNotEmpty($plainTextToken);
-        $this->assertDatabaseMissing('platform_cli_login_tickets', ['ticket_hash' => hash('sha256', $ticket)]);
+        $this->assertDatabaseHas('platform_cli_login_tickets', [
+            'ticket_hash' => hash('sha256', $ticketPayload['nonce']),
+            'user_id' => $this->operator->id,
+        ]);
 
         $this->withToken($plainTextToken)->getJson('/api/auth/me')
             ->assertOk()
@@ -198,25 +197,22 @@ class PlatformStoreManagementTest extends SeededTestCase
 
     public function test_cli_login_ticket_cannot_be_used_after_expiry_or_operator_deactivation(): void
     {
-        $expiredTicket = str_repeat('E', 64);
-        DB::table('platform_cli_login_tickets')->insert([
-            'ticket_hash' => hash('sha256', $expiredTicket),
-            'user_id' => $this->operator->id,
-            'expires_at' => now()->subSecond(),
-        ]);
+        $tickets = app(PlatformCliLoginTicket::class);
+        $expiredTicket = $tickets->issue((int) $this->operator->id, now()->subSecond()->timestamp);
+        $expiredPayload = $tickets->decode($expiredTicket);
+        $this->assertNotNull($expiredPayload);
         $this->postJson('/api/platform/cli-login/exchange', ['ticket' => $expiredTicket])->assertUnauthorized();
-        $this->assertDatabaseMissing('platform_cli_login_tickets', ['ticket_hash' => hash('sha256', $expiredTicket)]);
+        $this->assertDatabaseMissing('platform_cli_login_tickets', ['ticket_hash' => hash('sha256', $expiredPayload['nonce'])]);
 
-        $revokedTicket = str_repeat('R', 64);
-        DB::table('platform_cli_login_tickets')->insert([
-            'ticket_hash' => hash('sha256', $revokedTicket),
-            'user_id' => $this->operator->id,
-            'expires_at' => now()->addMinute(),
-        ]);
+        $revokedTicket = $tickets->issue((int) $this->operator->id, now()->addMinutes(5)->timestamp);
+        $revokedPayload = $tickets->decode($revokedTicket);
+        $this->assertNotNull($revokedPayload);
         DB::table('platform_operators')->where('user_id', $this->operator->id)->update(['is_active' => 0]);
 
         $this->postJson('/api/platform/cli-login/exchange', ['ticket' => $revokedTicket])->assertUnauthorized();
-        $this->assertDatabaseMissing('platform_cli_login_tickets', ['ticket_hash' => hash('sha256', $revokedTicket)]);
+        $this->assertDatabaseMissing('platform_cli_login_tickets', [
+            'ticket_hash' => hash('sha256', $revokedPayload['nonce']),
+        ]);
     }
 
     public function test_operator_creates_store_and_initial_admin_atomically_with_defaults(): void

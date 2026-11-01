@@ -67,6 +67,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/discounts', label: 'Diskon', permission: 'discount.manage' },
       { to: '/settings/vat', label: 'Pengaturan PPN', permission: 'settings.manage' },
+      { to: '/settings/warehouse', label: 'Pengaturan Gudang', permission: 'settings.manage' },
       { to: '/settings/float-policy', label: 'Kebijakan Endapan', permission: 'float.configure' },
       { to: '/users', label: 'Manajemen Pengguna', permission: 'user.manage' },
     ],

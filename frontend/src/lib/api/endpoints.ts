@@ -10,6 +10,7 @@ import type {
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
+  WarehouseSetting,
 } from './types';
 
 export const authApi = {
@@ -20,10 +21,14 @@ export const authApi = {
 };
 
 export const platformCliLoginApi = {
-  exchange: (ticket: string) =>
+  exchange: (ticket: string, issuedFingerprint: string, clientFingerprint: string) =>
     api<{ token: string; token_type: 'Bearer' }>('/platform/cli-login/exchange', {
       method: 'POST',
-      body: { ticket },
+      body: {
+        ticket,
+        issued_fingerprint: issuedFingerprint,
+        client_fingerprint: clientFingerprint,
+      },
     }),
 };
 
@@ -395,4 +400,7 @@ export const settingsApi = {
   vat: () => api<{ data: VatSetting }>('/settings/vat').then((r) => r.data),
   saveVat: (input: VatInput) =>
     api<{ data: VatSetting }>('/settings/vat', { method: 'PUT', body: input }).then((r) => r.data),
+  warehouse: () => api<{ data: WarehouseSetting }>('/settings/warehouse').then((r) => r.data),
+  saveWarehouse: (enabled: boolean) =>
+    api<{ data: WarehouseSetting }>('/settings/warehouse', { method: 'PUT', body: { enabled } }).then((r) => r.data),
 };
