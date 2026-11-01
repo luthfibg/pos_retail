@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { RequireAnyPermission, RequireAuth, RequirePermission, RequirePlatformOperator } from '@/features/auth/guards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
@@ -13,11 +13,8 @@ import { MovementsPage } from '@/features/inventory/MovementsPage';
 import { CustomersPage } from '@/features/customers/CustomersPage';
 import { PosPage } from '@/features/sales/PosPage';
 const SalesHistoryPage = lazy(() => import('@/features/sales/SalesHistoryPage').then((module) => ({ default: module.SalesHistoryPage })));
-import { DiscountsPage } from '@/features/pricing/DiscountsPage';
-import { VatSettingsPage } from '@/features/pricing/VatSettingsPage';
-import { WarehouseSettingsPage } from '@/features/settings/WarehouseSettingsPage';
-const AdminModelSettingsPage = lazy(() => import('@/features/settings/AdminModelSettingsPage').then((module) => ({ default: module.AdminModelSettingsPage })));
-const FloatPolicyPage = lazy(() => import('@/features/shifts/FloatPolicyPage').then((module) => ({ default: module.FloatPolicyPage })));
+const SettingsPage = lazy(() => import('@/features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })));
+import { LEGACY_REDIRECTS, SETTINGS_PERMISSIONS } from '@/features/settings/settingsSections';
 const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module) => ({ default: module.ShiftPage })));
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
@@ -27,7 +24,6 @@ const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceipts
 const PurchasingEntryPage = lazy(() => import('@/features/purchasing/PurchaseBoardPage').then((module) => ({ default: module.PurchasingEntryPage })));
 const DashboardPage = lazy(() => import('@/features/reports/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 const BillingPage = lazy(() => import('@/features/billing/BillingPage').then((module) => ({ default: module.BillingPage })));
-const UsersPage = lazy(() => import('@/features/users/UsersPage').then((module) => ({ default: module.UsersPage })));
 const PlatformStoresPage = lazy(() => import('@/features/platform/PlatformStoresPage').then((module) => ({ default: module.PlatformStoresPage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
@@ -73,10 +69,6 @@ export const router = createBrowserRouter([
           {
             element: <RequireAnyPermission permissions={['billing_period.manage', 'invoice.generate']} />,
             children: [{ path: 'billing', element: <LazyPage><BillingPage /></LazyPage> }],
-          },
-          {
-            element: <RequirePermission permission="user.manage" />,
-            children: [{ path: 'users', element: <LazyPage><UsersPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="inventory.view" />,
@@ -125,24 +117,14 @@ export const router = createBrowserRouter([
             children: [{ path: 'purchase-requisitions', element: <LazyPage><PurchasingEntryPage /></LazyPage> }],
           },
           {
-            element: <RequirePermission permission="discount.manage" />,
-            children: [{ path: 'discounts', element: <DiscountsPage /> }],
+            element: <RequireAnyPermission permissions={SETTINGS_PERMISSIONS} />,
+            children: [{ path: 'settings', element: <LazyPage><SettingsPage /></LazyPage> }],
           },
-          {
-            element: <RequirePermission permission="settings.manage" />,
-            children: [
-              { path: 'settings/vat', element: <VatSettingsPage /> },
-              { path: 'settings/warehouse', element: <WarehouseSettingsPage /> },
-              { path: 'settings/admin-model', element: <LazyPage><AdminModelSettingsPage /></LazyPage> },
-            ],
-          },
-          {
-            element: <RequirePermission permission="float.configure" />,
-            children: [{
-              path: 'settings/float-policy',
-              element: <LazyPage><FloatPolicyPage /></LazyPage>,
-            }],
-          },
+          // Rute lama (bookmark, tautan) dialihkan ke bagian yang sesuai di layar Pengaturan.
+          ...Object.entries(LEGACY_REDIRECTS).map(([from, id]) => ({
+            path: from.slice(1),
+            element: <Navigate to={`/settings#${id}`} replace />,
+          })),
           { path: '*', element: <NotFound /> },
         ],
       },

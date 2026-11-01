@@ -1,3 +1,4 @@
+import { SettingsTitle, pageClass } from '@/features/settings/embedded';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api/client';
@@ -14,7 +15,7 @@ import {
   type FloatPolicyFormValues,
 } from './floatPolicyForm';
 
-export function FloatPolicyPage() {
+export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {}) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ['float-policies'], queryFn: floatPolicyApi.list });
   const saved = query.data?.petty_cash ?? null;
@@ -46,8 +47,8 @@ export function FloatPolicyPage() {
 
   if (query.isLoading || !query.data || !values) {
     return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-xl font-semibold">Kebijakan Endapan</h1>
+      <div className={pageClass(embedded)}>
+        <SettingsTitle embedded={embedded}>Kebijakan Endapan</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-slate-500">Memuat kebijakan…</p>}
       </div>
@@ -74,9 +75,9 @@ export function FloatPolicyPage() {
   const serverError = (field: string) => apiErrors[field]?.[0];
 
   return (
-    <div className="max-w-2xl space-y-4 p-6">
+    <div className={pageClass(embedded, 'max-w-2xl')}>
       <div>
-        <h1 className="text-xl font-semibold">Kebijakan Endapan</h1>
+        <SettingsTitle embedded={embedded}>Kebijakan Endapan</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
           Atur uang yang tetap berada di laci saat shift ditutup. Kebijakan ini menentukan endapan dan setoran akhir shift berikutnya.
         </p>

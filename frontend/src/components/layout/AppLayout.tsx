@@ -34,6 +34,20 @@ export function AppLayout() {
         </div>
         <nav className="min-h-0 flex-1 overflow-hidden p-2">
           {groups.map((group) => {
+            const single = group.standalone ? group.items[0] : undefined;
+            if (single) {
+              return (
+                <NavLink
+                  key={group.label}
+                  to={single.to}
+                  className={({ isActive }) =>
+                    `mb-1 block rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`
+                  }
+                >
+                  {single.label}
+                </NavLink>
+              );
+            }
             const isExpanded = expandedGroup === group.label;
             return (
               <section key={group.label} className="mb-1">

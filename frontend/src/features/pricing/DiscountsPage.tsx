@@ -1,3 +1,4 @@
+import { SettingsTitle, pageClass } from '@/features/settings/embedded';
 import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { discountApi } from '@/lib/api/endpoints';
@@ -22,7 +23,7 @@ function StatusBadge({ status }: { status: DiscountStatus }) {
   );
 }
 
-export function DiscountsPage() {
+export function DiscountsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [target, setTarget] = useState<DiscountTarget | ''>('');
   const [activeOnly, setActiveOnly] = useState(false);
   const [page, setPage] = useState(1);
@@ -36,9 +37,9 @@ export function DiscountsPage() {
   const rows = query.data?.data ?? [];
 
   return (
-    <div className="space-y-4 p-6">
+    <div className={pageClass(embedded)}>
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Diskon</h1>
+        <SettingsTitle embedded={embedded}>Diskon</SettingsTitle>
         <button type="button" onClick={() => setDialog({})} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Diskon baru</button>
       </div>
       <p className="max-w-2xl text-sm text-slate-600">

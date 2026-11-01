@@ -1,0 +1,91 @@
+/**
+ * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
+ * Izin hanya untuk tampilan; backend tetap penentu akhir.
+ */
+export type SectionId = 'admin-model' | 'warehouse' | 'vat' | 'discounts' | 'float-policy' | 'users';
+export type GroupId = 'store' | 'sales' | 'cash' | 'accounts';
+
+export interface SettingsSection {
+  id: SectionId;
+  group: GroupId;
+  title: string;
+  description: string;
+  permission: string;
+  keywords: string[];
+  /** Bagian kecil terbuka sejak awal; daftar besar (diskon, pengguna) tertutup sampai dibuka. */
+  defaultOpen: boolean;
+}
+
+export const GROUPS: ReadonlyArray<{ id: GroupId; label: string }> = [
+  { id: 'store', label: 'Toko' },
+  { id: 'sales', label: 'Penjualan & harga' },
+  { id: 'cash', label: 'Kas' },
+  { id: 'accounts', label: 'Akun' },
+];
+
+export const SECTIONS: ReadonlyArray<SettingsSection> = [
+  {
+    id: 'admin-model', group: 'store', title: 'Model administrasi', permission: 'settings.manage', defaultOpen: true,
+    description: 'Pilih model Simple (Admin dan Kasir) atau Standar retail (Kasir, Finance, Purchasing, Accounting, Owner).',
+    keywords: ['role', 'peran', 'owner', 'finance', 'purchasing', 'accounting', 'admin'],
+  },
+  {
+    id: 'warehouse', group: 'store', title: 'Gudang', permission: 'settings.manage', defaultOpen: true,
+    description: 'Aktifkan lokasi Gudang untuk penerimaan barang dan transfer stok.',
+    keywords: ['lokasi', 'stok', 'transfer'],
+  },
+  {
+    id: 'vat', group: 'sales', title: 'PPN', permission: 'settings.manage', defaultOpen: true,
+    description: 'Tarif PPN, status harga sudah termasuk PPN, dan tanggal berlaku.',
+    keywords: ['pajak', 'pkp', 'tarif', 'invoice'],
+  },
+  {
+    id: 'discounts', group: 'sales', title: 'Diskon', permission: 'discount.manage', defaultOpen: false,
+    description: 'Diskon produk atau kategori yang berlaku otomatis di kasir.',
+    keywords: ['promo', 'potongan', 'harga'],
+  },
+  {
+    id: 'float-policy', group: 'cash', title: 'Kebijakan endapan', permission: 'float.configure', defaultOpen: true,
+    description: 'Uang yang tetap di laci saat shift ditutup dan aturan setoran akhir shift.',
+    keywords: ['endapan', 'laci', 'setoran', 'kas', 'shift'],
+  },
+  {
+    id: 'users', group: 'accounts', title: 'Pengguna', permission: 'user.manage', defaultOpen: false,
+    description: 'Akun, role, akses, dan status pengguna di toko ini.',
+    keywords: ['akun', 'sandi', 'password', 'role', 'kasir', 'username'],
+  },
+];
+
+/** Izin yang membuka layar Pengaturan (salah satu cukup). */
+export const SETTINGS_PERMISSIONS: string[] = Array.from(new Set(SECTIONS.map((section) => section.permission)));
+
+/** Rute lama menuju bagian yang sesuai, agar bookmark dan tautan lama tetap bekerja. */
+export const LEGACY_REDIRECTS: Record<string, SectionId> = {
+  '/settings/admin-model': 'admin-model',
+  '/settings/warehouse': 'warehouse',
+  '/settings/vat': 'vat',
+  '/discounts': 'discounts',
+  '/settings/float-policy': 'float-policy',
+  '/users': 'users',
+};
+
+export function visibleSections(can: (permission: string) => boolean, query = ''): SettingsSection[] {
+  const needle = query.trim().toLowerCase();
+  return SECTIONS.filter((section) => {
+    if (!can(section.permission)) return false;
+    if (needle === '') return true;
+    return [section.title, section.description, ...section.keywords].some((text) => text.toLowerCase().includes(needle));
+  });
+}
+
+export function groupSections(sections: SettingsSection[]): Array<{ id: GroupId; label: string; sections: SettingsSection[] }> {
+  return GROUPS.flatMap((group) => {
+    const inGroup = sections.filter((section) => section.group === group.id);
+    return inGroup.length > 0 ? [{ ...group, sections: inGroup }] : [];
+  });
+}
+
+export function sectionFromHash(hash: string, sections: SettingsSection[]): SectionId | null {
+  const id = hash.replace(/^#/, '');
+  return sections.find((section) => section.id === id)?.id ?? null;
+}

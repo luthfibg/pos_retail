@@ -1,3 +1,4 @@
+import { SETTINGS_PERMISSIONS } from '@/features/settings/settingsSections';
 export interface NavItem {
   to: string;
   label: string;
@@ -8,6 +9,8 @@ export interface NavItem {
 export interface NavGroup {
   label: string;
   items: NavItem[];
+  /** Tampil sebagai satu tautan langsung (tanpa akordeon grup), mis. Pengaturan. */
+  standalone?: boolean;
 }
 
 // Satu sumber menu. Item disaring berdasarkan permission dari /auth/me.
@@ -64,14 +67,9 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Pengaturan',
-    items: [
-      { to: '/discounts', label: 'Diskon', permission: 'discount.manage' },
-      { to: '/settings/vat', label: 'Pengaturan PPN', permission: 'settings.manage' },
-      { to: '/settings/warehouse', label: 'Pengaturan Gudang', permission: 'settings.manage' },
-      { to: '/settings/admin-model', label: 'Model Administrasi', permission: 'settings.manage' },
-      { to: '/settings/float-policy', label: 'Kebijakan Endapan', permission: 'float.configure' },
-      { to: '/users', label: 'Manajemen Pengguna', permission: 'user.manage' },
-    ],
+    standalone: true,
+    // Satu layar untuk semua pengaturan; bagiannya tampil sesuai izin (lihat features/settings/settingsSections.ts).
+    items: [{ to: '/settings', label: 'Pengaturan', permission: SETTINGS_PERMISSIONS }],
   },
   {
     label: 'Laporan',

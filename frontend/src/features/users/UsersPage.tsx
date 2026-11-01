@@ -13,7 +13,7 @@ import { buildCreateUser, buildUpdateUser, emptyUserForm, validateUserForm, type
 
 type UserStatus = 'active' | 'inactive' | '';
 
-export function UsersPage() {
+export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { me } = useAuth();
   const qc = useQueryClient();
   const [values, setValues] = useState({ q: '', status: '' as UserStatus, role: '' });
@@ -135,10 +135,10 @@ export function UsersPage() {
   const validationErrors = mutationError instanceof ApiError && mutationError.status === 422 ? mutationError.errors ?? {} : {};
 
   return (
-    <div className="space-y-5 p-4 sm:p-6">
+    <div className={embedded ? 'space-y-5' : 'space-y-5 p-4 sm:p-6'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Manajemen Pengguna</h1>
+          {embedded ? <h3 className="sr-only">Manajemen Pengguna</h3> : <h1 className="text-2xl font-semibold">Manajemen Pengguna</h1>}
           <p className="mt-1 text-sm text-slate-600">Kelola akun, role, akses, dan status pengguna di toko ini.</p>
         </div>
         <button type="button" onClick={openCreate} disabled={roles.isLoading || Boolean(roles.error)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">Tambah pengguna</button>

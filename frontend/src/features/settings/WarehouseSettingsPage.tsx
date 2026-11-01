@@ -1,10 +1,11 @@
+import { SettingsTitle, pageClass } from '@/features/settings/embedded';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Modal } from '@/components/ui/Modal';
 import { settingsApi } from '@/lib/api/endpoints';
 
-export function WarehouseSettingsPage() {
+export function WarehouseSettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ['settings', 'warehouse'],
@@ -28,8 +29,8 @@ export function WarehouseSettingsPage() {
 
   if (query.isLoading || !query.data) {
     return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-xl font-semibold">Pengaturan Gudang</h1>
+      <div className={pageClass(embedded)}>
+        <SettingsTitle embedded={embedded}>Pengaturan Gudang</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-slate-500">Memuat…</p>}
       </div>
@@ -39,9 +40,9 @@ export function WarehouseSettingsPage() {
   const { enabled, locations } = query.data;
 
   return (
-    <div className="max-w-2xl space-y-4 p-6">
+    <div className={pageClass(embedded, 'max-w-2xl')}>
       <div>
-        <h1 className="text-xl font-semibold">Pengaturan Gudang</h1>
+        <SettingsTitle embedded={embedded}>Pengaturan Gudang</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
           Aktifkan gudang bila toko menyimpan stok di lokasi gudang terpisah dari area toko.
         </p>

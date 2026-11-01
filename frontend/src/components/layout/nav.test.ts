@@ -30,7 +30,7 @@ describe('sidebar navigation', () => {
 
   it('shows user management only to users with user.manage', () => {
     const groups = getVisibleNavGroups((permission) => permission === 'user.manage', true);
-    expect(groups.flatMap((group) => group.items.map((item) => item.to))).toEqual(['/users']);
+    expect(groups.flatMap((group) => group.items.map((item) => item.to))).toEqual(['/settings']);
   });
 
   it('keeps only groups with at least one permitted menu', () => {
@@ -38,6 +38,6 @@ describe('sidebar navigation', () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.label).toBe('Pengaturan');
-    expect(groups[0]?.items.map((item) => item.to)).toEqual(['/settings/vat', '/settings/warehouse', '/settings/admin-model']);
+    expect(groups[0]?.items.map((item) => item.to)).toEqual(['/settings']);
   });
 });

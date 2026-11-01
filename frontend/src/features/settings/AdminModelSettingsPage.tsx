@@ -1,3 +1,4 @@
+import { SettingsTitle, pageClass } from './embedded';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,7 +19,7 @@ import {
 
 const QUERY_KEY = ['settings', 'admin-model'];
 
-export function AdminModelSettingsPage() {
+export function AdminModelSettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const queryClient = useQueryClient();
   const { me, can, refreshMe } = useAuth();
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: settingsApi.adminModel });
@@ -54,8 +55,8 @@ export function AdminModelSettingsPage() {
 
   if (query.isLoading || !query.data) {
     return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-xl font-semibold">Model Administrasi</h1>
+      <div className={pageClass(embedded)}>
+        <SettingsTitle embedded={embedded}>Model Administrasi</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-slate-500">Memuat…</p>}
       </div>
@@ -67,9 +68,9 @@ export function AdminModelSettingsPage() {
   const others = setting.options.filter((option) => !option.current);
 
   return (
-    <div className="max-w-4xl space-y-5 p-6">
+    <div className={pageClass(embedded, 'max-w-4xl')}>
       <div>
-        <h1 className="text-xl font-semibold">Model Administrasi</h1>
+        <SettingsTitle embedded={embedded}>Model Administrasi</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
           Pilih cara toko membagi tugas. Hak akses tetap ditentukan oleh peran masing-masing akun; model ini menentukan peran mana yang tersedia.
         </p>
@@ -207,7 +208,7 @@ function OptionCard({ option, setting, onSwitch }: { option: AdminModelOption; s
           Beralih ke {MODEL_TITLE[option.model]}
         </button>
         {!option.can_switch && option.blockers.length > 0 && (
-          <span className="text-sm text-slate-600">Lengkapi akun yang belum ada di <Link to="/users" className="font-medium text-blue-700 underline">Manajemen Pengguna</Link>, lalu muat ulang halaman ini.</span>
+          <span className="text-sm text-slate-600">Lengkapi akun yang belum ada di <Link to="/settings#users" className="font-medium text-blue-700 underline">Manajemen Pengguna</Link>, lalu muat ulang halaman ini.</span>
         )}
       </div>
     </section>
@@ -219,7 +220,7 @@ function RolesTable({ setting, canManageUsers }: { setting: AdminModelSetting; c
     <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">Akun per peran</h2>
-        {canManageUsers && <Link to="/users" className="text-sm font-medium text-blue-700 underline">Kelola pengguna</Link>}
+        {canManageUsers && <Link to="/settings#users" className="text-sm font-medium text-blue-700 underline">Kelola pengguna</Link>}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-left text-sm">

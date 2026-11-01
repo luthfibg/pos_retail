@@ -1,3 +1,4 @@
+import { SettingsTitle, pageClass } from '@/features/settings/embedded';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@/lib/api/endpoints';
@@ -8,7 +9,7 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { formatDate, formatQty } from '@/lib/format';
 import { buildVatInput, isVatDirty, validateVat, valuesFromVat, type VatErrors, type VatFormValues } from './vatForm';
 
-export function VatSettingsPage() {
+export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ['settings', 'vat'], queryFn: settingsApi.vat });
   const saved = query.data;
@@ -45,8 +46,8 @@ export function VatSettingsPage() {
 
   if (query.isLoading || !saved || !values) {
     return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-xl font-semibold">Pengaturan PPN</h1>
+      <div className={pageClass(embedded)}>
+        <SettingsTitle embedded={embedded}>Pengaturan PPN</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-slate-500">Memuat…</p>}
       </div>
@@ -67,9 +68,9 @@ export function VatSettingsPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-4 p-6">
+    <div className={pageClass(embedded, 'max-w-2xl')}>
       <div>
-        <h1 className="text-xl font-semibold">Pengaturan PPN</h1>
+        <SettingsTitle embedded={embedded}>Pengaturan PPN</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
           Mengatur PPN untuk penjualan tunai dan invoice HRD. Penjualan kredit karyawan tidak dikenai PPN di struk; PPN kredit dihitung saat invoice.
         </p>

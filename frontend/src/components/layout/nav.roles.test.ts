@@ -66,18 +66,17 @@ describe('menu per role (model standar retail)', () => {
 
   it('Owner melihat persetujuan, kebijakan, pengaturan, dan model administrasi', () => {
     const owner = menuFor('Owner');
-    expect(owner).toContain('/settings/admin-model');
-    expect(owner).toContain('/users');
+    expect(owner).toContain('/settings');
     expect(owner).toContain('/purchase-requisitions');
-    expect(owner).toContain('/settings/float-policy');
+    expect(owner).not.toContain('/users');
     expect(owner).not.toContain('/pos');
     expect(owner).not.toContain('/shift');
     expect(owner).not.toContain('/billing');
   });
 
-  it('hanya pemegang settings.manage yang melihat Model Administrasi', () => {
+  it('hanya pemegang izin pengaturan yang melihat menu Pengaturan', () => {
     for (const role of ['Kasir', 'Finance', 'Purchasing', 'Accounting']) {
-      expect(menuFor(role)).not.toContain('/settings/admin-model');
+      expect(menuFor(role)).not.toContain('/settings');
     }
   });
 });
