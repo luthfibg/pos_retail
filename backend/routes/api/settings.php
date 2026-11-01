@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminModelController;
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\VatSettingController;
 use App\Http\Controllers\WarehouseSettingController;
@@ -16,4 +17,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('settings/vat', [VatSettingController::class, 'update'])->middleware('can:settings.manage');
     Route::get('settings/warehouse', [WarehouseSettingController::class, 'show'])->middleware('can:settings.manage');
     Route::put('settings/warehouse', [WarehouseSettingController::class, 'update'])->middleware('can:settings.manage');
+
+    // Model administrasi toko: simple (Admin + Kasir) atau standar retail (Kasir, Finance, Purchasing, Accounting, Owner)
+    Route::get('settings/admin-model', [AdminModelController::class, 'show'])->middleware('can:settings.manage');
+    Route::put('settings/admin-model', [AdminModelController::class, 'update'])->middleware('can:settings.manage');
 });

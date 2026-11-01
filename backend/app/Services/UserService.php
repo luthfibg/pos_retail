@@ -11,13 +11,14 @@ use Illuminate\Validation\ValidationException;
 /**
  * Manajemen pengguna (user.manage), dibatasi pada toko aktif.
  *  - role ditentukan oleh user_roles (bukan username); satu role per pengguna per toko lewat API ini
- *  - Admin tidak dapat menonaktifkan atau mengubah role dirinya sendiri; toko tidak boleh kehilangan Admin aktif terakhir
+ *  - pengguna tidak dapat menonaktifkan atau mengubah role dirinya sendiri; toko tidak boleh kehilangan pengendali aktif terakhir (Admin pada model simple, Owner pada model standar)
+ *  - role yang dapat ditugaskan mengikuti model administrasi toko (AdminModelService)
  *  - menonaktifkan pengguna atau mereset sandi mencabut seluruh token aktifnya
  *  - sandi tidak pernah dikembalikan API maupun dicatat di audit log
  */
 class UserService
 {
-    public function __construct(private AuditLogger $audit, private PermissionResolver $permissions)
+    public function __construct(private AuditLogger $audit, private PermissionResolver $permissions, private AdminModelService $adminModel)
     {
     }
 
@@ -54,9 +55,11 @@ class UserService
     }
 
     /** @return list<array<string, mixed>> */
-    public function roles(): array
+    public function roles(int $storeId): array
     {
-        return DB::table('roles')->orderBy('name')->get(['id', 'name', 'description', 'is_system'])
+        $assignable = $this->adminModel->assignableRoles($this->adminModel->current($storeId));
+
+        return DB::table('roles')->whereIn('name', $assignable)->orderBy('name')->get(['id', 'name', 'description', 'is_system'])
             ->map(fn ($r) => ['id' => (int) $r->id, 'name' => $r->name, 'description' => $r->description, 'is_system' => (bool) $r->is_system])->all();
     }
 
@@ -66,6 +69,8 @@ class UserService
      */
     public function create(User $actor, int $storeId, array $data): array
     {
+        $this->assertAssignable($storeId, (string) $data['role'], 'role');
+
         $id = DB::transaction(function () use ($actor, $storeId, $data) {
             $id = DB::table('users')->insertGetId([
                 'name' => $data['name'],
@@ -117,6 +122,15 @@ class UserService
 
             $newRole = $data['role'] ?? null;
             $roleChanging = $newRole !== null && $newRole !== $currentRole;
+            $control = $this->adminModel->controllingRole($this->adminModel->current($storeId));
+
+            if ($roleChanging) {
+                $this->assertAssignable($storeId, $newRole, 'role');
+            }
+            $reactivating = array_key_exists('is_active', $data) && $data['is_active'] && ! $cur->is_active;
+            if ($reactivating && ! $roleChanging && $currentRole !== null) {
+                $this->assertAssignable($storeId, $currentRole, 'is_active');
+            }
             if ($roleChanging) {
                 $before['role'] = $currentRole;
                 $after['role'] = $newRole;
@@ -126,9 +140,9 @@ class UserService
                 throw ValidationException::withMessages([$deactivating ? 'is_active' : 'role' => ['Anda tidak dapat menonaktifkan atau mengubah role akun Anda sendiri.']]);
             }
 
-            if (($deactivating || ($roleChanging && $currentRole === 'Admin')) && $cur->is_active && $currentRole === 'Admin'
-                && $this->otherActiveAdmins($storeId, $id) === 0) {
-                throw ValidationException::withMessages([$deactivating ? 'is_active' : 'role' => ['Toko harus memiliki minimal satu Admin aktif.']]);
+            if (($deactivating || ($roleChanging && $currentRole === $control)) && $cur->is_active && $currentRole === $control
+                && $this->otherActiveHolders($storeId, $control, $id) === 0) {
+                throw ValidationException::withMessages([$deactivating ? 'is_active' : 'role' => ["Toko harus memiliki minimal satu {$control} aktif."]]);
             }
 
             if ($after === []) {
@@ -195,11 +209,21 @@ class UserService
             ->when($exceptTokenId !== null, fn ($q) => $q->where('id', '!=', $exceptTokenId))->delete();
     }
 
-    private function otherActiveAdmins(int $storeId, int $exceptUserId): int
+    private function assertAssignable(int $storeId, string $role, string $field): void
+    {
+        $model = $this->adminModel->current($storeId);
+
+        if (! in_array($role, $this->adminModel->assignableRoles($model), true)) {
+            $label = $model === AdminModelService::STANDARD ? 'standar retail' : 'simple';
+            throw ValidationException::withMessages([$field => ["Role {$role} tidak tersedia pada model administrasi {$label} toko ini."]]);
+        }
+    }
+
+    private function otherActiveHolders(int $storeId, string $role, int $exceptUserId): int
     {
         return DB::table('user_roles as ur')
             ->join('roles as r', 'r.id', '=', 'ur.role_id')->join('users as u', 'u.id', '=', 'ur.user_id')
-            ->where('ur.store_id', $storeId)->where('r.name', 'Admin')->where('u.is_active', 1)->where('u.id', '!=', $exceptUserId)
+            ->where('ur.store_id', $storeId)->where('r.name', $role)->where('u.is_active', 1)->where('u.id', '!=', $exceptUserId)
             ->distinct()->count('u.id');
     }
 

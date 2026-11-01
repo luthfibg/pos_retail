@@ -29,15 +29,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('purchase-orders/{po}/close', [PurchaseOrderController::class, 'close'])->whereNumber('po')->middleware('can:purchase_order.create');
 
     // Penerimaan barang. Kasir hanya melihat/mengelola penerimaannya sendiri (dicek di service).
-    Route::get('goods-receipts', [GoodsReceiptController::class, 'index'])->middleware('can:goods_receipt.create');
+    Route::get('goods-receipts', [GoodsReceiptController::class, 'index'])->middleware('can.any:goods_receipt.create,goods_receipt.verify_documents');
     Route::get('goods-receipts/receiving-locations', [GoodsReceiptController::class, 'receivingLocations'])
         ->middleware('can:goods_receipt.create');
     Route::post('goods-receipts', [GoodsReceiptController::class, 'store'])->middleware('can:goods_receipt.create');
-    Route::get('goods-receipts/{gr}', [GoodsReceiptController::class, 'show'])->whereNumber('gr')->middleware('can:goods_receipt.create');
+    Route::get('goods-receipts/{gr}', [GoodsReceiptController::class, 'show'])->whereNumber('gr')->middleware('can.any:goods_receipt.create,goods_receipt.verify_documents');
     Route::post('goods-receipts/{gr}/attachments', [GoodsReceiptController::class, 'storeAttachment'])
         ->whereNumber('gr')->middleware('can:goods_receipt.create');
     Route::get('goods-receipts/{gr}/attachments/{attachment}', [GoodsReceiptController::class, 'downloadAttachment'])
-        ->whereNumber('gr')->whereNumber('attachment')->middleware('can:goods_receipt.create');
+        ->whereNumber('gr')->whereNumber('attachment')->middleware('can.any:goods_receipt.create,goods_receipt.verify_documents');
     Route::post('goods-receipts/{gr}/post', [GoodsReceiptController::class, 'post'])->whereNumber('gr')->middleware('can:goods_receipt.create');
     Route::post('goods-receipts/{gr}/cancel', [GoodsReceiptController::class, 'cancel'])->whereNumber('gr')->middleware('can:goods_receipt.create');
     Route::post('goods-receipts/{gr}/verify-documents', [GoodsReceiptController::class, 'verifyDocuments'])->whereNumber('gr')->middleware('can:goods_receipt.verify_documents');

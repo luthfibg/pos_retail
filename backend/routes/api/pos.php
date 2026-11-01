@@ -13,12 +13,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('shifts', [ShiftController::class, 'index'])->middleware('can:shift.review');
     Route::get('shifts/current', [ShiftController::class, 'current'])->middleware('can:shift.open');
     Route::post('shifts/open', [ShiftController::class, 'open'])->middleware('can:shift.open');
-    Route::get('shifts/{shift}', [ShiftController::class, 'show'])->whereNumber('shift')->middleware('can:shift.open');
+    Route::get('shifts/{shift}', [ShiftController::class, 'show'])->whereNumber('shift')->middleware('can.any:shift.open,shift.review');
     Route::post('shifts/{shift}/start-count', [ShiftController::class, 'startCount'])->whereNumber('shift')->middleware('can:shift.close');
     Route::post('shifts/{shift}/close', [ShiftController::class, 'close'])->whereNumber('shift')->middleware('can:shift.close');
     Route::post('shifts/{shift}/review', [ShiftController::class, 'review'])->whereNumber('shift')->middleware('can:shift.review');
     Route::get('shifts/{shift}/cash-movements', [CashMovementController::class, 'index'])
-        ->whereNumber('shift')->middleware('can:cash_movement.create');
+        ->whereNumber('shift')->middleware('can.any:cash_movement.create,shift.review');
     Route::post('shifts/{shift}/cash-movements', [CashMovementController::class, 'store'])
         ->whereNumber('shift')->middleware('can:cash_movement.create');
 
@@ -26,8 +26,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('sales/preview', [SaleController::class, 'preview'])
         ->middleware(['can:sales.create', 'throttle:120,1']);
     Route::post('sales', [SaleController::class, 'store'])->middleware('can:sales.create');
-    Route::get('sales', [SaleController::class, 'index'])->middleware('can:sales.create');
-    Route::get('sales/{sale}', [SaleController::class, 'show'])->whereNumber('sale')->middleware('can:sales.create');
+    Route::get('sales', [SaleController::class, 'index'])->middleware('can.any:sales.create,shift.review');
+    Route::get('sales/{sale}', [SaleController::class, 'show'])->whereNumber('sale')->middleware('can.any:sales.create,shift.review');
     Route::post('sales/{sale}/reprint', [SaleController::class, 'reprint'])->whereNumber('sale')->middleware('can:receipt.reprint');
     Route::post('sales/{sale}/void', [SaleController::class, 'void'])->whereNumber('sale')->middleware('can:sales.void');
 

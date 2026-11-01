@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\LoginRequest;
 use App\Models\User;
+use App\Services\AdminModelService;
 use App\Services\AuditLogger;
 use App\Services\PermissionResolver;
 use App\Services\PlatformAccess;
@@ -22,6 +23,7 @@ class AuthController extends Controller
         private StoreContext $stores,
         private AuditLogger $audit,
         private PlatformAccess $platformAccess,
+        private AdminModelService $adminModel,
     ) {}
 
     public function login(LoginRequest $request): JsonResponse
@@ -106,6 +108,7 @@ class AuthController extends Controller
             'store' => DB::table('stores')->where('id', $storeId)->first(['id', 'code', 'name', 'timezone', 'currency']),
             'roles' => $roles,
             'permissions' => $this->permissions->codes($user, $storeId),
+            'admin_model' => $this->adminModel->current($storeId),
             'platform_operator' => $isPlatformOperator,
         ]);
     }

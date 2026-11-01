@@ -61,7 +61,7 @@ class SeederTest extends TestCase
 
         $this->assertSame(1, DB::table('stores')->count());
         $this->assertSame(3, DB::table('fund_accounts')->count());
-        $this->assertSame(2, DB::table('roles')->count());
+        $this->assertSame(count(PermissionCatalog::roles()), DB::table('roles')->count());
         $this->assertSame(1, DB::table('users')->count());
         $this->assertSame('14', DB::table('settings')->where('setting_key', 'expiry_warning_days')->value('setting_value'));
     }

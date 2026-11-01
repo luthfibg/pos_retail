@@ -36,9 +36,9 @@ class UserController extends Controller
         return response()->json(['data' => $this->users->find($this->stores->requireIdFor($request->user()), $user)]);
     }
 
-    public function roles(): JsonResponse
+    public function roles(Request $request): JsonResponse
     {
-        return response()->json(['data' => $this->users->roles()]);
+        return response()->json(['data' => $this->users->roles($this->stores->requireIdFor($request->user()))]);
     }
 
     public function store(StoreUserRequest $request): JsonResponse

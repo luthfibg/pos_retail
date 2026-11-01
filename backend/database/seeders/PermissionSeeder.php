@@ -7,7 +7,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Permission + role sistem (Admin, Kasir). Idempotent: hanya menambah yang belum ada,
+ * Permission + role sistem (Admin, Kasir, Owner, Finance, Purchasing, Accounting). Idempotent: hanya menambah yang belum ada,
  * tidak mencabut permission yang sudah diubah manual pada role.
  */
 class PermissionSeeder extends Seeder
@@ -20,10 +20,7 @@ class PermissionSeeder extends Seeder
         }
         DB::table('permissions')->upsert($rows, ['code'], ['module', 'description']);
 
-        $roles = [
-            'Admin' => ['description' => 'Admin/Owner: seluruh fungsi bisnis', 'codes' => array_keys(PermissionCatalog::all())],
-            'Kasir' => ['description' => 'Operasional toko', 'codes' => PermissionCatalog::cashier()],
-        ];
+        $roles = PermissionCatalog::roles();
 
         foreach ($roles as $name => $role) {
             DB::table('roles')->upsert(

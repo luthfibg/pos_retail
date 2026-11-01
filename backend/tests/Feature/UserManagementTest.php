@@ -71,7 +71,8 @@ class UserManagementTest extends SeededTestCase
         $this->getJson('/api/users/99999')->assertNotFound();
 
         $names = array_column($this->getJson('/api/roles')->assertOk()->json('data'), 'name');
-        $this->assertSame(['Admin', 'Kasir'], $names);
+        // model simple: Admin + Kasir, ditambah role delegasi (Finance, Purchasing, Accounting); Owner hanya pada model standar
+        $this->assertSame(['Accounting', 'Admin', 'Finance', 'Kasir', 'Purchasing'], $names);
     }
 
     public function test_update_changes_name_email_and_role_with_audit(): void

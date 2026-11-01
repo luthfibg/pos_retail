@@ -47,6 +47,7 @@ class TenantProvisioner
 
         foreach ([
             'warehouse_enabled' => false,
+            'admin_model' => 'simple',
             'receiving_requires_po' => true,
             'sod_pr_creator_approver' => 'block',
             'sod_owner_self_approve' => 'allow_with_flag',

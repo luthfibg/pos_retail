@@ -722,11 +722,55 @@ Semua endpoint memakai `auth:sanctum` dan `reports.view`; data dibatasi ke toko 
 - Tidak ada aggregasi lintas toko.
 - Kasir hanya dapat melihat data shift miliknya, tetapi inventori tetap dibatasi pada toko aktif.
 
+## 12. Model Administrasi Toko 🟡
+
+> Status: 🟡 kode + `AdminModelTest` (8 test) ditulis, **belum dijalankan** (menunggu `php artisan test`). Tidak ada migration. Tidak ada permission baru; **ada 4 role sistem baru** (`Owner`, `Finance`, `Purchasing`, `Accounting`). Untuk database yang sudah ada jalankan `php artisan db:seed --class=PermissionSeeder`. Prioritas #4 (model administrasi toko) dari daftar finalisasi Paket 1.
+
+Setiap toko memilih satu model (setting `admin_model`, default `simple` bila belum ada):
+
+| Model | Role yang dapat ditugaskan | Pengendali toko |
+|---|---|---|
+| `simple` | `Admin`, `Kasir`, serta `Finance` / `Purchasing` / `Accounting` sebagai delegasi | `Admin` (memegang semua permission) |
+| `standard` | `Kasir`, `Finance`, `Purchasing`, `Accounting`, `Owner` (**`Admin` tidak tersedia**) | `Owner` (persetujuan, kebijakan, pengawasan; tanpa fungsi operasional) |
+
+Backend tetap penentu izin: menu frontend cukup mengikuti `permissions` dari `GET /api/auth/me` (sekarang juga memuat `admin_model`).
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/settings/admin-model` | `settings.manage` | Model aktif, role + jumlah akun, dan rencana peralihan (`options`) |
+| PUT | `/api/settings/admin-model` | `settings.manage` | `{ "model": "standard" \| "simple", "confirm": true }` — beralih model; `confirm` wajib `true` |
+
+`GET` (`data`): `model`, `controlling_role`, `assignable_roles[]`, `roles[]` (`name, description, assignable, total_users, active_users`), `options[]` (`model, label, current, can_switch, blockers[], conversions[]`).
+- `blockers[]` = `{ code: "role_missing", role, message }`. Peralihan ke `standard` hanya bila **Kasir, Finance, Purchasing, Accounting masing-masing punya minimal satu akun AKTIF** (buat dulu lewat `POST /api/users`), dan ada pengendali aktif untuk dikonversi. Tampilkan sebagai daftar periksa.
+- `conversions[]` = `{ from, to, users[] }`: **semua pemegang `Admin` otomatis menjadi `Owner`** saat ke `standard`, dan pemegang `Owner` menjadi `Admin` saat kembali ke `simple`. Tampilkan dan minta konfirmasi sebelum `PUT`.
+- `PUT` gagal → 422 `errors.model` (berisi semua pesan penghalang, atau "sudah memakai model ini") / `errors.confirm`. Berhasil → `data` yang sama dengan `GET`. Sesi tetap berlaku; permission berubah seketika. Audit `settings.admin_model` (sebelum/sesudah + daftar pengguna yang dikonversi).
+
+Dampak ke endpoint lain:
+- `GET /api/roles` hanya mengembalikan role yang dapat ditugaskan pada model aktif. `POST/PATCH /api/users` dengan role di luar itu → 422 `errors.role`; mengaktifkan kembali akun yang rolenya tidak tersedia → 422 `errors.is_active` (ganti role sekaligus: boleh).
+- Aturan "toko harus punya minimal satu pengendali aktif" berlaku untuk `Admin` (simple) atau `Owner` (standard). Self-protection tetap.
+- Middleware baru `can.any:a,b` (lolos bila memegang salah satu permission) dipakai agar role non-Kasir dapat **membaca**: `GET /api/shifts/{id}` dan `GET /api/shifts/{id}/cash-movements` (+ `shift.review`), `GET /api/sales` dan `/api/sales/{id}` (+ `shift.review`), `GET /api/goods-receipts`, `/{id}`, dan unduh lampiran (+ `goods_receipt.verify_documents`). Data tetap dibatasi di service.
+
+**Matriks role (ASUMSI, perlu konfirmasi klien)** — definisi tunggal di `PermissionCatalog::roles()`:
+
+| Role | Fungsi utama |
+|---|---|
+| Kasir | tidak berubah (penjualan, shift, kas masuk/keluar, setoran, PR, penerimaan, transfer, ajuan adjustment) |
+| Finance | tinjau shift, terima/koreksi setoran, periksa PR, verifikasi karyawan + batas kredit, usul endapan (baca kebijakan), laporan |
+| Purchasing | buat/ubah produk dan kategori, supplier, buat PR, buat dan kirim PO, laporan |
+| Accounting | periode tagihan + invoice HRD + pembayaran, verifikasi surat jalan/faktur, audit log, tinjau shift (baca), laporan |
+| Owner | kelola pengguna/role/pengaturan, setujui PR, setujui adjustment/stok awal, pengecualian kredit, void, harga/diskon/aktivasi produk, kebijakan endapan, denah rak, audit, laporan, tinjau shift |
+| Admin | semua permission (model simple) |
+
+Catatan: `shift.review` sekaligus tanda "boleh melihat data semua kasir" (struk, laporan, shift), sehingga dipegang Owner, Finance, dan Accounting. Siapa yang boleh stok awal/penerimaan/transfer/adjustment dibuat dapat dikonfigurasi pada prioritas #5 (belum ada); sementara memakai permission yang sama seperti sebelumnya (Kasir untuk penerimaan/transfer/ajuan, `inventory.adjust.approve` untuk stok awal).
+
+Layar yang bisa dibuat (workspace Pengaturan): kartu "Model administrasi" dengan daftar periksa akun per role (`blockers`), pratinjau konversi `Admin → Owner`, dialog konfirmasi, lalu muat ulang `/api/auth/me` supaya menu mengikuti permission baru.
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`, `routes/api/reports.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-11-01** — Prioritas #4: model administrasi toko (`simple` / `standard`), 4 role baru (Owner, Finance, Purchasing, Accounting), peralihan dengan validasi akun per role + konversi Admin↔Owner, filter role pada `/api/roles` dan `/api/users`, middleware `can.any`, `admin_model` pada `/api/auth/me`. Status: 🟡 menunggu test (`AdminModelTest` 8; `SeederTest` dan `UserManagementTest` disesuaikan dengan daftar role baru). Bagian 12.
 - **2026-10-31** — Management Retail: API tenant yang sudah ada kini terhubung ke layar operator `/platform/stores`; login dan `/auth/me` mengarahkan operator global tanpa toko. CLI recovery memilih operator aktif berdasarkan ID (termasuk saat username terlupa), mengubah username/password, mencabut token lama, dan mencatat audit tanpa menyimpan password; UI login memberi instruksi recovery CLI tanpa endpoint publik. `PlatformStoreManagementTest` 7 lulus.
 - **2026-10-31** — Command `platform:operator-login` meminta kredensial operator secara interaktif dan membuka UI daftar tenant. Handoff browser memakai tiket satu kali/5 menit, exchange endpoint ber-rate-limit, fragment URL yang dibersihkan frontend, dan audit login; password/token API tidak dimasukkan ke URL. Log diagnostik exchange gagal hanya mencatat alasan aman, ID operator dan kedaluwarsa, tanpa tiket/password. Test login/tiket termasuk kedaluwarsa/pencabutan: 10 lulus (107 assertions).
 - **2026-10-30** — Management Retail: operator platform terpisah dari RBAC toko; bootstrap operator via CLI interaktif; onboarding tenant atomik bersama akun Admin awal dan konfigurasi default; daftar/detail tenant serta aktivasi/nonaktivasi dengan audit tanpa penghapusan data. `PlatformStoreManagementTest` 6 lulus; Auth/Seeder/RBAC 18 lulus; Pint lulus. Suite penuh: 243 lulus, 1 gagal pada fixture kedaluwarsa `ReportTest` (juga gagal tersendiri; tidak berkaitan dengan Management Retail).

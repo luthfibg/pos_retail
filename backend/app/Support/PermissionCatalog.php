@@ -88,6 +88,67 @@ final class PermissionCatalog
         ];
     }
 
+    /**
+     * Role sistem (global; penugasan per toko lewat user_roles). Model administrasi toko menentukan role mana yang dapat
+     * ditugaskan (lihat AdminModelService). ASUMSI: pembagian di bawah mengikuti standar retail dan perlu dikonfirmasi klien.
+     * `shift.review` dipakai juga sebagai tanda "boleh melihat data semua kasir" (struk, laporan, shift), sehingga dipegang
+     * Owner, Finance, dan Accounting.
+     *
+     * @return array<string, array{description: string, codes: list<string>}>
+     */
+    public static function roles(): array
+    {
+        return [
+            'Admin' => ['description' => 'Admin/Owner: seluruh fungsi bisnis (model simple)', 'codes' => array_keys(self::all())],
+            'Kasir' => ['description' => 'Operasional toko', 'codes' => self::cashier()],
+            'Owner' => ['description' => 'Pemilik: persetujuan, kebijakan, dan pengawasan (model standar retail)', 'codes' => self::owner()],
+            'Finance' => ['description' => 'Keuangan: tinjau shift, terima setoran, periksa PR, kredit karyawan', 'codes' => self::finance()],
+            'Purchasing' => ['description' => 'Pembelian: PO, supplier, master produk', 'codes' => self::purchasing()],
+            'Accounting' => ['description' => 'Akuntansi: tagihan HRD, verifikasi dokumen penerimaan, audit', 'codes' => self::accounting()],
+        ];
+    }
+
+    /** @return list<string> */
+    public static function owner(): array
+    {
+        return [
+            'user.manage', 'role.manage', 'settings.manage', 'audit_log.view',
+            'product.activate', 'price.change', 'discount.manage',
+            'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve',
+            'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
+            'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
+            'shift.review', 'float.configure', 'reports.view',
+        ];
+    }
+
+    /** @return list<string> */
+    public static function finance(): array
+    {
+        return [
+            'inventory.view', 'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
+            'purchase_requisition.finance_check', 'shift.review', 'float.propose', 'cash_deposit.receive',
+            'receipt.reprint', 'reports.view',
+        ];
+    }
+
+    /** @return list<string> */
+    public static function purchasing(): array
+    {
+        return [
+            'product.create', 'product.update', 'category.manage', 'supplier.manage', 'shelf_layout.view', 'inventory.view',
+            'purchase_requisition.create', 'purchase_order.create', 'purchase_order.send', 'reports.view',
+        ];
+    }
+
+    /** @return list<string> */
+    public static function accounting(): array
+    {
+        return [
+            'inventory.view', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close',
+            'invoice.generate', 'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'reports.view',
+        ];
+    }
+
     public static function module(string $code): string
     {
         return explode('.', $code, 2)[0];
