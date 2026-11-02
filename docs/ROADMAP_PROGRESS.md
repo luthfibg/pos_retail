@@ -47,7 +47,7 @@
 
 - **Model administrasi toko (🟡):** toko memilih model simple (Admin + Kasir) atau standar retail (Kasir, Finance, Purchasing, Accounting, Owner); peralihan divalidasi (tiap role wajib punya akun aktif) dan mengonversi Admin↔Owner; menu per role mengikuti permission.
 - **Kewenangan stok (🟡):** per toko, Admin/Owner menentukan role yang boleh stok awal, penerimaan, transfer, dan ajuan/persetujuan adjustment, terpisah untuk lokasi toko dan gudang, di toko dengan atau tanpa gudang dan di model administrasi mana pun.
-- **Kunci otorisasi (🟡):** Owner/Admin dapat memiliki kunci khusus (kode 6 karakter kapital atau kalimat rahasia) yang menggantikan atau melengkapi password pada persetujuan PR/PO, adjustment, dan pengecualian kredit; dapat dibuat, diganti, dihapus, dicabut oleh pengelola, dan terkunci otomatis bila ditebak berulang.
+- **Kunci otorisasi (🟡):** Owner/Admin dapat memiliki kunci khusus (kode 6 karakter kapital atau kalimat rahasia) yang menggantikan atau melengkapi password pada persetujuan PR/PO, adjustment, dan pengecualian kredit; dapat dibuat, diganti, dihapus, dicabut oleh pengelola, dan terkunci otomatis bila ditebak berulang. UI pengelolaan tersedia di Pengaturan; typecheck, 183 test frontend, dan build lulus, uji klik menunggu. Backend perlu migration `authorization_keys`.
 - **Manajemen pengguna:** Admin menambah akun Kasir/Admin, mengubah nama/email/role, menonaktifkan/mengaktifkan, dan mereset sandi (sesi lama diakhiri) tanpa menyentuh database; setiap pengguna dapat mengganti sandinya sendiri. ✅
 - **Diskon dan PPN:** Admin membuat/mengubah/menonaktifkan diskon per produk atau kategori (persen/nominal, rentang tanggal) dan mengatur saklar PPN dengan tarif berversi, tanpa menyentuh database. ✅
 
