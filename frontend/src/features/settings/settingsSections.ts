@@ -2,7 +2,7 @@
  * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
  * Izin hanya untuk tampilan; backend tetap penentu akhir.
  */
-export type SectionId = 'admin-model' | 'warehouse' | 'stock-authority' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
+export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-authority' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
 export type GroupId = 'store' | 'sales' | 'cash' | 'accounts';
 
 export interface SettingsSection {
@@ -24,6 +24,11 @@ export const GROUPS: ReadonlyArray<{ id: GroupId; label: string }> = [
 ];
 
 export const SECTIONS: ReadonlyArray<SettingsSection> = [
+  {
+    id: 'store-name', group: 'store', title: 'Nama toko', permission: 'settings.manage', defaultOpen: true,
+    description: 'Ubah nama toko yang ditampilkan tanpa mengubah kode, mata uang, atau zona waktu.',
+    keywords: ['nama', 'identitas', 'retail', 'toko'],
+  },
   {
     id: 'admin-model', group: 'store', title: 'Model administrasi', permission: 'settings.manage', defaultOpen: true,
     description: 'Pilih model Simple (Admin dan Kasir) atau Standar retail (Kasir, Finance, Purchasing, Accounting, Owner).',

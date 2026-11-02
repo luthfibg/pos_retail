@@ -22,6 +22,11 @@ export const authApi = {
   me: () => api<Me>('/auth/me'),
 };
 
+export const storeSettingsApi = {
+  updateName: (name: string) =>
+    api<{ data: { name: string } }>('/settings/store-name', { method: 'PATCH', body: { name } }).then((response) => response.data),
+};
+
 export const platformCliLoginApi = {
   exchange: (ticket: string, issuedFingerprint: string, clientFingerprint: string) =>
     api<{ token: string; token_type: 'Bearer' }>('/platform/cli-login/exchange', {
