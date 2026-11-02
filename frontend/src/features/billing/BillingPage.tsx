@@ -419,11 +419,22 @@ function InvoiceDetail({
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Karyawan / struk</th><th className="py-2 pr-3">Departemen</th><th className="py-2 pr-3">Tanggal</th><th className="py-2 text-right">Tagihan</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
-                {invoice.customers.map((customer) => customer.sales.map((sale) => (
-                  <tr key={sale.sale_id}><td className="py-2 pr-3"><span className="block font-medium">{customer.name}</span><span className="text-xs text-slate-500">{customer.customer_no} · {sale.doc_number}</span></td><td className="py-2 pr-3">{customer.department ?? '—'}</td><td className="whitespace-nowrap py-2 pr-3">{formatDateTime(sale.posted_at)}</td><td className="whitespace-nowrap py-2 text-right">{formatRupiah(sale.amount)}</td></tr>
-                )))}
-              </tbody>
+              {invoice.customers.map((customer) => (
+                <tbody key={customer.customer_id} className="divide-y divide-slate-100">
+                  <tr className="bg-slate-50 font-semibold">
+                    <th colSpan={3} className="py-2 pr-3 text-left">{customer.name} · {customer.customer_no}{customer.department ? ` · ${customer.department}` : ''}</th>
+                    <th className="py-2 text-right">Subtotal {formatRupiah(customer.subtotal)}</th>
+                  </tr>
+                  {customer.sales.map((sale) => (
+                    <tr key={sale.sale_id}>
+                      <td className="py-2 pl-4 pr-3">{sale.doc_number}</td>
+                      <td className="py-2 pr-3">{customer.department ?? '—'}</td>
+                      <td className="whitespace-nowrap py-2 pr-3">{formatDateTime(sale.posted_at)}</td>
+                      <td className="whitespace-nowrap py-2 text-right">{formatRupiah(sale.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
           <dl className="ml-auto grid max-w-sm grid-cols-2 gap-x-6 gap-y-2 border-t border-slate-200 pt-3 text-sm">
@@ -496,12 +507,23 @@ function InvoicePrint({ invoice, storeName, onDone }: { invoice: Invoice; storeN
         </header>
         <p className="mb-4"><strong>Ditagihkan kepada:</strong> {invoice.bill_to}</p>
         <table>
-          <thead><tr><th>No.</th><th>Karyawan</th><th>Departemen</th><th>No. Struk</th><th>Tanggal</th><th className="text-right">Jumlah</th></tr></thead>
-          <tbody>
-            {invoice.customers.flatMap((customer) => customer.sales.map((sale) => (
-              <tr key={sale.sale_id}><td>{sale.sale_id}</td><td>{customer.name} ({customer.customer_no})</td><td>{customer.department ?? '—'}</td><td>{sale.doc_number}</td><td>{formatDateTime(sale.posted_at)}</td><td className="text-right">{formatRupiah(sale.amount)}</td></tr>
-            )))}
-          </tbody>
+          <thead><tr><th>Karyawan / struk</th><th>Departemen</th><th>Tanggal</th><th className="text-right">Jumlah</th></tr></thead>
+          {invoice.customers.map((customer) => (
+            <tbody key={customer.customer_id}>
+              <tr className="font-bold">
+                <th colSpan={3} className="border-t border-black text-left">{customer.name} ({customer.customer_no})</th>
+                <th className="border-t border-black text-right">Subtotal {formatRupiah(customer.subtotal)}</th>
+              </tr>
+              {customer.sales.map((sale) => (
+                <tr key={sale.sale_id}>
+                  <td className="pl-4">{sale.doc_number}</td>
+                  <td>{customer.department ?? '—'}</td>
+                  <td>{formatDateTime(sale.posted_at)}</td>
+                  <td className="text-right">{formatRupiah(sale.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
         </table>
         <dl className="ml-auto mt-4 grid max-w-xs grid-cols-2 gap-2">
           <dt>Subtotal</dt><dd className="text-right">{formatRupiah(invoice.subtotal)}</dd>
