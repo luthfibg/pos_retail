@@ -31,7 +31,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/products', label: 'Produk', permission: 'inventory.view' },
       { to: '/categories', label: 'Kategori', permission: 'category.manage' },
       { to: '/customers', label: 'Karyawan', permission: 'customer.select' },
-      { to: '/inventory/opening', label: 'Stok Awal', permission: 'inventory.adjust.approve' },
+      { to: '/inventory/opening', label: 'Stok Awal', permission: 'inventory.opening_balance' },
       { to: '/inventory/adjustments', label: 'Adjustment & Opname', permission: ['inventory.adjust.request', 'inventory.adjust.approve'] },
       { to: '/inventory/transfers', label: 'Transfer Stok', permission: 'stock_transfer.create' },
       { to: '/inventory/movements', label: 'Riwayat Stok', permission: 'inventory.view' },

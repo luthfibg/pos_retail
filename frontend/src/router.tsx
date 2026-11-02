@@ -87,7 +87,7 @@ export const router = createBrowserRouter([
             children: [{ path: 'customers', element: <CustomersPage /> }],
           },
           {
-            element: <RequirePermission permission="inventory.adjust.approve" />,
+            element: <RequirePermission permission="inventory.opening_balance" />,
             children: [{ path: 'inventory/opening', element: <OpeningBalancePage /> }],
           },
           {

@@ -4,6 +4,8 @@ import { getVisibleNavGroups } from './nav';
 /**
  * Menu yang dilihat tiap role pada model standar retail.
  * Matriks izin di bawah MENCERMINKAN `PermissionCatalog::roles()` di backend (ASUMSI, menunggu konfirmasi klien).
+ * Izin stok (stok awal, penerimaan, transfer, ajuan/persetujuan adjustment) sebenarnya diturunkan dari matriks Kewenangan Stok;
+ * daftar di bawah memakai DEFAULT model standar retail.
  * Bila matriks backend berubah, perbarui bagian ini bersamaan agar perubahan menu terlihat saat review.
  */
 const PERMISSIONS: Record<string, string[]> = {
@@ -25,7 +27,7 @@ const PERMISSIONS: Record<string, string[]> = {
     'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'reports.view',
   ],
   Owner: [
-    'user.manage', 'role.manage', 'settings.manage', 'audit_log.view', 'product.activate', 'price.change', 'discount.manage',
+    'user.manage', 'role.manage', 'settings.manage', 'audit_log.view', 'inventory.opening_balance', 'product.activate', 'price.change', 'discount.manage',
     'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve', 'customer.select', 'customer.update',
     'customer.verify', 'customer.set_limit', 'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
     'shift.review', 'float.configure', 'reports.view',
@@ -67,6 +69,7 @@ describe('menu per role (model standar retail)', () => {
   it('Owner melihat persetujuan, kebijakan, pengaturan, dan model administrasi', () => {
     const owner = menuFor('Owner');
     expect(owner).toContain('/settings');
+    expect(owner).toContain('/inventory/opening');
     expect(owner).toContain('/purchase-requisitions');
     expect(owner).not.toContain('/users');
     expect(owner).not.toContain('/pos');

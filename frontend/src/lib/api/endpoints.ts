@@ -10,8 +10,7 @@ import type {
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
-  WarehouseSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting,
-  AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder,
+  WarehouseSetting, AdminModelId, AdminModelSetting, StockAuthoritySetting, StockAuthorityUpdate,
 } from './types';
 
 export const authApi = {
@@ -89,20 +88,6 @@ export const userApi = {
     api<{ data: ManagedUser }>(`/users/${id}/reset-password`, { method: 'POST', body: { password } }).then((r) => r.data),
   changePassword: (input: { current_password: string; password: string }) =>
     api<{ message: string }>('/auth/change-password', { method: 'POST', body: input }),
-};
-
-export const authorizationKeyApi = {
-  own: () => api<{ data: AuthorizationKeyStatus }>('/authorization-key').then((r) => r.data),
-  setOwn: (input: { current_password: string; type: AuthorizationKeyType; key?: string; generate?: true }) =>
-    api<{ data: AuthorizationKeyStatus }>('/authorization-key', { method: 'PUT', body: input }).then((r) => r.data),
-  removeOwn: (current_password: string) =>
-    api<{ data: AuthorizationKeyStatus }>('/authorization-key', { method: 'DELETE', body: { current_password } }).then((r) => r.data),
-  holders: () => api<{ data: AuthorizationKeyHolder[] }>('/authorization-keys').then((r) => r.data),
-  revoke: (userId: number, reason: string) =>
-    api<{ data: AuthorizationKeyHolder[] }>(`/authorization-keys/${userId}`, { method: 'DELETE', body: { reason } }).then((r) => r.data),
-  approvalAuth: () => api<{ data: ApprovalAuthSetting }>('/settings/approval-auth').then((r) => r.data),
-  setApprovalAuth: (mode: ApprovalAuthMode, current_password: string) =>
-    api<{ data: ApprovalAuthSetting }>('/settings/approval-auth', { method: 'PUT', body: { mode, current_password } }).then((r) => r.data),
 };
 
 export interface ProductFilters {
@@ -422,4 +407,8 @@ export const settingsApi = {
   /** `confirm: true` wajib (konfirmasi eksplisit); backend menolak tanpa itu. */
   saveAdminModel: (model: AdminModelId) =>
     api<{ data: AdminModelSetting }>('/settings/admin-model', { method: 'PUT', body: { model, confirm: true } }).then((r) => r.data),
+  stockAuthority: () => api<{ data: StockAuthoritySetting }>('/settings/stock-authority').then((r) => r.data),
+  /** Daftar (bukan objek) karena kunci aturan mengandung titik. Hanya kirim aturan yang berubah. */
+  saveStockAuthority: (rules: StockAuthorityUpdate[]) =>
+    api<{ data: StockAuthoritySetting }>('/settings/stock-authority', { method: 'PUT', body: { rules } }).then((r) => r.data),
 };

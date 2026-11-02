@@ -31,6 +31,8 @@ export function AdminModelSettingsPage({ embedded = false }: { embedded?: boolea
     mutationFn: (model: AdminModelId) => settingsApi.saveAdminModel(model),
     onSuccess: async (data) => {
       queryClient.setQueryData(QUERY_KEY, data);
+      // Backend mengganti role Admin <-> Owner pada matriks kewenangan stok yang sudah disetel.
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'stock-authority'] });
       // Menu mengikuti permission dari /auth/me, jadi muat ulang sesi agar sidebar langsung berubah.
       await refreshMe();
       void queryClient.invalidateQueries({ queryKey: ['user-roles'] });

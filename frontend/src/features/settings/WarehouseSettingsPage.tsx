@@ -21,6 +21,7 @@ export function WarehouseSettingsPage({ embedded = false }: { embedded?: boolean
     },
     onSuccess: (data) => {
       queryClient.setQueryData(['settings', 'warehouse'], data);
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'stock-authority'] });
       setNextEnabled(null);
       setSavedNotice(true);
     },

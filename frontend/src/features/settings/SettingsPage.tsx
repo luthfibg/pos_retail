@@ -5,21 +5,21 @@ import { groupSections, sectionFromHash, visibleSections, type SectionId, type S
 
 const AdminModel = lazy(() => import('./AdminModelSettingsPage').then((module) => ({ default: module.AdminModelSettingsPage })));
 const Warehouse = lazy(() => import('./WarehouseSettingsPage').then((module) => ({ default: module.WarehouseSettingsPage })));
+const StockAuthority = lazy(() => import('./StockAuthoritySettingsPage').then((module) => ({ default: module.StockAuthoritySettingsPage })));
 const Vat = lazy(() => import('@/features/pricing/VatSettingsPage').then((module) => ({ default: module.VatSettingsPage })));
 const Discounts = lazy(() => import('@/features/pricing/DiscountsPage').then((module) => ({ default: module.DiscountsPage })));
 const FloatPolicy = lazy(() => import('@/features/shifts/FloatPolicyPage').then((module) => ({ default: module.FloatPolicyPage })));
 const Users = lazy(() => import('@/features/users/UsersPage').then((module) => ({ default: module.UsersPage })));
-const ApprovalAuth = lazy(() => import('./ApprovalAuthSettingsPage').then((module) => ({ default: module.ApprovalAuthSettingsPage })));
 
 function SectionBody({ id }: { id: SectionId }) {
   switch (id) {
     case 'admin-model': return <AdminModel embedded />;
     case 'warehouse': return <Warehouse embedded />;
+    case 'stock-authority': return <StockAuthority embedded />;
     case 'vat': return <Vat embedded />;
     case 'discounts': return <Discounts embedded />;
     case 'float-policy': return <FloatPolicy embedded />;
     case 'users': return <Users embedded />;
-    case 'approval-auth': return <ApprovalAuth embedded />;
   }
 }
 

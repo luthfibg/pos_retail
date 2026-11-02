@@ -33,56 +33,8 @@ export interface Me {
   platform_operator: boolean;
   /** Model administrasi toko aktif (`simple` bila belum diatur). Tidak ada untuk operator platform. */
   admin_model?: AdminModelId;
-  approval_auth_mode?: ApprovalAuthMode;
-  authorization_key?: Pick<AuthorizationKeyStatus, 'eligible' | 'has_key' | 'type' | 'locked'>;
-}
-
-export type AuthorizationKeyType = 'code' | 'passphrase';
-export type ApprovalAuthMode = 'password' | 'key' | 'password_and_key';
-
-export interface AuthorizationKeyStatus {
-  eligible: boolean;
-  has_key: boolean;
-  type: AuthorizationKeyType | null;
-  locked: boolean;
-  created_at: string | null;
-  rotated_at: string | null;
-  last_used_at: string | null;
-  mode: ApprovalAuthMode;
-  generated_key?: string;
-}
-
-export interface AuthorizationKeyHolder {
-  user_id: number;
-  name: string;
-  username: string;
-  has_key: boolean;
-  type: AuthorizationKeyType | null;
-  locked: boolean;
-  last_used_at: string | null;
-  rotated_at: string | null;
-}
-
-export type ApprovalAuthBlockerCode = 'key_missing' | 'key_locked' | 'no_approver';
-
-export interface ApprovalAuthBlocker {
-  code: ApprovalAuthBlockerCode;
-  user_id: number | null;
-  username: string | null;
-  message: string;
-}
-
-export interface ApprovalAuthModeOption {
-  mode: ApprovalAuthMode;
-  label: string;
-  can_switch: boolean;
-  blockers: ApprovalAuthBlocker[];
-}
-
-export interface ApprovalAuthSetting {
-  mode: ApprovalAuthMode;
-  modes: ApprovalAuthModeOption[];
-  holders: AuthorizationKeyHolder[];
+  /** Wewenang stok pengguna ini per aturan, mis. `{ "receipt.warehouse": false }`. Untuk menyaring pilihan lokasi di form stok. */
+  stock_authority?: Record<string, boolean>;
 }
 
 export interface LoginResponse {
@@ -183,6 +135,40 @@ export interface AdminModelSetting {
   assignable_roles: string[];
   roles: AdminModelRole[];
   options: AdminModelOption[];
+}
+
+export interface StockAuthorityWarning {
+  code: string;
+  message: string;
+}
+
+export interface StockAuthorityRule {
+  key: string;
+  action: string;
+  scope: 'store_floor' | 'warehouse' | null;
+  permission: string;
+  label: string;
+  description: string;
+  roles: string[];
+  default_roles: string[];
+  customized: boolean;
+  active_users: number;
+  /** false = aturan Gudang saat Gudang nonaktif (tetap bisa disetel). */
+  applies: boolean;
+  warnings: StockAuthorityWarning[];
+}
+
+export interface StockAuthoritySetting {
+  admin_model: AdminModelId;
+  warehouse_enabled: boolean;
+  assignable_roles: string[];
+  rules: StockAuthorityRule[];
+}
+
+/** `roles: null` mengembalikan aturan ke default model. */
+export interface StockAuthorityUpdate {
+  key: string;
+  roles: string[] | null;
 }
 
 export interface ManagedRole {

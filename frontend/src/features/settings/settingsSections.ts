@@ -2,7 +2,7 @@
  * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
  * Izin hanya untuk tampilan; backend tetap penentu akhir.
  */
-export type SectionId = 'admin-model' | 'warehouse' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
+export type SectionId = 'admin-model' | 'warehouse' | 'stock-authority' | 'vat' | 'discounts' | 'float-policy' | 'users';
 export type GroupId = 'store' | 'sales' | 'cash' | 'accounts';
 
 export interface SettingsSection {
@@ -10,7 +10,7 @@ export interface SettingsSection {
   group: GroupId;
   title: string;
   description: string;
-  permission: string | string[];
+  permission: string;
   keywords: string[];
   /** Bagian kecil terbuka sejak awal; daftar besar (diskon, pengguna) tertutup sampai dibuka. */
   defaultOpen: boolean;
@@ -35,6 +35,11 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     keywords: ['lokasi', 'stok', 'transfer'],
   },
   {
+    id: 'stock-authority', group: 'store', title: 'Kewenangan stok', permission: 'settings.manage', defaultOpen: false,
+    description: 'Siapa yang boleh stok awal, penerimaan, transfer, serta mengajukan dan menyetujui adjustment/opname.',
+    keywords: ['inventory', 'opname', 'adjustment', 'penerimaan', 'transfer', 'stok awal', 'wewenang', 'role'],
+  },
+  {
     id: 'vat', group: 'sales', title: 'PPN', permission: 'settings.manage', defaultOpen: true,
     description: 'Tarif PPN, status harga sudah termasuk PPN, dan tanggal berlaku.',
     keywords: ['pajak', 'pkp', 'tarif', 'invoice'],
@@ -54,24 +59,16 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     description: 'Akun, role, akses, dan status pengguna di toko ini.',
     keywords: ['akun', 'sandi', 'password', 'role', 'kasir', 'username'],
   },
-  {
-    id: 'approval-auth', group: 'accounts', title: 'Otorisasi persetujuan',
-    permission: ['settings.manage', 'user.manage', 'purchase_requisition.approve', 'inventory.adjust.approve', 'sales.credit_exception'],
-    defaultOpen: true,
-    description: 'Atur metode autentikasi ulang dan kunci pribadi untuk pemegang izin persetujuan.',
-    keywords: ['owner', 'admin', 'kunci', 'kode', 'passphrase', 'password', 'approval'],
-  },
 ];
 
 /** Izin yang membuka layar Pengaturan (salah satu cukup). */
-export const SETTINGS_PERMISSIONS: string[] = Array.from(new Set(SECTIONS.flatMap((section) =>
-  Array.isArray(section.permission) ? section.permission : [section.permission],
-)));
+export const SETTINGS_PERMISSIONS: string[] = Array.from(new Set(SECTIONS.map((section) => section.permission)));
 
 /** Rute lama menuju bagian yang sesuai, agar bookmark dan tautan lama tetap bekerja. */
 export const LEGACY_REDIRECTS: Record<string, SectionId> = {
   '/settings/admin-model': 'admin-model',
   '/settings/warehouse': 'warehouse',
+  '/settings/stock-authority': 'stock-authority',
   '/settings/vat': 'vat',
   '/discounts': 'discounts',
   '/settings/float-policy': 'float-policy',
@@ -81,8 +78,7 @@ export const LEGACY_REDIRECTS: Record<string, SectionId> = {
 export function visibleSections(can: (permission: string) => boolean, query = ''): SettingsSection[] {
   const needle = query.trim().toLowerCase();
   return SECTIONS.filter((section) => {
-    const permissions = Array.isArray(section.permission) ? section.permission : [section.permission];
-    if (!permissions.some(can)) return false;
+    if (!can(section.permission)) return false;
     if (needle === '') return true;
     return [section.title, section.description, ...section.keywords].some((text) => text.toLowerCase().includes(needle));
   });
