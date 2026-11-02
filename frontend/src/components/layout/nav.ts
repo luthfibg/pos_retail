@@ -1,4 +1,5 @@
 import { SETTINGS_PERMISSIONS } from '@/features/settings/settingsSections';
+
 export interface NavItem {
   to: string;
   label: string;
@@ -9,39 +10,48 @@ export interface NavItem {
 export interface NavGroup {
   label: string;
   items: NavItem[];
-  /** Tampil sebagai satu tautan langsung (tanpa akordeon grup), mis. Pengaturan. */
+  /** Diisi otomatis oleh getVisibleNavGroups: grup dengan satu menu tampil sebagai tautan langsung, tanpa dropdown. */
   standalone?: boolean;
 }
 
-// Satu sumber menu. Item disaring berdasarkan permission dari /auth/me.
+/**
+ * Satu sumber menu, disusun mengikuti alur operasional toko:
+ *
+ *  1. Dashboard      beranda: ringkasan penjualan, kas, dan stok
+ *  2. Penjualan      buka shift -> jual di kasir -> koreksi/cetak ulang struk
+ *  3. Keuangan       tinjau shift -> terima setoran -> tagih HRD
+ *  4. Pembelian      PR -> pemeriksaan Finance -> persetujuan Owner -> PO -> terima barang
+ *  5. Inventory      stok awal -> transfer/putaway -> adjustment & opname -> riwayat stok
+ *  6. Data Master    kategori -> produk -> supplier -> karyawan (pembeli kredit)
+ *  7. Pengaturan     satu layar untuk semua konfigurasi
+ *
+ * Item disaring berdasarkan permission dari /auth/me, jadi setiap role (Kasir, Finance, Purchasing, Accounting, Owner,
+ * Admin) hanya melihat menunya sendiri. Urutan di dalam grup juga mengikuti alur.
+ */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: 'Operasional',
+    label: 'Dashboard',
+    items: [{ to: '/dashboard', label: 'Dashboard', permission: 'reports.view' }],
+  },
+  {
+    label: 'Penjualan',
     items: [
+      { to: '/shift', label: 'Shift Saya', permission: 'shift.open', cashierOnly: true },
       { to: '/pos', label: 'Kasir', permission: 'sales.create', cashierOnly: true },
       { to: '/sales', label: 'Riwayat Penjualan', permission: 'sales.create' },
-      { to: '/shift', label: 'Shift Saya', permission: 'shift.open', cashierOnly: true },
-      { to: '/shifts', label: 'Tinjau Shift', permission: 'shift.review' },
-      { to: '/cash-deposits', label: 'Setoran Masuk', permission: 'cash_deposit.receive' },
     ],
   },
   {
-    label: 'Inventory',
+    label: 'Keuangan',
     items: [
-      { to: '/products', label: 'Produk', permission: 'inventory.view' },
-      { to: '/categories', label: 'Kategori', permission: 'category.manage' },
-      { to: '/customers', label: 'Karyawan', permission: 'customer.select' },
-      { to: '/inventory/opening', label: 'Stok Awal', permission: 'inventory.opening_balance' },
-      { to: '/inventory/adjustments', label: 'Adjustment & Opname', permission: ['inventory.adjust.request', 'inventory.adjust.approve'] },
-      { to: '/inventory/transfers', label: 'Transfer Stok', permission: 'stock_transfer.create' },
-      { to: '/inventory/movements', label: 'Riwayat Stok', permission: 'inventory.view' },
-      { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create' },
+      { to: '/shifts', label: 'Tinjau Shift', permission: 'shift.review' },
+      { to: '/cash-deposits', label: 'Setoran Masuk', permission: 'cash_deposit.receive' },
+      { to: '/billing', label: 'Tagihan HRD', permission: ['billing_period.manage', 'invoice.generate'] },
     ],
   },
   {
     label: 'Pembelian',
     items: [
-      { to: '/suppliers', label: 'Supplier', permission: 'supplier.manage' },
       {
         to: '/purchase-requisitions',
         label: 'Permintaan Pembelian',
@@ -53,30 +63,38 @@ export const NAV_GROUPS: NavGroup[] = [
           'purchase_order.send',
         ],
       },
+      { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create' },
     ],
   },
   {
-    label: 'Keuangan',
+    label: 'Inventory',
     items: [
-      {
-        to: '/billing',
-        label: 'Tagihan HRD',
-        permission: ['billing_period.manage', 'invoice.generate'],
-      },
+      { to: '/inventory/opening', label: 'Stok Awal', permission: 'inventory.opening_balance' },
+      { to: '/inventory/transfers', label: 'Transfer Stok', permission: 'stock_transfer.create' },
+      { to: '/inventory/adjustments', label: 'Adjustment & Opname', permission: ['inventory.adjust.request', 'inventory.adjust.approve'] },
+      { to: '/inventory/movements', label: 'Riwayat Stok', permission: 'inventory.view' },
+    ],
+  },
+  {
+    label: 'Data Master',
+    items: [
+      { to: '/categories', label: 'Kategori', permission: 'category.manage' },
+      { to: '/products', label: 'Produk', permission: 'inventory.view' },
+      { to: '/suppliers', label: 'Supplier', permission: 'supplier.manage' },
+      { to: '/customers', label: 'Karyawan', permission: 'customer.select' },
     ],
   },
   {
     label: 'Pengaturan',
-    standalone: true,
     // Satu layar untuk semua pengaturan; bagiannya tampil sesuai izin (lihat features/settings/settingsSections.ts).
     items: [{ to: '/settings', label: 'Pengaturan', permission: SETTINGS_PERMISSIONS }],
   },
-  {
-    label: 'Laporan',
-    items: [{ to: '/dashboard', label: 'Dashboard', permission: 'reports.view' }],
-  },
 ];
 
+/**
+ * Menu yang terlihat untuk pengguna ini. Grup yang hanya punya satu menu bagi pengguna tersebut ditandai `standalone`
+ * dan ditampilkan sebagai satu tautan langsung (label = nama menunya), bukan dropdown berisi satu item.
+ */
 export function getVisibleNavGroups(can: (permission: string) => boolean, isAdmin: boolean): NavGroup[] {
   return NAV_GROUPS.flatMap((group) => {
     const items = group.items.filter((item) => {
@@ -84,6 +102,6 @@ export function getVisibleNavGroups(can: (permission: string) => boolean, isAdmi
       return Array.isArray(item.permission) ? item.permission.some(can) : can(item.permission);
     });
 
-    return items.length > 0 ? [{ ...group, items }] : [];
+    return items.length > 0 ? [{ ...group, items, standalone: items.length === 1 }] : [];
   });
 }

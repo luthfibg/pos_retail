@@ -40,4 +40,30 @@ describe('sidebar navigation', () => {
     expect(groups[0]?.label).toBe('Pengaturan');
     expect(groups[0]?.items.map((item) => item.to)).toEqual(['/settings']);
   });
+
+  it('grup dengan satu menu ditandai standalone, grup berisi banyak menu tetap dropdown', () => {
+    const permissions = new Set(['reports.view', 'shift.review', 'cash_deposit.receive']);
+    const groups = getVisibleNavGroups((permission) => permissions.has(permission), true);
+
+    expect(groups.map((group) => [group.label, group.standalone])).toEqual([
+      ['Dashboard', true],
+      ['Keuangan', false],
+    ]);
+    expect(groups[1]?.items.map((item) => item.to)).toEqual(['/shifts', '/cash-deposits']);
+  });
+
+  it('urutan grup mengikuti alur kerja', () => {
+    const groups = getVisibleNavGroups(() => true, true);
+    expect(groups.map((group) => group.label)).toEqual([
+      'Dashboard', 'Penjualan', 'Keuangan', 'Pembelian', 'Inventory', 'Data Master', 'Pengaturan',
+    ]);
+  });
+
+  it('shift dibuka sebelum kasir dipakai, dan penerimaan barang mengikuti permintaan pembelian', () => {
+    const paths = getVisibleNavGroups(() => true, false).flatMap((group) => group.items.map((item) => item.to));
+    expect(paths.indexOf('/shift')).toBeLessThan(paths.indexOf('/pos'));
+    expect(paths.indexOf('/pos')).toBeLessThan(paths.indexOf('/sales'));
+    expect(paths.indexOf('/purchase-requisitions')).toBeLessThan(paths.indexOf('/goods-receipts'));
+    expect(paths.indexOf('/inventory/opening')).toBeLessThan(paths.indexOf('/inventory/movements'));
+  });
 });

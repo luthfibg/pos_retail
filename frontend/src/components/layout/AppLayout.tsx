@@ -10,10 +10,12 @@ export function AppLayout() {
   const location = useLocation();
   const isAdmin = can('shift.review');
   const groups = getVisibleNavGroups(can, isAdmin);
-  const activeGroup = groups.find((group) =>
+  // Hanya grup dropdown yang bisa terbuka; menu tunggal (standalone) adalah tautan langsung.
+  const dropdowns = groups.filter((group) => !group.standalone);
+  const activeGroup = dropdowns.find((group) =>
     group.items.some(({ to }) => location.pathname === to || location.pathname.startsWith(`${to}/`)),
   )?.label;
-  const [expandedGroup, setExpandedGroup] = useState(activeGroup ?? groups[0]?.label ?? '');
+  const [expandedGroup, setExpandedGroup] = useState(activeGroup ?? dropdowns[0]?.label ?? '');
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export function AppLayout() {
                   key={group.label}
                   to={single.to}
                   className={({ isActive }) =>
-                    `mb-1 block rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`
+                    `mb-1 block rounded-md px-3 py-2 text-xs font-semibold uppercase leading-tight tracking-wide ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`
                   }
                 >
                   {single.label}

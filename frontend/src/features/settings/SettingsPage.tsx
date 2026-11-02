@@ -10,6 +10,7 @@ const Vat = lazy(() => import('@/features/pricing/VatSettingsPage').then((module
 const Discounts = lazy(() => import('@/features/pricing/DiscountsPage').then((module) => ({ default: module.DiscountsPage })));
 const FloatPolicy = lazy(() => import('@/features/shifts/FloatPolicyPage').then((module) => ({ default: module.FloatPolicyPage })));
 const Users = lazy(() => import('@/features/users/UsersPage').then((module) => ({ default: module.UsersPage })));
+const ApprovalAuth = lazy(() => import('./ApprovalAuthSettingsPage').then((module) => ({ default: module.ApprovalAuthSettingsPage })));
 
 function SectionBody({ id }: { id: SectionId }) {
   switch (id) {
@@ -20,6 +21,7 @@ function SectionBody({ id }: { id: SectionId }) {
     case 'discounts': return <Discounts embedded />;
     case 'float-policy': return <FloatPolicy embedded />;
     case 'users': return <Users embedded />;
+    case 'approval-auth': return <ApprovalAuth embedded />;
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getVisibleNavGroups } from './nav';
+import { getVisibleNavGroups, type NavGroup } from './nav';
 
 /**
  * Menu yang dilihat tiap role pada model standar retail.
@@ -81,5 +81,79 @@ describe('menu per role (model standar retail)', () => {
     for (const role of ['Kasir', 'Finance', 'Purchasing', 'Accounting']) {
       expect(menuFor(role)).not.toContain('/settings');
     }
+  });
+});
+
+/** Bentuk sidebar: tautan langsung ditulis `Nama`, dropdown ditulis `Grup > Menu 1, Menu 2` (urut seperti tampilan). */
+function sidebarFor(permissions: string[] | 'all', isAdmin?: boolean): string[] {
+  const set = new Set(permissions === 'all' ? [] : permissions);
+  const can = (permission: string) => permissions === 'all' || set.has(permission);
+  const groups: NavGroup[] = getVisibleNavGroups(can, isAdmin ?? can('shift.review'));
+  return groups.map((group) => {
+    const labels = group.items.map((item) => item.label);
+    return group.standalone ? labels.join('') : `${group.label} > ${labels.join(', ')}`;
+  });
+}
+
+describe('susunan sidebar mengikuti alur kerja', () => {
+  it('Kasir: shift -> kasir -> riwayat, lalu pembelian, inventory, dan data master', () => {
+    expect(sidebarFor(PERMISSIONS.Kasir ?? [])).toEqual([
+      'Dashboard',
+      'Penjualan > Shift Saya, Kasir, Riwayat Penjualan',
+      'Pembelian > Permintaan Pembelian, Penerimaan Barang',
+      'Inventory > Transfer Stok, Adjustment & Opname, Riwayat Stok',
+      'Data Master > Produk, Karyawan',
+    ]);
+  });
+
+  it('Finance: grup bermenu tunggal menjadi tautan langsung', () => {
+    expect(sidebarFor(PERMISSIONS.Finance ?? [])).toEqual([
+      'Dashboard',
+      'Keuangan > Tinjau Shift, Setoran Masuk',
+      'Permintaan Pembelian',
+      'Riwayat Stok',
+      'Data Master > Produk, Karyawan',
+    ]);
+  });
+
+  it('Purchasing', () => {
+    expect(sidebarFor(PERMISSIONS.Purchasing ?? [])).toEqual([
+      'Dashboard',
+      'Permintaan Pembelian',
+      'Riwayat Stok',
+      'Data Master > Kategori, Produk, Supplier',
+    ]);
+  });
+
+  it('Accounting', () => {
+    expect(sidebarFor(PERMISSIONS.Accounting ?? [])).toEqual([
+      'Dashboard',
+      'Keuangan > Tinjau Shift, Tagihan HRD',
+      'Riwayat Stok',
+      'Produk',
+    ]);
+  });
+
+  it('Owner', () => {
+    expect(sidebarFor(PERMISSIONS.Owner ?? [])).toEqual([
+      'Dashboard',
+      'Tinjau Shift',
+      'Permintaan Pembelian',
+      'Inventory > Stok Awal, Adjustment & Opname, Riwayat Stok',
+      'Data Master > Produk, Karyawan',
+      'Pengaturan',
+    ]);
+  });
+
+  it('Admin (model simple) memegang semua izin dan tidak melihat menu khusus kasir', () => {
+    expect(sidebarFor('all', true)).toEqual([
+      'Dashboard',
+      'Riwayat Penjualan',
+      'Keuangan > Tinjau Shift, Setoran Masuk, Tagihan HRD',
+      'Pembelian > Permintaan Pembelian, Penerimaan Barang',
+      'Inventory > Stok Awal, Transfer Stok, Adjustment & Opname, Riwayat Stok',
+      'Data Master > Kategori, Produk, Supplier, Karyawan',
+      'Pengaturan',
+    ]);
   });
 });

@@ -6,14 +6,15 @@ const only = (...permissions: string[]) => (permission: string) => permissions.i
 
 describe('settingsSections', () => {
   it('pemegang semua izin melihat semua bagian dalam urutan kategori', () => {
-    expect(visibleSections(all).map((section) => section.id)).toEqual(['admin-model', 'warehouse', 'stock-authority', 'vat', 'discounts', 'float-policy', 'users']);
+    expect(visibleSections(all).map((section) => section.id)).toEqual(['admin-model', 'warehouse', 'stock-authority', 'vat', 'discounts', 'float-policy', 'users', 'approval-auth']);
   });
 
   it('bagian mengikuti izin masing-masing', () => {
     expect(visibleSections(only('discount.manage')).map((section) => section.id)).toEqual(['discounts']);
-    expect(visibleSections(only('user.manage')).map((section) => section.id)).toEqual(['users']);
+    expect(visibleSections(only('user.manage')).map((section) => section.id)).toEqual(['users', 'approval-auth']);
+    expect(visibleSections(only('inventory.adjust.approve')).map((section) => section.id)).toEqual(['approval-auth']);
     expect(visibleSections(only('float.configure')).map((section) => section.id)).toEqual(['float-policy']);
-    expect(visibleSections(only('settings.manage')).map((section) => section.id)).toEqual(['admin-model', 'warehouse', 'stock-authority', 'vat']);
+    expect(visibleSections(only('settings.manage')).map((section) => section.id)).toEqual(['admin-model', 'warehouse', 'stock-authority', 'vat', 'approval-auth']);
     expect(visibleSections(only('shift.review'))).toEqual([]);
   });
 
@@ -22,6 +23,7 @@ describe('settingsSections', () => {
     expect(visibleSections(all, 'SANDI').map((section) => section.id)).toEqual(['users']);
     expect(visibleSections(all, 'opname').map((section) => section.id)).toEqual(['stock-authority']);
     expect(visibleSections(all, 'endapan').map((section) => section.id)).toEqual(['float-policy']);
+    expect(visibleSections(all, 'kunci').map((section) => section.id)).toEqual(['approval-auth']);
     expect(visibleSections(all, 'tidak-ada')).toEqual([]);
     expect(visibleSections(only('discount.manage'), 'pajak')).toEqual([]);
   });
@@ -42,6 +44,9 @@ describe('settingsSections', () => {
   it('rute lama menunjuk bagian yang ada dan izin layar mencakup semua bagian', () => {
     const ids = SECTIONS.map((section) => section.id);
     for (const id of Object.values(LEGACY_REDIRECTS)) expect(ids).toContain(id);
-    for (const section of SECTIONS) expect(SETTINGS_PERMISSIONS).toContain(section.permission);
+    for (const section of SECTIONS) {
+      const permissions = Array.isArray(section.permission) ? section.permission : [section.permission];
+      for (const permission of permissions) expect(SETTINGS_PERMISSIONS).toContain(permission);
+    }
   });
 });
