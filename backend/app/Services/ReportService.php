@@ -110,6 +110,99 @@ class ReportService
         ];
     }
 
+    /** @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    public function profit(int $storeId, array $filters): array
+    {
+        [$start, $end] = $this->boundaries($filters);
+        $sales = DB::table('sales')
+            ->where('store_id', $storeId)
+            ->where('status', 'posted')
+            ->whereBetween('posted_at', [$start, $end])
+            ->orderBy('id')
+            ->get(['id', 'payment_mode', 'invoice_id']);
+
+        $profitBySale = [];
+        $salesRevenue = 0;
+        $costOfGoodsSold = 0;
+        foreach (DB::table('sale_items')
+            ->whereIn('sale_id', $sales->pluck('id'))
+            ->get(['sale_id', 'qty', 'line_total', 'cost_snapshot']) as $item) {
+            $qtyUnits = Decimal::qty((string) $item->qty);
+            $costUnits = Decimal::toUnits((string) $item->cost_snapshot, 4);
+            $lineRevenue = Decimal::money((string) $item->line_total);
+            $lineCostOfGoods = intdiv($qtyUnits * $costUnits + 50_000, 100_000);
+            $salesRevenue += $lineRevenue;
+            $costOfGoodsSold += $lineCostOfGoods;
+            $profitBySale[$item->sale_id] = ($profitBySale[$item->sale_id] ?? 0)
+                + $lineRevenue - $lineCostOfGoods;
+        }
+
+        $invoiceIds = $sales->where('payment_mode', 'payroll_credit')->pluck('invoice_id')->filter()->unique();
+        $invoiceRows = $invoiceIds->isEmpty()
+            ? collect()
+            : DB::table('receivable_invoices')
+                ->where('store_id', $storeId)
+                ->whereIn('id', $invoiceIds)
+                ->get(['id', 'total'])
+                ->keyBy('id');
+        $paidByInvoice = $invoiceIds->isEmpty()
+            ? collect()
+            : DB::table('invoice_payments')
+                ->whereIn('invoice_id', $invoiceIds)
+                ->where('received_at', '<=', $end)
+                ->selectRaw('invoice_id, coalesce(sum(amount), 0) as paid')
+                ->groupBy('invoice_id')
+                ->pluck('paid', 'invoice_id');
+
+        $cashProfit = 0;
+        $creditProfit = 0;
+        $creditValidProfit = 0;
+        foreach ($sales as $sale) {
+            $saleProfit = $profitBySale[$sale->id] ?? 0;
+            if ($sale->payment_mode === 'cash') {
+                $cashProfit += $saleProfit;
+
+                continue;
+            }
+
+            $creditProfit += $saleProfit;
+            $invoice = $invoiceRows->get($sale->invoice_id);
+            if ($invoice === null) {
+                continue;
+            }
+
+            $invoiceTotal = Decimal::money((string) $invoice->total);
+            if ($invoiceTotal <= 0) {
+                continue;
+            }
+
+            $paid = min(Decimal::money((string) ($paidByInvoice->get($sale->invoice_id) ?? '0')), $invoiceTotal);
+            $creditValidProfit += $this->proportionalAmount($saleProfit, $paid, $invoiceTotal);
+        }
+
+        $validProfit = $cashProfit + $creditValidProfit;
+        $totalProfit = $cashProfit + $creditProfit;
+
+        return [
+            'period' => ['date_from' => $filters['date_from'], 'date_to' => $filters['date_to']],
+            'basis' => 'HPP snapshot per item; pembayaran invoice dihitung sampai akhir periode',
+            'sales_revenue' => Decimal::moneyString($salesRevenue),
+            'cost_of_goods_sold' => Decimal::moneyString($costOfGoodsSold),
+            'total_gross_profit' => Decimal::moneyString($totalProfit),
+            'valid_profit' => Decimal::moneyString($validProfit),
+            'expected_profit' => Decimal::moneyString($totalProfit - $validProfit),
+            'by_payment_mode' => [
+                'cash' => ['valid_profit' => Decimal::moneyString($cashProfit)],
+                'payroll_credit' => [
+                    'valid_profit' => Decimal::moneyString($creditValidProfit),
+                    'expected_profit' => Decimal::moneyString($creditProfit - $creditValidProfit),
+                ],
+            ],
+        ];
+    }
+
     /** @param array<string, mixed> $filters */
     public function inventory(int $storeId, array $filters): array
     {
@@ -274,5 +367,12 @@ class ReportService
         }
 
         return isset($filters['cashier_id']) ? (int) $filters['cashier_id'] : null;
+    }
+
+    private function proportionalAmount(int $amount, int $numerator, int $denominator): int
+    {
+        $magnitude = intdiv(abs($amount) * $numerator + intdiv($denominator, 2), $denominator);
+
+        return $amount < 0 ? -$magnitude : $magnitude;
     }
 }

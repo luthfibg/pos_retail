@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\PermissionResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
 use Tests\SeededTestCase;
 
 class BillingTest extends SeededTestCase
@@ -25,7 +27,7 @@ class BillingTest extends SeededTestCase
             'store_id' => $this->storeId(), 'doc_number' => 'SHIFT-TGH', 'register_id' => DB::table('registers')->value('id'),
             'cashier_id' => $this->cashier->id, 'opening_balance' => 0, 'status' => 'open', 'opened_at' => now(),
         ]);
-        \Laravel\Sanctum\Sanctum::actingAs($this->admin, ['*']);
+        Sanctum::actingAs($this->admin, ['*']);
     }
 
     private function employee(string $no, string $name): int
@@ -240,6 +242,14 @@ class BillingTest extends SeededTestCase
         $this->postJson("/api/invoices/{$invoice}/payments", ['amount' => '100000', 'reference' => 'TRF-1', 'received_on' => '2026-10-28'])
             ->assertCreated()->assertJsonPath('data.status', 'partially_paid')->assertJsonPath('data.amount_paid', '100000.00')
             ->assertJsonPath('data.amount_remaining', '75000.50')->assertJsonCount(1, 'data.payments');
+        $paymentId = DB::table('invoice_payments')->where('invoice_id', $invoice)->value('id');
+        $this->assertDatabaseHas('fund_ledger_entries', [
+            'fund_account_id' => DB::table('fund_accounts')->where('store_id', $this->storeId())->where('type', 'main_cash')->value('id'),
+            'entry_type' => 'invoice_payment_in',
+            'amount' => '100000.00',
+            'ref_type' => 'invoice_payment',
+            'ref_id' => $paymentId,
+        ]);
         $this->assertSame(3, DB::table('sales')->where('invoice_id', $invoice)->where('billing_status', 'invoiced')->count());
 
         $this->postJson("/api/invoices/{$invoice}/payments", ['amount' => '75000.51'])->assertUnprocessable()->assertJsonValidationErrors(['amount']);
@@ -252,6 +262,29 @@ class BillingTest extends SeededTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'invoice.record_payment', 'entity_id' => $invoice, 'actor_id' => $this->admin->id]);
 
         $this->postJson("/api/invoices/{$invoice}/payments", ['amount' => '1'])->assertUnprocessable()->assertJsonValidationErrors(['status']);
+    }
+
+    public function test_finance_can_verify_hrd_payment_and_payment_is_recorded_in_main_cash(): void
+    {
+        [$period] = $this->closedPeriodWithSales();
+        $invoice = $this->postJson("/api/billing-periods/{$period}/invoice")->assertCreated()->json('data.id');
+        $this->postJson("/api/invoices/{$invoice}/issue")->assertOk();
+        $this->postJson("/api/invoices/{$invoice}/hand-over")->assertOk();
+
+        $finance = $this->makeUser('Finance', 'finance-pembayaran-tagihan');
+        Sanctum::actingAs($finance, ['*']);
+
+        $this->postJson("/api/invoices/{$invoice}/payments", ['amount' => '50000', 'reference' => 'BANK-001'])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'partially_paid')
+            ->assertJsonPath('data.amount_paid', '50000.00');
+
+        $this->assertDatabaseHas('fund_ledger_entries', [
+            'fund_account_id' => DB::table('fund_accounts')->where('store_id', $this->storeId())->where('type', 'main_cash')->value('id'),
+            'entry_type' => 'invoice_payment_in',
+            'amount' => '50000.00',
+            'created_by' => $finance->id,
+        ]);
     }
 
     public function test_billed_credit_sale_cannot_be_voided_after_invoice(): void
@@ -269,8 +302,8 @@ class BillingTest extends SeededTestCase
     public function test_cashier_and_guest_have_no_access(): void
     {
         $id = $this->openPeriod();
-        \Laravel\Sanctum\Sanctum::actingAs($this->cashier, ['*']);
-        app(\App\Services\PermissionResolver::class)->flush();
+        Sanctum::actingAs($this->cashier, ['*']);
+        app(PermissionResolver::class)->flush();
 
         $this->getJson('/api/billing-periods')->assertForbidden();
         $this->postJson('/api/billing-periods', [])->assertForbidden();

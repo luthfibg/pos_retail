@@ -237,4 +237,57 @@ class ReportTest extends SeededTestCase
             ->assertOk()
             ->assertJsonPath('data.summary.net_sales', '0.00');
     }
+
+    public function test_profit_report_separates_expected_credit_profit_from_paid_profit(): void
+    {
+        $admin = $this->signIn('Admin', 'admin-profit-laporan');
+        $cashSale = $this->sale('cash', '100.00', '2026-10-28 02:00:00');
+        $creditSale = $this->sale('payroll_credit', '200.00', '2026-10-28 03:00:00');
+        $cashProduct = $this->product('PROFIT-CASH');
+        $creditProduct = $this->product('PROFIT-CREDIT');
+
+        DB::table('sale_items')->insert([
+            ['sale_id' => $cashSale, 'product_id' => $cashProduct, 'qty' => '1.000', 'unit_price' => '100.00', 'discount_amount' => '0.00', 'line_total' => '100.00', 'cost_snapshot' => '40.0000'],
+            ['sale_id' => $creditSale, 'product_id' => $creditProduct, 'qty' => '1.000', 'unit_price' => '200.00', 'discount_amount' => '0.00', 'line_total' => '200.00', 'cost_snapshot' => '80.0000'],
+        ]);
+
+        $periodId = DB::table('billing_periods')->insertGetId([
+            'store_id' => $this->storeId(), 'label' => 'Oktober', 'starts_at' => '2026-10-01 00:00:00',
+            'closed_at' => '2026-10-28 00:00:00', 'status' => 'invoiced', 'closed_by' => $admin->id,
+        ]);
+        $invoiceId = DB::table('receivable_invoices')->insertGetId([
+            'store_id' => $this->storeId(), 'doc_number' => 'INV-PROFIT', 'billing_period_id' => $periodId,
+            'bill_to' => 'HRD', 'subtotal' => '200.00', 'tax_amount' => '0.00', 'total' => '200.00',
+            'amount_paid' => '50.00', 'status' => 'partially_paid', 'created_by' => $admin->id,
+        ]);
+        DB::table('sales')->where('id', $creditSale)->update(['invoice_id' => $invoiceId, 'billing_status' => 'invoiced']);
+        DB::table('invoice_payments')->insert([
+            'invoice_id' => $invoiceId, 'amount' => '50.00', 'received_at' => '2026-10-29 05:00:00',
+            'recorded_by' => $admin->id,
+        ]);
+
+        $this->getJson('/api/reports/profit?date_from=2026-10-28&date_to=2026-10-28')
+            ->assertOk()
+            ->assertJsonPath('data.sales_revenue', '300.00')
+            ->assertJsonPath('data.cost_of_goods_sold', '120.00')
+            ->assertJsonPath('data.total_gross_profit', '180.00')
+            ->assertJsonPath('data.valid_profit', '60.00')
+            ->assertJsonPath('data.expected_profit', '120.00')
+            ->assertJsonPath('data.by_payment_mode.payroll_credit.expected_profit', '120.00');
+
+        $this->getJson('/api/reports/profit?date_from=2026-10-28&date_to=2026-10-29')
+            ->assertOk()
+            ->assertJsonPath('data.valid_profit', '90.00')
+            ->assertJsonPath('data.expected_profit', '90.00')
+            ->assertJsonPath('data.by_payment_mode.payroll_credit.valid_profit', '30.00');
+
+        Sanctum::actingAs($this->cashier, ['*']);
+        $this->getJson('/api/reports/profit?date_from=2026-10-28&date_to=2026-10-29')->assertForbidden();
+
+        Sanctum::actingAs($this->makeUser('Finance', 'finance-profit-laporan'), ['*']);
+        $this->getJson('/api/reports/profit?date_from=2026-10-28&date_to=2026-10-29')->assertOk();
+
+        Sanctum::actingAs($this->makeUser('Owner', 'owner-profit-laporan'), ['*']);
+        $this->getJson('/api/reports/profit?date_from=2026-10-28&date_to=2026-10-29')->assertOk();
+    }
 }

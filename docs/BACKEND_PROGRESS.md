@@ -618,12 +618,13 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 | GET | `/api/invoices/{id}` | `invoice.generate` | Detail: `customers[]` (per karyawan, berisi `sales[]`) dan `payments[]` |
 | POST | `/api/invoices/{id}/issue` | `invoice.issue` | draft → `issued` |
 | POST | `/api/invoices/{id}/hand-over` | `invoice.issue` | `issued` → `handed_to_hr` (penanda diserahkan ke HRD) |
-| POST | `/api/invoices/{id}/payments` | `invoice.record_payment` | Catat pembayaran HRD: `amount`, `received_on?`, `reference?`, `note?` |
+| POST | `/api/invoices/{id}/payments` | `invoice.record_payment` | Finance/Accounting/Admin mencatat pembayaran HRD: `amount`, `received_on?`, `reference?`, `note?`; penerimaan masuk ke akun `main_cash` |
 
 ### Perilaku
 - **Tutup periode** mengikat semua struk kredit terposting yang belum terikat ke periode itu, lalu **periode berikutnya otomatis dibuka**; struk kredit baru masuk ke sana. Karena struk terikat tidak lagi dihitung sebagai pemakaian, **sisa batas kredit karyawan pulih** setelah tutup periode. Struk tunai dan struk batal tidak ikut.
 - **Invoice**: satu per periode tertutup, satu baris per struk. Subtotal = jumlah struk. PPN dihitung di invoice hanya bila `vat_enabled` aktif dan tarif lengkap (R-04); bila PPN aktif tapi konfigurasi belum lengkap → 422 `status` dan tidak ada yang berubah. Struk ditandai `billing_status: "invoiced"` dan **tidak dapat di-void lagi** (422 `status`, perlu credit note).
 - **Status invoice**: `draft` → `issued` → `handed_to_hr` → `partially_paid` → `paid`. Pembayaran hanya untuk `issued`/`handed_to_hr`/`partially_paid`; jumlah > 0 dan ≤ `amount_remaining` (422 `amount`). Saat lunas, semua struk menjadi `billing_status: "paid"`.
+- Finance mencatat pembayaran HRD sebagai konfirmasi penerimaan dana. Transaksi pembayaran dan ledger `invoice_payment_in` pada akun kas besar toko dibuat atomik; referensi ledger menunjuk baris `invoice_payments`. Permission `invoice.record_payment` tersedia untuk Finance dan Admin (serta role lain yang secara eksplisit diberi izin).
 - Bentuk invoice: `id, document_no (INV-YYYYMM-000001), billing_period_id, period_label, bill_to, subtotal, tax_rate, tax_amount, total, amount_paid, amount_remaining, status, issued_at, handed_at, created_at`. Semua uang string desimal.
 - Kunci error 422: `status` (urutan/aturan alur), `amount`, `scheduled_close_date`.
 
@@ -721,6 +722,19 @@ Semua endpoint memakai `auth:sanctum` dan `reports.view`; data dibatasi ke toko 
 - PPN pada laporan mengikuti snapshot penjualan yang tersimpan; tidak melakukan kalkulasi ulang dari tarif terbaru.
 - Tidak ada aggregasi lintas toko.
 - Kasir hanya dapat melihat data shift miliknya, tetapi inventori tetap dibatasi pada toko aktif.
+
+## 11.1 Laporan Laba Kotor (Backend) ✅
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/reports/profit` | `reports.profit.view` | Laba kotor berdasarkan tanggal penjualan, dipisah menjadi valid dan expected |
+
+- HPP dihitung dari `qty × cost_snapshot` setiap baris penjualan; pendapatan memakai `line_total` setelah diskon dan sebelum PPN.
+- Penjualan tunai yang terposting dihitung sebagai laba valid. Laba penjualan kredit gaji menjadi expected sampai Finance mencatat pembayaran HRD.
+- Pembayaran parsial memvalidasi laba kredit secara proporsional terhadap total invoice. Nilai pembayaran yang dihitung hanya pembayaran dengan `received_at` sampai akhir tanggal `date_to`; penjualan dalam laporan tetap dibatasi pada `posted_at` di rentang tanggal.
+- Respons memuat `sales_revenue`, `cost_of_goods_sold`, `total_gross_profit`, `valid_profit`, `expected_profit`, dan rincian `by_payment_mode`. Kasir tidak menerima izin `reports.profit.view`; Admin, Owner, Finance, dan Accounting mendapatkannya.
+- Laporan ini mengukur laba kotor penjualan (belum mengurangi biaya operasional atau kerugian retur/write-off). Laporan baca tidak membuat audit log.
+- Permission baru `reports.profit.view` memerlukan `php artisan db:seed --class=PermissionSeeder` pada instalasi yang sudah ada.
 
 ## 12. Model Administrasi Toko 🟡
 
@@ -916,6 +930,7 @@ Respons hanya `{ "data": { "name": "Nama Toko Baru" } }`. Perubahan dicatat di a
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-11-02** — Laporan laba kotor `GET /api/reports/profit` memakai `line_total` dan HPP snapshot per item; penjualan kredit dipisah expected/valid dan pembayaran parsial Finance mengakui laba secara proporsional. Pencatatan pembayaran HRD kini masuk atomik ke ledger akun `main_cash`. Permission baru `reports.profit.view` untuk Admin, Owner, Finance, dan Accounting; `BillingTest` 11 lulus dan tes profit terarah 1 lulus.
 - **2026-11-02** — Endpoint Retail `PATCH /api/settings/store-name` hanya mengizinkan perubahan `name` (maks. 150 karakter), izin `settings.manage`, konteks toko aktif, dan audit `settings.store_name`; request menolak field toko lain. Tidak menambahkan endpoint read/create/delete atau perubahan atribut lain. `StoreNameSettingTest`: 3 test lulus.
 - **2026-11-03** — Prioritas #1: kunci otorisasi Owner/Admin (kode 6 karakter kapital atau kalimat rahasia), CRUD mandiri + pencabutan oleh pengelola, mode kredensial persetujuan per toko (`password` default / `key` / `password_and_key`) pada semua dialog re-auth (`approver_key`), penguncian permanen setelah 10 gagal, audit tanpa kunci, `approval_auth_mode` dan `authorization_key` pada `/api/auth/me`. Migration `authorization_keys` baru. Status: 🟡 menunggu test (`AuthorizationKeyTest` 12). Bagian 14.
 - **2026-11-02** — Retur supplier (Paket 3): draft/pengajuan dan karantina stok, keputusan supplier, penerimaan barang pengganti, serta write-off bernilai HPP setelah ditolak supplier dengan re-auth `inventory.adjust.approve`. Akses pengajuan/keputusan/penerimaan dikendalikan matriks stok (aturan kini 10). Migration, permission, endpoint, dan tes feature baru; kontrak bagian 15.

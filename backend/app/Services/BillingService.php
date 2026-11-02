@@ -269,6 +269,27 @@ class BillingService
                 'recorded_by' => $actor->id,
             ]);
 
+            $fund = DB::table('fund_accounts')
+                ->where('store_id', $storeId)
+                ->where('type', 'main_cash')
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+            if ($fund === null) {
+                throw ValidationException::withMessages(['fund_account' => ['Akun kas besar aktif untuk penerimaan Finance belum tersedia.']]);
+            }
+
+            DB::table('fund_ledger_entries')->insert([
+                'fund_account_id' => $fund->id,
+                'entry_type' => 'invoice_payment_in',
+                'amount' => Decimal::moneyString($amount),
+                'ref_type' => 'invoice_payment',
+                'ref_id' => $paymentId,
+                'occurred_at' => $receivedAt,
+                'created_by' => $actor->id,
+                'note' => 'Pembayaran HRD '.$inv->doc_number,
+            ]);
+
             $paid = Decimal::money((string) $inv->amount_paid) + $amount;
             $status = $paid >= Decimal::money((string) $inv->total) ? 'paid' : 'partially_paid';
 

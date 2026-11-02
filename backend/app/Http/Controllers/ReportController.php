@@ -35,6 +35,16 @@ class ReportController extends Controller
         )]);
     }
 
+    public function profit(Request $request): JsonResponse
+    {
+        $filters = $this->filters($request);
+
+        return response()->json(['data' => $this->reports->profit(
+            $this->stores->requireIdFor($request->user()),
+            $filters,
+        )]);
+    }
+
     public function inventory(Request $request): JsonResponse
     {
         $filters = $request->validate([

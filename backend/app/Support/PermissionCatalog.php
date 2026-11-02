@@ -63,6 +63,7 @@ final class PermissionCatalog
             'invoice.issue' => 'Menerbitkan invoice',
             'invoice.record_payment' => 'Mencatat pembayaran invoice dari HRD',
             'reports.view' => 'Melihat laporan',
+            'reports.profit.view' => 'Melihat laporan laba',
         ];
     }
 
@@ -119,7 +120,7 @@ final class PermissionCatalog
             'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve',
             'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
-            'shift.review', 'float.configure', 'reports.view',
+            'shift.review', 'float.configure', 'reports.view', 'reports.profit.view',
         ];
     }
 
@@ -129,7 +130,7 @@ final class PermissionCatalog
         return [
             'inventory.view', 'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.finance_check', 'shift.review', 'float.propose', 'cash_deposit.receive',
-            'receipt.reprint', 'reports.view',
+            'invoice.record_payment', 'receipt.reprint', 'reports.view', 'reports.profit.view',
         ];
     }
 
@@ -148,6 +149,7 @@ final class PermissionCatalog
         return [
             'inventory.view', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close',
             'invoice.generate', 'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'reports.view',
+            'reports.profit.view',
         ];
     }
 
