@@ -3,7 +3,7 @@
 namespace App\Support;
 
 /**
- * Daftar permission Paket 1 (sesuai Bagian 14.3 dokumen kebutuhan).
+ * Daftar permission sistem (Paket 1 ditambah fitur lanjutan).
  * Admin memegang semua; Kasir memegang subset di cashier().
  * Catatan: `product.create` dan `reports.view` untuk Kasir dibatasi lebih lanjut di service
  * (produk baru berstatus pending_price; laporan hanya shift/stok sendiri).
@@ -41,6 +41,7 @@ final class PermissionCatalog
             'purchase_order.send' => 'Mengirim PO ke supplier',
             'goods_receipt.create' => 'Mencatat penerimaan barang',
             'goods_receipt.verify_documents' => 'Memverifikasi surat jalan dan faktur',
+            'supplier_return.create' => 'Mengelola retur supplier (dikendalikan matriks kewenangan stok)',
             'stock_transfer.create' => 'Membuat transfer stok',
             'inventory.adjust.request' => 'Mengajukan adjustment stok',
             'inventory.adjust.approve' => 'Menyetujui adjustment stok',

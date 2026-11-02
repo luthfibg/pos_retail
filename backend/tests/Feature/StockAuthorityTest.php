@@ -63,13 +63,15 @@ class StockAuthorityTest extends SeededTestCase
         $data = $this->getJson('/api/settings/stock-authority')->assertOk()->assertJsonPath('data.admin_model', 'simple')
             ->assertJsonPath('data.warehouse_enabled', false)->json('data');
 
-        $this->assertCount(8, $data['rules']);
-        $this->assertSame(['opening_balance', 'receipt.store_floor', 'receipt.warehouse', 'transfer.store_floor', 'transfer.warehouse',
-            'adjustment_request.store_floor', 'adjustment_request.warehouse', 'adjustment_approve'], array_column($data['rules'], 'key'));
+        $this->assertCount(10, $data['rules']);
+        $this->assertSame(['opening_balance', 'receipt.store_floor', 'receipt.warehouse', 'supplier_return.store_floor',
+            'supplier_return.warehouse', 'transfer.store_floor', 'transfer.warehouse', 'adjustment_request.store_floor',
+            'adjustment_request.warehouse', 'adjustment_approve'], array_column($data['rules'], 'key'));
 
         $rules = $this->rules();
         $this->assertSame(['Admin'], $rules['opening_balance']['roles']);
         $this->assertSame(['Admin', 'Kasir'], $rules['receipt.store_floor']['roles']);
+        $this->assertSame(['Admin', 'Kasir'], $rules['supplier_return.store_floor']['roles']);
         $this->assertSame(['Admin'], $rules['adjustment_approve']['roles']);
         $this->assertFalse($rules['receipt.store_floor']['customized']);
         $this->assertTrue($rules['receipt.store_floor']['applies']);

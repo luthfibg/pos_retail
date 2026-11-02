@@ -50,7 +50,8 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Frontend: pemeriksaan PR/PO, adjustment, tagihan HRD, manajemen pengguna, transfer stok | Belum lengkap | Backlog frontend; kontrak backend tersedia |
 | Periode tagihan + invoice HRD + pembayaran HRD | Selesai | **Lolos** test (25 Okt 2026) |
 | Dashboard dan laporan dasar (penjualan harian, stok menipis/kedaluwarsa, ringkasan kas) | Selesai | **Lolos** test (`ReportTest`, 28 Okt 2026); endpoint baca dengan permission `reports.view`, filter WIB, dan batasan per toko/kasir |
-| Paket 2 dan 3 (lihat 6) | Belum dirancang | — |
+| Paket 2 | Belum dirancang | — |
+| Retur supplier + write-off (Paket 3) | Backend + tes lulus; UI belum ada | Kontrak API di `BACKEND_PROGRESS.md` bagian 15 |
 
 **Penting:** kode baru backend harus ditandai "belum dijalankan" sampai `php artisan test` dijalankan. Suite terakhir pada 28 Okt 2026: **238 test lulus (2.129 assertions)**.
 
@@ -146,7 +147,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 **Berkas penting** (di folder keluaran proyek): `schema_paket1.sql`, `erd_paket1.md`, zip migration, zip tahap1b (seeder/auth/RBAC), zip tahap1c (master data), `SETUP.md`, `SETUP_AUTH_RBAC.md`, `PANDUAN_MASTER_DATA.md`.
 
-**Tabel Paket 1 (55)** sudah mencakup semua alur di bawah. **Belum dirancang (Paket 2/3):** `bank_accounts`, `bank_transactions`, `bank_deposits`, `bank_receipts`, `supplier_payments`, `purchase_fund_*`, `expenses`, `customer_returns`, `credit_notes`, `supplier_returns`, rekonsiliasi.
+**Tabel Paket 1 (55)** adalah baseline schema. Migration backend tambahan kini menyediakan `supplier_returns` dan `supplier_return_items`. **Belum dirancang:** `bank_accounts`, `bank_transactions`, `bank_deposits`, `bank_receipts`, `supplier_payments`, `purchase_fund_*`, `expenses`, `customer_returns`, `credit_notes`, rekonsiliasi.
 
 ---
 
@@ -179,7 +180,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 **Jika jadwal mundur, potong dalam urutan ini:** denah rak visual (pakai daftar), UI adjustment/opname, transfer antar-rak, UI langkah "pemeriksaan Finance" (jadikan satu tombol Admin), dashboard. **Jangan dipotong:** posting penjualan atomik, aturan kredit/batas, FEFO, shift + endapan, invoice HRD.
 
-**Di luar target 1 bulan:** Paket 2 (Saldo Pembelian, pembayaran supplier, setoran bank, expenses, retur pelanggan, credit note), Paket 3 (retur supplier + write-off, rekonsiliasi bank, laporan analitik Owner), modul impor data (ditunda klien; cut-over ±1,5–2 bulan dari sekarang).
+**Di luar target 1 bulan:** Paket 2 (Saldo Pembelian, pembayaran supplier, setoran bank, expenses, retur pelanggan, credit note), Paket 3 (rekonsiliasi bank, laporan analitik Owner; retur supplier + write-off backend sudah tersedia dan menunggu validasi), modul impor data (ditunda klien; cut-over ±1,5–2 bulan dari sekarang).
 
 ---
 

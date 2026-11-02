@@ -65,9 +65,17 @@ describe('stockAuthorityLogic', () => {
   });
 
   it('mengelompokkan per operasi dengan judul dan membedakan Toko/Gudang', () => {
-    const groups = groupRules([rule('opening_balance'), rule('receipt.store_floor'), rule('receipt.warehouse'), rule('adjustment_approve')]);
-    expect(groups.map((g) => g.title)).toEqual(['Stok awal', 'Penerimaan barang', 'Persetujuan adjustment / opname']);
+    const groups = groupRules([
+      rule('opening_balance'),
+      rule('receipt.store_floor'),
+      rule('receipt.warehouse'),
+      rule('supplier_return.store_floor'),
+      rule('supplier_return.warehouse'),
+      rule('adjustment_approve'),
+    ]);
+    expect(groups.map((g) => g.title)).toEqual(['Stok awal', 'Penerimaan barang', 'Retur supplier', 'Persetujuan adjustment / opname']);
     expect(groups[1]?.rules.map(rowTitle)).toEqual(['Lokasi Toko', 'Lokasi Gudang']);
+    expect(groups[2]?.rules.map(rowTitle)).toEqual(['Lokasi Toko', 'Lokasi Gudang']);
     expect(rowTitle(rule('opening_balance'))).toBe('Aturan opening_balance');
   });
 

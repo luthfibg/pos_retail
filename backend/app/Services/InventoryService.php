@@ -148,10 +148,10 @@ class InventoryService
         });
     }
 
-    // ------------------------------------------------------------------ penerimaan (dipakai WS penerimaan barang)
+    // ------------------------------------------------------------------ penerimaan
 
     /**
-     * Barang masuk dari penerimaan (goods receipt). Produk track_expiry wajib bertanggal kadaluarsa.
+     * Barang masuk dari penerimaan PO atau pengganti retur. Produk track_expiry wajib bertanggal kadaluarsa.
      *
      * @return array{batch_id: int, balance_id: int}
      */
@@ -168,8 +168,13 @@ class InventoryService
         ?int $actorId,
         ?int $locationId = null,
         ?int $positionId = null,
+        string $movementType = 'receipt',
     ): array {
         $this->requireTransaction();
+
+        if (! in_array($movementType, ['receipt', 'supplier_replacement_in'], true)) {
+            throw new LogicException('Jenis pergerakan stok masuk tidak valid.');
+        }
 
         $product = DB::table('products')->where('store_id', $storeId)->where('id', $productId)->lockForUpdate()->first();
         abort_if($product === null, 404, 'Produk tidak ditemukan.');
@@ -189,11 +194,143 @@ class InventoryService
             batchCode: $batchCode,
             goodsReceiptItemId: $goodsReceiptItemId,
             isOpening: false,
-            type: 'receipt',
+            type: $movementType,
             refType: $refType,
             refId: $refId,
             actorId: $actorId,
         );
+    }
+
+    /**
+     * Memindahkan barang yang diklaim ke karantina sampai supplier mengambil keputusan.
+     *
+     * @param  list<array<string, mixed>>  $items
+     */
+    public function quarantineSupplierReturn(int $storeId, int $returnId, array $items, int $actorId): void
+    {
+        $this->requireTransaction();
+
+        $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+        DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
+            ->orderBy('id')->lockForUpdate()->get(['id']);
+
+        $balances = [];
+        $errors = [];
+        foreach ($items as $index => $item) {
+            $balance = DB::table('inventory_balances')
+                ->where('product_id', (int) $item['product_id'])
+                ->where('location_id', (int) $item['location_id'])
+                ->whereRaw('position_key = ?', [$item['shelf_position_id'] ?? 0])
+                ->whereRaw('batch_key = ?', [$item['batch_id'] ?? 0])
+                ->lockForUpdate()
+                ->first();
+            $bucket = (string) $item['source_bucket'];
+            $column = self::BUCKET_COLUMNS[$bucket];
+            $available = Decimal::qty((string) ($balance->{$column} ?? '0'));
+            $qty = Decimal::qty((string) $item['qty']);
+            if ($balance === null || $available < $qty) {
+                $errors["items.{$index}.qty"] = ['Stok berubah atau tidak mencukupi untuk mengajukan retur.'];
+
+                continue;
+            }
+            $balances[$index] = (int) $balance->id;
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        foreach ($items as $index => $item) {
+            $qty = Decimal::qty((string) $item['qty']);
+            $bucket = (string) $item['source_bucket'];
+            $this->decreaseBalance($balances[$index], $bucket, $qty);
+            $this->increaseBalance($balances[$index], 'quarantine', $qty);
+            DB::table('inventory_movements')->insert([
+                'store_id' => $storeId,
+                'product_id' => (int) $item['product_id'],
+                'batch_id' => $item['batch_id'],
+                'from_location_id' => (int) $item['location_id'],
+                'from_position_id' => $item['shelf_position_id'],
+                'from_bucket' => $bucket,
+                'to_location_id' => (int) $item['location_id'],
+                'to_position_id' => $item['shelf_position_id'],
+                'to_bucket' => 'quarantine',
+                'qty' => Decimal::qtyString($qty),
+                'movement_type' => 'adjustment',
+                'unit_cost' => $item['unit_cost'],
+                'ref_type' => 'supplier_return',
+                'ref_id' => $returnId,
+                'occurred_at' => $this->now(),
+                'created_by' => $actorId,
+            ]);
+        }
+    }
+
+    /**
+     * Removes claimed stock from quarantine after supplier acceptance or approved write-off.
+     *
+     * @param  list<array<string, mixed>>  $items
+     */
+    public function closeSupplierReturn(
+        int $storeId,
+        int $returnId,
+        array $items,
+        int $actorId,
+        string $movementType,
+    ): void {
+        $this->requireTransaction();
+
+        if (! in_array($movementType, ['supplier_return_out', 'write_off'], true)) {
+            throw new LogicException('Jenis pergerakan stok keluar tidak valid.');
+        }
+
+        $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+        DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
+            ->orderBy('id')->lockForUpdate()->get(['id']);
+
+        $balances = [];
+        $errors = [];
+        foreach ($items as $index => $item) {
+            $balance = DB::table('inventory_balances')
+                ->where('product_id', (int) $item['product_id'])
+                ->where('location_id', (int) $item['location_id'])
+                ->whereRaw('position_key = ?', [$item['shelf_position_id'] ?? 0])
+                ->whereRaw('batch_key = ?', [$item['batch_id'] ?? 0])
+                ->lockForUpdate()
+                ->first();
+            $available = Decimal::qty((string) ($balance->qty_quarantine ?? '0'));
+            $qty = Decimal::qty((string) $item['qty']);
+            if ($balance === null || $available < $qty) {
+                $errors["items.{$index}.qty"] = ['Stok karantina retur berubah atau tidak mencukupi.'];
+
+                continue;
+            }
+            $balances[$index] = (int) $balance->id;
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        foreach ($items as $index => $item) {
+            $qty = Decimal::qty((string) $item['qty']);
+            $this->decreaseBalance($balances[$index], 'quarantine', $qty);
+            DB::table('inventory_movements')->insert([
+                'store_id' => $storeId,
+                'product_id' => (int) $item['product_id'],
+                'batch_id' => $item['batch_id'],
+                'from_location_id' => (int) $item['location_id'],
+                'from_position_id' => $item['shelf_position_id'],
+                'from_bucket' => 'quarantine',
+                'qty' => Decimal::qtyString($qty),
+                'movement_type' => $movementType,
+                'unit_cost' => $item['unit_cost'],
+                'ref_type' => 'supplier_return',
+                'ref_id' => $returnId,
+                'occurred_at' => $this->now(),
+                'created_by' => $actorId,
+            ]);
+        }
     }
 
     // ------------------------------------------------------------------ penjualan (FEFO)

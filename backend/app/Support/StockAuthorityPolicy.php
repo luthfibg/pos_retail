@@ -11,10 +11,10 @@ use Illuminate\Support\Facades\DB;
  * Disimpan di settings.stock_authority sebagai {kunci_aturan: [nama role]} HANYA untuk aturan yang diubah; aturan yang tidak
  * disetel memakai default menurut model administrasi toko (simple/standard). Tidak bergantung pada ada/tidaknya Gudang.
  *
- * Mekanisme: PermissionResolver menurunkan lima permission stok (goods_receipt.create, stock_transfer.create,
+ * Mekanisme: PermissionResolver menurunkan permission stok (goods_receipt.create, supplier_return.create, stock_transfer.create,
  * inventory.adjust.request, inventory.adjust.approve, inventory.opening_balance) DARI MATRIKS ini, bukan dari role_permissions,
  * sehingga middleware `can:` yang ada dan menu frontend (dari permissions di /api/auth/me) otomatis mengikuti. Penerimaan,
- * transfer, dan pengajuan adjustment punya lingkup lokasi (toko/gudang); lingkup diperiksa lagi di service lewat assertScope().
+ * retur, transfer, dan pengajuan adjustment punya lingkup lokasi (toko/gudang); lingkup diperiksa lagi di service lewat assertScope().
  * Kelas ini sengaja tanpa dependensi container (hanya DB) agar aman dipakai PermissionResolver.
  */
 final class StockAuthorityPolicy
@@ -29,6 +29,10 @@ final class StockAuthorityPolicy
             'label' => 'Penerimaan barang ke toko', 'description' => 'Mencatat, memposting, dan membatalkan penerimaan barang dari PO ke lokasi toko.'],
         'receipt.warehouse' => ['action' => 'receipt', 'scope' => 'warehouse', 'permission' => 'goods_receipt.create',
             'label' => 'Penerimaan barang ke gudang', 'description' => 'Penerimaan barang dari PO ke lokasi gudang (berlaku bila Gudang diaktifkan).'],
+        'supplier_return.store_floor' => ['action' => 'supplier_return', 'scope' => 'store_floor', 'permission' => 'supplier_return.create',
+            'label' => 'Retur supplier dari toko', 'description' => 'Mengajukan retur barang dan mencatat keputusan supplier dari lokasi toko.'],
+        'supplier_return.warehouse' => ['action' => 'supplier_return', 'scope' => 'warehouse', 'permission' => 'supplier_return.create',
+            'label' => 'Retur supplier dari gudang', 'description' => 'Mengajukan retur barang dan mencatat keputusan supplier dari gudang.'],
         'transfer.store_floor' => ['action' => 'transfer', 'scope' => 'store_floor', 'permission' => 'stock_transfer.create',
             'label' => 'Transfer/putaway di toko', 'description' => 'Memindahkan stok antar posisi rak di toko.'],
         'transfer.warehouse' => ['action' => 'transfer', 'scope' => 'warehouse', 'permission' => 'stock_transfer.create',
@@ -42,7 +46,10 @@ final class StockAuthorityPolicy
     ];
 
     private const ACTION_LABELS = [
-        'receipt' => 'menerima barang', 'transfer' => 'memindahkan stok', 'adjustment_request' => 'mengajukan adjustment stok',
+        'receipt' => 'menerima barang',
+        'supplier_return' => 'mengajukan retur supplier',
+        'transfer' => 'memindahkan stok',
+        'adjustment_request' => 'mengajukan adjustment stok',
     ];
 
     /** @return list<string> permission yang dikendalikan matriks (bukan role_permissions) */
@@ -62,8 +69,8 @@ final class StockAuthorityPolicy
     public static function defaults(string $model): array
     {
         $byAction = $model === 'standard'
-            ? ['opening_balance' => ['Owner'], 'receipt' => ['Kasir'], 'transfer' => ['Kasir'], 'adjustment_request' => ['Kasir'], 'adjustment_approve' => ['Owner']]
-            : ['opening_balance' => ['Admin'], 'receipt' => ['Admin', 'Kasir'], 'transfer' => ['Admin', 'Kasir'], 'adjustment_request' => ['Admin', 'Kasir'], 'adjustment_approve' => ['Admin']];
+            ? ['opening_balance' => ['Owner'], 'receipt' => ['Kasir'], 'supplier_return' => ['Kasir'], 'transfer' => ['Kasir'], 'adjustment_request' => ['Kasir'], 'adjustment_approve' => ['Owner']]
+            : ['opening_balance' => ['Admin'], 'receipt' => ['Admin', 'Kasir'], 'supplier_return' => ['Admin', 'Kasir'], 'transfer' => ['Admin', 'Kasir'], 'adjustment_request' => ['Admin', 'Kasir'], 'adjustment_approve' => ['Admin']];
 
         $out = [];
         foreach (self::RULES as $key => $rule) {

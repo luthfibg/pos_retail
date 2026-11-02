@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Permission efektif = permission dari role (per toko) + override `allow` - override `deny`.
- * Lima permission stok (StockAuthorityPolicy::controlledPermissions) TIDAK diambil dari role_permissions, melainkan dari
+ * Permission stok (StockAuthorityPolicy::controlledPermissions) TIDAK diambil dari role_permissions, melainkan dari
  * matriks kewenangan stok toko (settings.stock_authority atau default menurut model administrasi).
  * Hasil di-cache per instance (per request).
  */
@@ -17,9 +17,7 @@ class PermissionResolver
     /** @var array<string, list<string>> */
     private array $cache = [];
 
-    public function __construct(private StoreContext $stores)
-    {
-    }
+    public function __construct(private StoreContext $stores) {}
 
     /** @return list<string> */
     public function codes(User $user, ?int $storeId = null): array

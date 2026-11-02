@@ -193,7 +193,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
 | P2 | Paket 2: Saldo Pembelian + alokasi, pembayaran supplier, setoran bank, expenses, retur pelanggan, credit note | ⏸ |  |
-| P3 | Paket 3: retur supplier + write-off, rekonsiliasi bank, laporan analitik Owner | ⏸ |  |
+| P3 | Paket 3: retur supplier + write-off, rekonsiliasi bank, laporan analitik Owner | 🟡 | Retur supplier/write-off backend dan tes terarah lulus; UI, rekonsiliasi, dan analitik masih tersisa |
 
 ---
 

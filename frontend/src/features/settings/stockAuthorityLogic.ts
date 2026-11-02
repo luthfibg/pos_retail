@@ -6,6 +6,7 @@ export type StockDraft = Record<string, string[]>;
 export const ACTION_TITLE: Record<string, string> = {
   opening_balance: 'Stok awal',
   receipt: 'Penerimaan barang',
+  supplier_return: 'Retur supplier',
   transfer: 'Transfer / putaway',
   adjustment_request: 'Ajuan adjustment / opname',
   adjustment_approve: 'Persetujuan adjustment / opname',

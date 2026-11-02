@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 1 November 2026 · **Validasi terbaru:** `WarehouseSettingsTest`, `StockTransferTest`, dan `GoodsReceiptTest` — 24 lulus (296 assertions); frontend build dan typecheck lulus. Suite penuh terakhir: 243 lulus, 1 gagal pada `ReportTest` karena fixture tanggal `2026-10-30` diklasifikasikan `hari_ini` alih-alih `akan_kedaluwarsa` (gagal juga saat dijalankan tersendiri). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+**Diperbarui:** 2 November 2026 · **Validasi terbaru:** `SupplierReturnTest` 6 lulus (60 assertions); regresi `StockAuthorityTest`, `StockAdjustmentTest`, `GoodsReceiptTest`, dan `SaleTest` 54 lulus (611 assertions); frontend `stockAuthorityLogic.test.ts` 7 lulus dan typecheck lulus. Suite penuh terakhir: 243 lulus, 1 gagal pada `ReportTest` karena fixture tanggal `2026-10-30` diklasifikasikan `hari_ini` alih-alih `akan_kedaluwarsa` (gagal juga saat dijalankan tersendiri). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -185,7 +185,7 @@ Endpoint baca memakai permission `inventory.adjust.request` atau `inventory.adju
 - Daftar menerima `status` (`draft|requested|posted|rejected|cancelled`), `reason`, awalan nomor dokumen melalui `q`, dan `per_page` (1–100, default 25). Nomor dokumen `ADJ-...`; jumlah, snapshot saldo, dan selisih dikembalikan sebagai string desimal.
 
 ### Yang belum ada untuk Inventory
-Denah rak ⏳. `InventoryService` menyediakan `receive`, `sell` FEFO, `voidSale`, `transfer`, dan `adjust`; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
+Denah rak ⏳. Retur supplier dan write-off kini tersedia di bagian 15. `InventoryService` juga menyediakan `receive`, `sell` FEFO, `voidSale`, `transfer`, dan `adjust`; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
 
 ---
 
@@ -765,23 +765,24 @@ Catatan: `shift.review` sekaligus tanda "boleh melihat data semua kasir" (struk,
 
 Layar yang bisa dibuat (workspace Pengaturan): kartu "Model administrasi" dengan daftar periksa akun per role (`blockers`), pratinjau konversi `Admin → Owner`, dialog konfirmasi, lalu muat ulang `/api/auth/me` supaya menu mengikuti permission baru.
 
-## 13. Matriks Kewenangan Stok 🟡
+## 13. Matriks Kewenangan Stok ✅
 
-> Status: 🟡 kode + `StockAuthorityTest` (12 test) ditulis, **belum dijalankan** (menunggu `php artisan test`). Tidak ada migration. **Satu permission baru: `inventory.opening_balance`** (stok awal tidak lagi memakai `inventory.adjust.approve`); jalankan `php artisan db:seed --class=PermissionSeeder` pada database yang sudah ada. Prioritas #5 dari daftar finalisasi Paket 1; menyertakan penyelesaian FR-04 (bagian bawah).
+> Status: `StockAuthorityTest` dan tes workflow retur lulus. Matriks memuat 10 aturan, termasuk retur supplier per lokasi. Permission `supplier_return.create` diturunkan dari matriks; jalankan `php artisan db:seed --class=PermissionSeeder` pada database yang sudah ada agar permission tersedia.
 
-Tiap toko menentukan **role mana** yang boleh melakukan operasi stok. Berlaku di toko mana pun: dengan/tanpa Gudang dan pada model administrasi `simple` maupun `standard`. Ada 8 aturan:
+Tiap toko menentukan **role mana** yang boleh melakukan operasi stok. Berlaku di toko mana pun: dengan/tanpa Gudang dan pada model administrasi `simple` maupun `standard`. Ada 10 aturan:
 
 | Kunci aturan | Operasi | Permission yang diturunkan |
 |---|---|---|
 | `opening_balance` | Input stok awal | `inventory.opening_balance` |
 | `receipt.store_floor` / `receipt.warehouse` | Penerimaan barang dari PO ke lokasi toko / gudang | `goods_receipt.create` |
+| `supplier_return.store_floor` / `supplier_return.warehouse` | Retur supplier dari lokasi toko / gudang | `supplier_return.create` |
 | `transfer.store_floor` / `transfer.warehouse` | Transfer/putaway; **gudang** bila lokasi asal ATAU tujuan adalah gudang | `stock_transfer.create` |
 | `adjustment_request.store_floor` / `adjustment_request.warehouse` | Membuat dan mengajukan adjustment/opname untuk lokasi toko / gudang | `inventory.adjust.request` |
 | `adjustment_approve` | Menyetujui/menolak adjustment (stok langsung berubah saat disetujui) | `inventory.adjust.approve` |
 
-**Default** (bila belum disetel): model `simple` → stok awal `[Admin]`, penerimaan/transfer/ajuan `[Admin, Kasir]`, persetujuan `[Admin]`. Model `standard` → stok awal `[Owner]`, penerimaan/transfer/ajuan `[Kasir]`, persetujuan `[Owner]`. Perilaku default sama dengan sebelum fitur ini.
+**Default** (bila belum disetel): model `simple` → stok awal `[Admin]`, penerimaan/retur/transfer/ajuan `[Admin, Kasir]`, persetujuan `[Admin]`. Model `standard` → stok awal `[Owner]`, penerimaan/retur/transfer/ajuan `[Kasir]`, persetujuan `[Owner]`.
 
-**Cara kerja:** lima permission di atas **tidak lagi diambil dari role_permissions**, melainkan diturunkan dari matriks ini (`PermissionResolver`). Karena itu `can:` pada route, `permissions` di `GET /api/auth/me`, dan menu frontend otomatis mengikuti. Penerimaan, transfer, dan ajuan adjustment diperiksa ulang menurut **jenis lokasi** (toko/gudang) saat membuat dan memposting; pelanggaran → **403** `{ "message": "Anda tidak berwenang menerima barang pada lokasi Gudang." }`. Override per pengguna (`user_permissions`) tetap berlaku di atas matriks (`allow` menambah, `deny` mencabut).
+**Cara kerja:** permission yang dikendalikan matriks **tidak diambil dari role_permissions**, melainkan diturunkan dari matriks ini (`PermissionResolver`). Karena itu `can:` pada route, `permissions` di `GET /api/auth/me`, dan menu frontend otomatis mengikuti. Penerimaan, retur, transfer, dan ajuan adjustment diperiksa ulang menurut **jenis lokasi** (toko/gudang); override per pengguna (`user_permissions`) tetap berlaku di atas matriks (`allow` menambah, `deny` mencabut).
 
 ### Endpoint (izin `settings.manage`)
 
@@ -808,7 +809,7 @@ Tiap toko menentukan **role mana** yang boleh melakukan operasi stok. Berlaku di
 
 ### Cara frontend mengambilnya
 1. **Layar pengaturan** (workspace Pengaturan → "Kewenangan Stok", tampil bila `settings.manage`): `GET /api/settings/stock-authority`; tampilkan `rules` sebagai matriks (baris = aturan, kolom = `assignable_roles`, sel = checkbox dari `roles`). Kelompokkan `receipt/transfer/adjustment_request` per `scope` ("Toko" / "Gudang"); beri label "belum berlaku" bila `applies=false`; tampilkan `warnings`; tombol "Kembalikan default" mengirim `roles: null`. Simpan dengan satu `PUT` berisi hanya aturan yang diubah, lalu pakai respons untuk menyegarkan tampilan dan **muat ulang `GET /api/auth/me`** agar menu mengikuti.
-2. **Menu dan tombol di semua layar**: tetap pakai `permissions` dari `GET /api/auth/me` (mis. `goods_receipt.create` untuk menu Penerimaan). Untuk pilihan lokasi, `GET /api/auth/me` kini juga memuat `stock_authority`: peta `{ "opening_balance": true, "receipt.store_floor": true, "receipt.warehouse": false, ... }` untuk pengguna yang login. Sembunyikan opsi lokasi **Gudang** pada form penerimaan/transfer/adjustment bila kunci `.warehouse`-nya `false`; untuk transfer, kedua lokasi (asal dan tujuan) harus diizinkan.
+2. **Menu dan tombol di semua layar**: tetap pakai `permissions` dari `GET /api/auth/me` (mis. `supplier_return.create` untuk menu retur supplier). Untuk pilihan lokasi, `GET /api/auth/me` memuat `stock_authority` per aturan dan per lokasi.
 3. **Penanganan error**: 403 pada create/post (pesan di atas) → tampilkan pesan, jangan ulangi. Ikuti `GET /api/auth/me` yang baru bila pengaturan diubah saat sesi berjalan.
 
 Layar yang bisa dibuat: "Kewenangan Stok" di workspace Pengaturan; filter pilihan lokasi pada `/goods-receipts`, `/inventory/transfers`, `/inventory/adjustments`; menu Stok Awal muncul bagi pemegang `inventory.opening_balance`.
@@ -816,7 +817,7 @@ Layar yang bisa dibuat: "Kewenangan Stok" di workspace Pengaturan; filter piliha
 ### Perubahan lain pada tahap ini
 - Route stok awal (`POST /api/inventory/opening-balances`) memakai `can:inventory.opening_balance`.
 - **FR-04 (`FRONTEND_REQUESTS.md`)**: `GET /api/purchase-orders` dan detailnya kini menampilkan semua status PO dan harga/total bagi pemegang `purchase_requisition.approve` (Owner model standar) atau `purchase_order.send`, sehingga PO `pending_confirmation` terlihat untuk dikonfirmasi.
-- `PermissionCatalog::roles()`: lima permission stok pada daftar role hanya dokumentasi; yang berlaku adalah matriks.
+- `PermissionCatalog::roles()`: permission stok pada daftar role hanya dokumentasi; yang berlaku adalah matriks.
 - ASUMSI: lingkup gudang pada transfer = lokasi asal atau tujuan adalah gudang; persetujuan adjustment tidak dibatasi lokasi; tidak ada pemisahan tugas otomatis antara pengaju dan penyetuju (hanya peringatan `no_active_user`); pembatalan dokumen mengikuti aturan pemilik dokumen yang sudah ada.
 
 ## 14. Kunci Otorisasi Owner/Admin 🟡
@@ -871,13 +872,43 @@ Berlaku pada semua dialog persetujuan yang memakai re-auth: persetujuan PR, konf
 
 ASUMSI: kunci per pengguna (bukan satu kunci bersama toko) agar dapat diaudit dan dicabut per orang; hash bcrypt dengan penguncian permanen dianggap cukup untuk kode 6 karakter; DELETE membawa body JSON (bila proxy membuang body DELETE, ubah ke POST).
 
+## 15. Retur Supplier dan Write-off (Paket 3) ✅
+
+`SupplierReturnTest` lulus (6 test, 60 assertions). Migration baru: `2026_11_04_000059_create_supplier_returns_tables.php`. Jalankan `php artisan migrate`; pada database yang sudah ada jalankan `php artisan db:seed --class=PermissionSeeder` untuk menambahkan `supplier_return.create`.
+
+Retur dicatat untuk supplier tertentu dan lokasi/batch stok. Pengajuan memindahkan barang dari bucket `sellable` atau `damaged` ke `quarantine`, sehingga tidak dapat terjual selama menunggu keputusan. Keputusan supplier dicatat pengguna yang punya izin retur:
+
+`draft` → `submitted` → `accepted` → `replacement_received`
+
+atau `draft` → `submitted` → `rejected` → `written_off`.
+
+Supplier yang menerima retur menyebabkan stok karantina keluar (`supplier_return_out`); barang pengganti diterima lewat aksi terpisah sebagai batch baru (`supplier_replacement_in`) dengan HPP snapshot barang retur. Supplier yang menolak membuat nilai `loss_amount` dari qty × HPP snapshot; stok tetap dikarantina sampai pemegang `inventory.adjust.approve` menyetujui write-off dengan autentikasi ulang Owner/Admin. Write-off mengurangi bucket karantina dengan movement `write_off`. Penerimaan pengganti dilakukan sekaligus untuk semua baris retur dan memakai jumlah qty asal.
+
+### Endpoint (`auth:sanctum`)
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/supplier-returns` | `supplier_return.create` atau `inventory.adjust.approve` | Daftar; filter `status`, `supplier_id`, awalan nomor `q`, `per_page` |
+| POST | `/api/supplier-returns` | `supplier_return.create` | Buat draft |
+| GET | `/api/supplier-returns/{id}` | `supplier_return.create` atau `inventory.adjust.approve` | Detail |
+| POST | `/api/supplier-returns/{id}/submit` | `supplier_return.create` | Validasi stok terbaru dan pindahkan item ke karantina |
+| POST | `/api/supplier-returns/{id}/supplier-decision` | `supplier_return.create` | Catat `{ "decision": "accept|reject", "note": "..." }`; alasan wajib untuk reject |
+| POST | `/api/supplier-returns/{id}/replacement-receipt` | `supplier_return.create` | Terima seluruh qty barang pengganti, `items[]` berisi `return_item_id`, `expiry_date?`, `batch_code?`, `shelf_position_id?` |
+| POST | `/api/supplier-returns/{id}/write-off` | `inventory.adjust.approve` | Persetujuan Owner/Admin; wajib `approver_username` dan kredensial sesuai mode autentikasi ulang |
+| POST | `/api/supplier-returns/{id}/cancel` | `supplier_return.create` | Batalkan draft |
+
+Body buat: `supplier_id`, `items[]` (`product_id`, `location_id`, `qty`, `batch_id?`, `shelf_position_id?`, `source_bucket?` = `sellable|damaged`), `note?`. Produk dan supplier harus milik toko yang sedang aktif; batch/posisi harus cocok dengan produk/lokasi. Lingkup toko/gudang diperiksa kembali saat submit, keputusan, dan penerimaan pengganti. Role pemegang `supplier_return.create` dikonfigurasi lewat aturan `supplier_return.store_floor` / `supplier_return.warehouse` pada matriks kewenangan stok (bagian 13).
+
+Respons detail memuat `doc_number` (`RET-000001`), supplier, status, waktu submit/keputusan, catatan, `loss_amount` (string uang/null), approver, dan `items[]` termasuk lokasi, batch, qty, HPP snapshot, serta batch pengganti. Draft tidak mengubah stok; submit gagal 422 jika stok berubah/tidak cukup dan transaksi tidak meninggalkan movement parsial. Status akhir tidak dapat dibatalkan atau diposting ulang. Aksi penting dicatat sebagai `supplier_return.create|submit|accept|reject|replacement_received|write_off|cancel`.
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`, `routes/api/reports.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
 - **2026-11-03** — Prioritas #1: kunci otorisasi Owner/Admin (kode 6 karakter kapital atau kalimat rahasia), CRUD mandiri + pencabutan oleh pengelola, mode kredensial persetujuan per toko (`password` default / `key` / `password_and_key`) pada semua dialog re-auth (`approver_key`), penguncian permanen setelah 10 gagal, audit tanpa kunci, `approval_auth_mode` dan `authorization_key` pada `/api/auth/me`. Migration `authorization_keys` baru. Status: 🟡 menunggu test (`AuthorizationKeyTest` 12). Bagian 14.
-- **2026-11-02** — Prioritas #5: matriks kewenangan stok per toko (8 aturan: stok awal, penerimaan, transfer, ajuan adjustment per lokasi toko/gudang, persetujuan adjustment), permission baru `inventory.opening_balance`, permission stok diturunkan dari matriks oleh `PermissionResolver`, pemeriksaan lingkup lokasi di service, `stock_authority` pada `/api/auth/me`, remap Admin⇄Owner saat ganti model; FR-04 (Owner melihat PO `pending_confirmation` + harga). Status: 🟡 menunggu test (`StockAuthorityTest` 12). Bagian 13.
+- **2026-11-02** — Retur supplier (Paket 3): draft/pengajuan dan karantina stok, keputusan supplier, penerimaan barang pengganti, serta write-off bernilai HPP setelah ditolak supplier dengan re-auth `inventory.adjust.approve`. Akses pengajuan/keputusan/penerimaan dikendalikan matriks stok (aturan kini 10). Migration, permission, endpoint, dan tes feature baru; kontrak bagian 15.
+- **2026-11-02** — Prioritas #5: matriks kewenangan stok per toko (stok awal, penerimaan, transfer, ajuan adjustment per lokasi toko/gudang, persetujuan adjustment), permission baru `inventory.opening_balance`, permission stok diturunkan dari matriks oleh `PermissionResolver`, pemeriksaan lingkup lokasi di service, `stock_authority` pada `/api/auth/me`, remap Admin⇄Owner saat ganti model; FR-04 (Owner melihat PO `pending_confirmation` + harga). Bagian 13.
 - **2026-11-01** — Prioritas #4: model administrasi toko (`simple` / `standard`), 4 role baru (Owner, Finance, Purchasing, Accounting), peralihan dengan validasi akun per role + konversi Admin↔Owner, filter role pada `/api/roles` dan `/api/users`, middleware `can.any`, `admin_model` pada `/api/auth/me`. Status: 🟡 menunggu test (`AdminModelTest` 8; `SeederTest` dan `UserManagementTest` disesuaikan dengan daftar role baru). Bagian 12.
 - **2026-10-31** — Management Retail: API tenant yang sudah ada kini terhubung ke layar operator `/platform/stores`; login dan `/auth/me` mengarahkan operator global tanpa toko. CLI recovery memilih operator aktif berdasarkan ID (termasuk saat username terlupa), mengubah username/password, mencabut token lama, dan mencatat audit tanpa menyimpan password; UI login memberi instruksi recovery CLI tanpa endpoint publik. `PlatformStoreManagementTest` 7 lulus.
 - **2026-10-31** — Command `platform:operator-login` meminta kredensial operator secara interaktif dan membuka UI daftar tenant. Handoff browser memakai tiket satu kali/5 menit, exchange endpoint ber-rate-limit, fragment URL yang dibersihkan frontend, dan audit login; password/token API tidak dimasukkan ke URL. Log diagnostik exchange gagal hanya mencatat alasan aman, ID operator dan kedaluwarsa, tanpa tiket/password. Test login/tiket termasuk kedaluwarsa/pencabutan: 10 lulus (107 assertions).
