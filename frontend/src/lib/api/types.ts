@@ -689,6 +689,20 @@ export interface DashboardReport {
   cash: CashSummaryReport;
 }
 
+export interface ProfitReport {
+  period: { date_from: string; date_to: string };
+  basis: string;
+  sales_revenue: Decimal;
+  cost_of_goods_sold: Decimal;
+  total_gross_profit: Decimal;
+  valid_profit: Decimal;
+  expected_profit: Decimal;
+  by_payment_mode: {
+    cash: { valid_profit: Decimal };
+    payroll_credit: { valid_profit: Decimal; expected_profit: Decimal };
+  };
+}
+
 export type CustomerStatus = 'pending_verification' | 'active' | 'inactive';
 export type CreditState = 'not_verified' | 'limit_not_set' | 'available' | 'exhausted' | 'inactive';
 

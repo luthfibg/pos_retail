@@ -8,7 +8,7 @@ import type {
   PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
-  DashboardReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
+  DashboardReport, ProfitReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
   WarehouseSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting,
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
@@ -53,6 +53,8 @@ export const platformStoreApi = {
 export const reportApi = {
   dashboard: (filters: { date_from: string; date_to: string; cashier_id?: number }) =>
     api<{ data: DashboardReport }>('/reports/dashboard', { query: filters }).then((r) => r.data),
+  profit: (filters: { date_from: string; date_to: string }) =>
+    api<{ data: ProfitReport }>('/reports/profit', { query: filters }).then((r) => r.data),
 };
 
 export const billingApi = {

@@ -5,7 +5,8 @@ import { formatDate, formatQty, formatRupiah } from '@/lib/format';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
-import { chartHeight, validateDashboardFilters, type DashboardFilterValues } from './dashboardFilters';
+import type { ProfitReport } from '@/lib/api/types';
+import { chartHeight, profitComposition, validateDashboardFilters, type DashboardFilterValues } from './dashboardFilters';
 
 function todayWib(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -23,6 +24,7 @@ function amountLabel(value: string): string {
 export function DashboardPage() {
   const { can } = useAuth();
   const canReviewShifts = can('shift.review');
+  const canViewProfit = can('reports.profit.view');
   const today = todayWib();
   const [filters, setFilters] = useState<DashboardFilterValues>({
     dateFrom: today,
@@ -38,6 +40,14 @@ export function DashboardPage() {
       date_to: applied.dateTo,
       ...(canReviewShifts && applied.cashierId ? { cashier_id: Number(applied.cashierId) } : {}),
     }),
+  });
+  const profitQuery = useQuery({
+    queryKey: ['reports', 'profit', applied.dateFrom, applied.dateTo],
+    queryFn: () => reportApi.profit({
+      date_from: applied.dateFrom,
+      date_to: applied.dateTo,
+    }),
+    enabled: canViewProfit,
   });
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
@@ -99,6 +109,31 @@ export function DashboardPage() {
         <p role="status" className="py-8 text-center text-sm text-slate-500">Memuat dashboard…</p>
       ) : report ? (
         <div className="space-y-6" aria-busy={query.isFetching}>
+          {canViewProfit && (
+            <section aria-label="Laporan laba kotor" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+              <div>
+                <h2 className="text-lg font-semibold">Laba kotor</h2>
+                <p className="text-sm text-slate-500">
+                  {profitQuery.data
+                    ? `${formatDate(profitQuery.data.period.date_from)} – ${formatDate(profitQuery.data.period.date_to)}`
+                    : `${formatDate(applied.dateFrom)} – ${formatDate(applied.dateTo)}`}
+                  {' · '}Pendapatan setelah diskon, sebelum PPN, dikurangi HPP snapshot.
+                </p>
+              </div>
+              {canReviewShifts && applied.cashierId && (
+                <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                  Laporan laba mencakup semua kasir di toko; filter ID kasir hanya berlaku untuk ringkasan penjualan dan kas.
+                </p>
+              )}
+              <ErrorNotice error={profitQuery.error} />
+              {profitQuery.isPending ? (
+                <p role="status" className="py-4 text-sm text-slate-500">Memuat laporan laba…</p>
+              ) : profitQuery.data ? (
+                <ProfitSummary report={profitQuery.data} />
+              ) : null}
+            </section>
+          )}
+
           <section aria-label="Ringkasan" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {summaryCards.map((card) => (
               <article key={card.label} className="rounded-lg border border-slate-200 bg-white p-4">
@@ -234,6 +269,82 @@ export function DashboardPage() {
           <p className="text-xs text-slate-500">Ambang peringatan kedaluwarsa toko: {report.inventory.warning_days} hari. Data inventori menunjukkan kondisi stok saat ini.</p>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ProfitSummary({ report }: { report: ProfitReport }) {
+  const contribution = profitComposition(report.valid_profit, report.expected_profit);
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <article className="rounded-md border border-emerald-200 bg-emerald-50/60 p-4">
+          <h3 className="text-sm font-medium text-emerald-900">Laba valid</h3>
+          <p className="mt-1 text-2xl font-semibold text-emerald-950">{amountLabel(report.valid_profit)}</p>
+          <p className="mt-1 text-xs text-emerald-900">Tunai + bagian laba kredit HRD yang sudah dibayar.</p>
+        </article>
+        <article className="rounded-md border border-amber-200 bg-amber-50/70 p-4">
+          <h3 className="text-sm font-medium text-amber-900">Laba expected</h3>
+          <p className="mt-1 text-2xl font-semibold text-amber-950">{amountLabel(report.expected_profit)}</p>
+          <p className="mt-1 text-xs text-amber-900">Bagian laba kredit HRD yang belum tervalidasi pembayaran.</p>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-slate-50 p-4">
+          <h3 className="text-sm font-medium text-slate-700">Total laba kotor</h3>
+          <p className="mt-1 text-2xl font-semibold text-slate-950">{amountLabel(report.total_gross_profit)}</p>
+          <p className="mt-1 text-xs text-slate-600">Valid + expected.</p>
+        </article>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div className="rounded-md border border-slate-200 p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="font-semibold">Komposisi laba</h3>
+            <p className="text-xs text-slate-500">Berdasarkan status pembayaran</p>
+          </div>
+          {contribution ? (
+            <>
+              <div
+                className="mt-3 flex h-5 overflow-hidden rounded-full bg-slate-100"
+                role="img"
+                aria-label={`Komposisi laba: valid ${amountLabel(report.valid_profit)}, expected ${amountLabel(report.expected_profit)}`}
+              >
+                {contribution.valid > 0 && <div className="bg-emerald-600" style={{ width: `${contribution.valid}%` }} />}
+                {contribution.expected > 0 && <div className="bg-amber-400" style={{ width: `${contribution.expected}%` }} />}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-emerald-600" />Valid {contribution.valid}%</span>
+                <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-amber-400" />Expected {contribution.expected}%</span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-600">
+              Komposisi persentase tidak ditampilkan karena total laba nol/negatif atau terdapat nilai laba negatif. Nilai valid dan expected tetap ditampilkan terpisah di atas.
+            </p>
+          )}
+          <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-sm">
+            <Metric label="Pendapatan (setelah diskon, sebelum PPN)" value={amountLabel(report.sales_revenue)} />
+            <Metric label="HPP barang terjual" value={amountLabel(report.cost_of_goods_sold)} />
+          </dl>
+        </div>
+
+        <div className="rounded-md border border-slate-200 p-4">
+          <h3 className="font-semibold">Rincian menurut pembayaran</h3>
+          <dl className="mt-3 space-y-3 text-sm">
+            <div className="rounded-md bg-slate-50 p-3">
+              <dt className="font-medium">Penjualan tunai</dt>
+              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba valid</span><span className="font-medium">{amountLabel(report.by_payment_mode.cash.valid_profit)}</span></dd>
+            </div>
+            <div className="rounded-md bg-slate-50 p-3">
+              <dt className="font-medium">Kredit gaji</dt>
+              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba valid</span><span className="font-medium">{amountLabel(report.by_payment_mode.payroll_credit.valid_profit)}</span></dd>
+              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba expected</span><span className="font-medium">{amountLabel(report.by_payment_mode.payroll_credit.expected_profit)}</span></dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500">
+        Pembayaran invoice diperhitungkan sampai akhir tanggal akhir laporan. Ini laba kotor: belum dikurangi biaya operasional atau kerugian retur/write-off.
+      </p>
     </div>
   );
 }

@@ -26,6 +26,16 @@ export function chartHeight(value: string, maximum: string): number {
   return Math.min(100, Math.max(2, Number(hundredths) / 100));
 }
 
+export function profitComposition(validValue: string, expectedValue: string): { valid: number; expected: number } | null {
+  const valid = decimalToCents(validValue);
+  const expected = decimalToCents(expectedValue);
+  if (valid === null || expected === null || valid < 0n || expected < 0n) return null;
+  const total = valid + expected;
+  if (total <= 0n) return null;
+  const validPercent = Number((valid * 100n + total / 2n) / total);
+  return { valid: validPercent, expected: 100 - validPercent };
+}
+
 function isCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);

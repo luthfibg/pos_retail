@@ -17,9 +17,11 @@ Backend harus jalan (`php artisan serve`). Login memakai akun hasil `php artisan
 - `src/features/<modul>/` — layar + hook per modul (auth, products, ...)
 - `src/components/ui|layout/` — komponen bersama; `layout/nav.ts` = satu sumber menu + permission
 - `src/lib/format.ts` — format Rupiah/qty/waktu (WIB). Hanya tampilan.
+- `src/components/ui/LocalDecimalInput.tsx` — input kuantitas/harga dengan pemisah Indonesia; state dan payload tetap angka desimal kanonis.
 
 ## Konvensi (mengikuti handoff backend)
 1. Uang/qty = **string desimal**. Jangan `Number` untuk perhitungan; total keranjang dihitung server atau pakai pustaka desimal.
+   Untuk tampilan/input gunakan format Indonesia: titik untuk ribuan, koma untuk desimal, dan hilangkan nol pecahan yang tidak perlu (`20.000` → `20`, `6.000,00` → `6.000`). Masukan desimal dinormalisasi kembali sebelum dikirim ke API.
 2. Semua request `Accept: application/json` (sudah di `api()`).
 3. Permission di UI hanya untuk menyembunyikan menu/tombol; validasi sebenarnya di backend (tangani 403/422).
 4. Respons: sukses `{data}`, paginasi Laravel, 422 `{message, errors}`.

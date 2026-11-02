@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { purchaseOrderApi, supplierApi } from '@/lib/api/endpoints';
 import type { PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition } from '@/lib/api/types';
@@ -136,10 +137,10 @@ export function PurchaseOrderCreateDialog({
                       <div className="text-xs text-slate-500">Sisa {formatQty(item.qty_remaining)} {item.unit_name}</div>
                     </div>
                     <label className="text-xs text-slate-500">Jumlah
-                      <input className={`${inputCls} mt-1 px-2`} type="number" min="0.001" max={item.qty_remaining} step="0.001" required={line.selected} disabled={!line.selected} value={line.qty} onChange={(event) => updateLine(item.product_id, { qty: event.target.value })} />
+                      <LocalDecimalInput className={`${inputCls} mt-1 px-2`} kind="quantity" required={line.selected} disabled={!line.selected} value={line.qty} onChange={(value) => updateLine(item.product_id, { qty: value })} aria-label={`Jumlah ${item.name}`} />
                     </label>
                     <label className="text-xs text-slate-500">Harga/unit
-                      <input className={`${inputCls} mt-1 px-2`} type="number" min="0" step="0.01" required={line.selected} disabled={!line.selected} value={line.price} onChange={(event) => updateLine(item.product_id, { price: event.target.value })} />
+                      <LocalDecimalInput className={`${inputCls} mt-1 px-2`} kind="price" required={line.selected} disabled={!line.selected} value={line.price} onChange={(value) => updateLine(item.product_id, { price: value })} aria-label={`Harga per unit ${item.name}`} />
                     </label>
                   </div>
                 );

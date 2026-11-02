@@ -3,6 +3,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { ApiError } from '@/lib/api/client';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -309,11 +310,11 @@ function CreateGoodsReceiptDialog({
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label={`Diterima (${item.unit_name})`} error={errors?.qtyReceived}>
-                      <input className={inputCls} inputMode="decimal" value={line.qtyReceived} onChange={(event) => updateLine(line.key, 'qtyReceived', event.target.value)} />
+                    <Field label={`Diterima (${item.unit_name})`} error={errors?.qtyReceived} hint="Contoh: 20 atau 1,5.">
+                      <LocalDecimalInput className={inputCls} kind="quantity" value={line.qtyReceived} onChange={(value) => updateLine(line.key, 'qtyReceived', value)} />
                     </Field>
-                    <Field label={`Rusak (${item.unit_name})`} error={errors?.qtyDamaged}>
-                      <input className={inputCls} inputMode="decimal" value={line.qtyDamaged} onChange={(event) => updateLine(line.key, 'qtyDamaged', event.target.value)} />
+                    <Field label={`Rusak (${item.unit_name})`} error={errors?.qtyDamaged} hint="Contoh: 2 atau 0,5.">
+                      <LocalDecimalInput className={inputCls} kind="quantity" value={line.qtyDamaged} onChange={(value) => updateLine(line.key, 'qtyDamaged', value)} />
                     </Field>
                     <Field label="Tanggal kedaluwarsa" error={errors?.expiryDate} hint={expiryRequired ? 'Wajib untuk produk yang melacak kedaluwarsa.' : 'Kosongkan untuk produk tanpa pelacakan kedaluwarsa.'}>
                       <input type="date" min={todayWib()} className={inputCls} value={line.expiryDate} onChange={(event) => updateLine(line.key, 'expiryDate', event.target.value)} disabled={expiryLoading || !expiryRequired} />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, formatQty, formatRupiah, parseApiTime, toWibDate } from './format';
+import { formatDate, formatDateTime, formatLocalDecimal, formatQty, formatRupiah, parseApiTime, parseLocalDecimal, toWibDate } from './format';
 
 describe('format', () => {
   it('menampilkan rupiah tanpa desimal bila bulat', () => {
@@ -7,6 +7,11 @@ describe('format', () => {
   });
   it('menampilkan dua desimal bila pecahan', () => {
     expect(formatRupiah('3500.50')).toContain('3.500,50');
+  });
+  it('menampilkan rupiah dengan pemisah ribuan tanpa desimal nol yang tidak perlu', () => {
+    expect(formatRupiah('6000.00')).toContain('6.000');
+    expect(formatRupiah('6000.00')).not.toContain(',00');
+    expect(formatRupiah('6000.50')).toContain('6.000,50');
   });
   it('null menjadi strip', () => {
     expect(formatRupiah(null)).toBe('—');
@@ -29,6 +34,22 @@ describe('format', () => {
     expect(formatDate('2027-03-01')).toContain('2027');
     expect(formatDate('2027-03-01')).toMatch(/\b1\b/);
     expect(formatDate(null)).toBe('—');
+  });
+});
+
+describe('formatLocalDecimal', () => {
+  it('menghilangkan nol pecahan yang tidak perlu dan memakai pemisah Indonesia', () => {
+    expect(formatLocalDecimal('20.000', 'quantity')).toBe('20');
+    expect(formatLocalDecimal('1250.500', 'quantity')).toBe('1.250,5');
+    expect(formatLocalDecimal('6000.00', 'price')).toBe('6.000');
+    expect(formatLocalDecimal('6000.50', 'price')).toBe('6.000,5');
+  });
+
+  it('menerjemahkan masukan lokal ke angka desimal kanonis untuk API', () => {
+    expect(parseLocalDecimal('1.250,5')).toBe('1250.5');
+    expect(parseLocalDecimal('20.000')).toBe('20000');
+    expect(parseLocalDecimal('6000,50')).toBe('6000.50');
+    expect(parseLocalDecimal('1.5')).toBe('1.5');
   });
 });
 

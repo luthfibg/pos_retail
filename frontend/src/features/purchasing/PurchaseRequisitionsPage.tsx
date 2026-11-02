@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api/client';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProductPicker } from '@/features/products/ProductPicker';
@@ -275,11 +276,11 @@ export function PurchaseRequisitionForm({
                   <button type="button" disabled={rows.length <= 1} onClick={() => { setRows((current) => current.filter((item) => item.key !== row.key)); setErrors((current) => ({ ...current, rows: {} })); }} aria-label={`Hapus baris ${index + 1}`} className="mt-6 rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">Hapus</button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Jumlah" error={rowErrors.qty}>
-                    <input className={inputCls} inputMode="decimal" value={row.qty} onChange={(event) => updateRow(row.key, { qty: event.target.value })} />
+                  <Field label="Jumlah" error={rowErrors.qty} hint="Contoh: 20 atau 1,5. Maksimal 3 angka pecahan.">
+                    <LocalDecimalInput className={inputCls} kind="quantity" value={row.qty} onChange={(value) => updateRow(row.key, { qty: value })} />
                   </Field>
-                  <Field label="Estimasi harga / unit (opsional)" error={rowErrors.est_price}>
-                    <input className={inputCls} inputMode="decimal" value={row.estPrice} onChange={(event) => updateRow(row.key, { estPrice: event.target.value })} />
+                  <Field label="Estimasi harga / unit (opsional)" error={rowErrors.est_price} hint="Contoh: 6.000 atau 6.000,50.">
+                    <LocalDecimalInput className={inputCls} kind="price" value={row.estPrice} onChange={(value) => updateRow(row.key, { estPrice: value })} />
                   </Field>
                   <Field label="Catatan baris" error={rowErrors.note}>
                     <input className={inputCls} maxLength={255} value={row.note} onChange={(event) => updateRow(row.key, { note: event.target.value })} />

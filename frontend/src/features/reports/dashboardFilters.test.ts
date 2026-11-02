@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chartHeight, validateDashboardFilters } from './dashboardFilters';
+import { chartHeight, profitComposition, validateDashboardFilters } from './dashboardFilters';
 
 describe('validateDashboardFilters', () => {
   it('accepts a valid date range and optional cashier ID', () => {
@@ -25,5 +25,18 @@ describe('chartHeight', () => {
     expect(chartHeight('0.00', '100.00')).toBe(0);
     expect(chartHeight('120.00', '100.00')).toBe(100);
     expect(chartHeight('0.01', '100.00')).toBe(2);
+  });
+
+  describe('profitComposition', () => {
+    it('calculates valid and expected shares using exact currency values', () => {
+      expect(profitComposition('75.00', '25.00')).toEqual({ valid: 75, expected: 25 });
+      expect(profitComposition('0.00', '12.00')).toEqual({ valid: 0, expected: 100 });
+    });
+
+    it('omits a proportional chart for invalid, zero, or negative profit values', () => {
+      expect(profitComposition('0.00', '0.00')).toBeNull();
+      expect(profitComposition('-5.00', '10.00')).toBeNull();
+      expect(profitComposition('invalid', '10.00')).toBeNull();
+    });
   });
 });

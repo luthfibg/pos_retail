@@ -4,7 +4,7 @@ import type { Decimal } from './api/types';
 // gunakan pustaka desimal atau hitung di backend saat fitur POS dibangun.
 
 const idr0 = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
-const idr2 = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const idr2 = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 2 });
 
 export function formatRupiah(value: Decimal | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
@@ -19,6 +19,34 @@ export function formatQty(value: Decimal | null | undefined): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
   return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 3 }).format(n);
+}
+
+export type LocalDecimalKind = 'quantity' | 'price';
+
+/** Format angka untuk kolom input Indonesia: pemisah ribuan titik, desimal koma, nol pecahan di belakang dibuang. */
+export function formatLocalDecimal(value: string, kind: LocalDecimalKind): string {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value.trim());
+  if (!match) return value;
+  const maxFractionDigits = kind === 'quantity' ? 3 : 2;
+  if ((match[3]?.length ?? 0) > maxFractionDigits) return value;
+  const integer = (match[2] ?? '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const fraction = (match[3] ?? '').slice(0, maxFractionDigits).replace(/0+$/, '');
+  return `${match[1] ?? ''}${integer}${fraction ? `,${fraction}` : ''}`;
+}
+
+/**
+ * Konversi input lokal ke string desimal kanonis. Contoh: "1.250,5" -> "1250.5";
+ * titik tiga-digit dianggap pemisah ribuan, sedangkan koma adalah pemisah desimal.
+ */
+export function parseLocalDecimal(value: string): string {
+  const trimmed = value.trim().replace(/\s/g, '');
+  if (trimmed === '') return '';
+  if (trimmed.includes(',')) {
+    if (!/^-?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d*)?$/.test(trimmed)) return trimmed;
+    return trimmed.replace(/\./g, '').replace(',', '.');
+  }
+  if (/^-?\d{1,3}(?:\.\d{3})+$/.test(trimmed)) return trimmed.replace(/\./g, '');
+  return trimmed;
 }
 
 /** Waktu API berbentuk "2026-10-23 03:15:00.123" (UTC tanpa penanda zona). Tanpa 'Z', browser salah menganggapnya waktu lokal. */

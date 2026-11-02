@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -288,8 +289,8 @@ function SupplierReturnCreateDialog({
               )}
               {balances.length === 0 && stock.data && <p className="text-xs text-amber-800">Tidak ada saldo positif pada bucket ini.</p>}
               <div className="flex flex-wrap items-end gap-2">
-                <Field label={`Qty ${selectedBalance ? `(tersedia ${formatQty(sourceBucket === 'sellable' ? selectedBalance.qty_sellable : selectedBalance.qty_damaged)})` : ''}`}>
-                  <input className={`${inputCls} w-36`} inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} placeholder="0.000" />
+                <Field label={`Qty ${selectedBalance ? `(tersedia ${formatQty(sourceBucket === 'sellable' ? selectedBalance.qty_sellable : selectedBalance.qty_damaged)})` : ''}`} hint="Gunakan koma untuk pecahan, misalnya 1,5.">
+                  <LocalDecimalInput className={`${inputCls} w-36`} kind="quantity" value={qty} onChange={setQty} placeholder="Contoh: 20" />
                 </Field>
                 <button type="button" onClick={addLine} disabled={!product || !selectedBalance || !qty.trim()} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">Tambah barang</button>
               </div>
