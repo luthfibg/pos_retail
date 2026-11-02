@@ -25,7 +25,8 @@ class StoreSaleRequest extends FormRequest
             'amount_tendered' => ['required_if:payment_mode,cash', 'nullable', 'numeric', 'min:0', 'max:999999999999', 'decimal:0,2'],
             'credit_exception' => ['nullable', 'array'],
             'credit_exception.approver_username' => ['required_with:credit_exception', 'string', 'max:60'],
-            'credit_exception.approver_password' => ['required_with:credit_exception', 'string', 'max:200'],
+            'credit_exception.approver_password' => ['nullable', 'string', 'max:200'],   // wajib/tidaknya mengikuti mode (ReauthService::assertProvided)
+            'credit_exception.approver_key' => ['nullable', 'string', 'max:200'],
             'credit_exception.note' => ['required_with:credit_exception', 'string', 'max:255'],
         ];
     }

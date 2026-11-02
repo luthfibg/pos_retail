@@ -57,11 +57,13 @@ class SaleService
         $approver = null;
         if ($isCredit && ! empty($data['credit_exception'])) {
             $exception = $data['credit_exception'];
+            $this->reauth->assertProvided($exception, $actor);
             $approver = $this->reauth->confirm(
                 (string) $exception['approver_username'],
-                (string) $exception['approver_password'],
+                (string) ($exception['approver_password'] ?? ''),
                 'sales.credit_exception',
                 $actor,
+                $exception['approver_key'] ?? null,
             );
         }
 

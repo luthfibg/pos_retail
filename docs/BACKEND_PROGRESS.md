@@ -419,7 +419,7 @@ Permintaan buat/ubah:
 
 Detail PR (`data`): `id, doc_number ("PR-202610-000001"), status, reason, est_total, requested_by, requester_name, submitted_at, created_at`, `items[]` (`id, product_id, sku, name, unit_name, qty, est_price, note, qty_ordered, qty_remaining` — dua terakhir = berapa sudah/ belum dipesan lewat PO), `approvals[]` (`step: finance_check|owner_auth, decision: approved|returned|rejected, decided_by_name, note, is_self_approval, decided_at`), `purchase_orders[]` (`id, doc_number, status, total`).
 
-Autentikasi ulang Owner: kirim `approver_username` + `approver_password` (diketik pemberi persetujuan sendiri; salah → 422 `errors.approver_password`). Wajib selama setting `approval_reauth_required` aktif (default aktif). Bila pembuat PR = pemberi persetujuan (mode minimalis), diizinkan hanya jika setting `sod_owner_self_approve = allow_with_flag` (default) dan **ditandai** `is_self_approval: true` — tampilkan lencana "disetujui sendiri". Bila diblokir → 422 `errors.approver_username`.
+Autentikasi ulang Owner (bila toko memakai mode kunci, lihat bagian 14: kirim juga/atau `approver_key`): kirim `approver_username` + `approver_password` (diketik pemberi persetujuan sendiri; salah → 422 `errors.approver_password`). Wajib selama setting `approval_reauth_required` aktif (default aktif). Bila pembuat PR = pemberi persetujuan (mode minimalis), diizinkan hanya jika setting `sod_owner_self_approve = allow_with_flag` (default) dan **ditandai** `is_self_approval: true` — tampilkan lencana "disetujui sendiri". Bila diblokir → 422 `errors.approver_username`.
 
 ### 6.2 Purchase Order (PO)
 
@@ -819,11 +819,64 @@ Layar yang bisa dibuat: "Kewenangan Stok" di workspace Pengaturan; filter piliha
 - `PermissionCatalog::roles()`: lima permission stok pada daftar role hanya dokumentasi; yang berlaku adalah matriks.
 - ASUMSI: lingkup gudang pada transfer = lokasi asal atau tujuan adalah gudang; persetujuan adjustment tidak dibatasi lokasi; tidak ada pemisahan tugas otomatis antara pengaju dan penyetuju (hanya peringatan `no_active_user`); pembatalan dokumen mengikuti aturan pemilik dokumen yang sudah ada.
 
+## 14. Kunci Otorisasi Owner/Admin 🟡
+
+> Status: 🟡 kode + `AuthorizationKeyTest` (12 test) ditulis, **belum dijalankan** (menunggu `php artisan test`). **Ada 1 migration baru** (`2026_11_03_000058_create_authorization_keys_table`, tabel `authorization_keys`): jalankan `php artisan migrate`. Tidak ada permission baru. Prioritas #1 dari daftar finalisasi Paket 1.
+
+**Keputusan desain (ASUMSI, perlu konfirmasi):** kunci **melengkapi** autentikasi ulang yang ada, tidak menghapusnya. Tiap toko memilih mode kredensial persetujuan; **default `password` = perilaku lama** sehingga tidak ada yang berubah sampai Admin/Owner mengaktifkannya.
+
+| Mode (`approval_auth_mode`) | Yang diketik pemberi persetujuan |
+|---|---|
+| `password` (default) | `approver_username` + `approver_password` (seperti sebelumnya) |
+| `key` | `approver_username` + `approver_key` (kunci menggantikan password) |
+| `password_and_key` | `approver_username` + `approver_password` + `approver_key` |
+
+Berlaku pada semua dialog persetujuan yang memakai re-auth: persetujuan PR, konfirmasi PO, adjustment `loss`/`expired`, dan pengecualian kredit di penjualan (`credit_exception.approver_key`). Field baru `approver_key` dikirim berdampingan dengan field yang sudah ada.
+
+**Siapa pemegang kunci:** pengguna aktif yang memegang salah satu izin persetujuan (`purchase_requisition.approve`, `inventory.adjust.approve`, `sales.credit_exception`), jadi Owner/Admin dan siapa pun yang diberi izin itu (termasuk lewat matriks kewenangan stok). Dasarnya izin, bukan nama role.
+
+**Dua jenis kunci:**
+- `code`: tepat 6 karakter huruf kapital A–Z atau angka 0–9 (huruf kecil diterima saat mengetik dan diubah ke kapital); tidak boleh satu karakter berulang. Dapat **dibuatkan sistem** (`generate: true`; tanpa I, O, 0, 1) dan ditampilkan **sekali** di respons.
+- `passphrase`: kalimat rahasia, minimal 16 karakter dan 3 kata (maks. 100), spasi dirapikan, huruf besar/kecil dibedakan.
+- Kunci harus berbeda dari password akun. Hanya **hash bcrypt** yang disimpan; kunci tidak pernah dikembalikan lagi, dicatat di audit, atau terlihat oleh siapa pun (pengelola pengguna hanya dapat **mencabut**, tidak dapat melihat atau menyetel).
+
+### Endpoint
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/authorization-key` | login | Status kunci sendiri |
+| PUT | `/api/authorization-key` | pemegang izin persetujuan | Buat/ganti kunci sendiri |
+| DELETE | `/api/authorization-key` | login | Hapus kunci sendiri |
+| GET | `/api/authorization-keys` | `user.manage` | Daftar pemegang izin persetujuan + status kunci |
+| DELETE | `/api/authorization-keys/{user}` | `user.manage` | Cabut kunci pengguna lain (`reason` wajib) |
+| GET | `/api/settings/approval-auth` | `settings.manage` | Mode saat ini, pilihan mode + penghalang, daftar pemegang |
+| PUT | `/api/settings/approval-auth` | `settings.manage` | Ganti mode |
+
+- **GET status** (`data`): `eligible` (boleh punya kunci), `has_key`, `type` (`code|passphrase|null`), `locked`, `created_at`, `rotated_at`, `last_used_at`, `mode`. Hash tidak pernah dikirim.
+- **PUT sendiri**: `{ "current_password": "...", "type": "code", "key": "AB12CD" }` atau `{ "current_password": "...", "type": "code", "generate": true }` → `data` = status; bila dibuatkan sistem ada `generated_key` (simpan/tampilkan **sekali**; tidak dapat diambil lagi). Mengganti kunci lama = rotasi (`rotated_at` terisi, kunci lama langsung tak berlaku) dan **membuka kunci yang terkunci**. 403 bila bukan pemegang izin persetujuan. 422: `current_password` (salah / terlalu banyak percobaan), `key` (aturan format), `generate`, `type`.
+- **DELETE sendiri**: body `{ "current_password": "..." }`. 422 `key` bila belum punya kunci, atau bila mode `key`/`password_and_key` dan ini kunci aktif terakhir.
+- **Cabut oleh pengelola**: body `{ "reason": "kunci dicurigai bocor" }` → daftar pemegang terbaru. 422 `user` bila mencabut diri sendiri (pakai DELETE sendiri) atau pengguna tidak punya kunci; 422 `key` bila mencabutnya meninggalkan nol kunci aktif pada mode kunci. Tercatat di audit.
+- **Mode**: `GET` → `data`: `mode`, `modes[]` (`mode, label, can_switch, blockers[]`), `holders[]`. `blockers[]` = `{ code: key_missing|key_locked|no_approver, user_id, username, message }`: beralih ke `key`/`password_and_key` hanya bila **setiap pemegang aktif sudah punya kunci yang tidak terkunci**. `PUT { "mode": "key", "current_password": "..." }` → `data` yang sama dengan GET. 422 `mode` (penghalang / sudah memakai mode itu) atau `current_password`. Audit `settings.approval_auth`. Pengguna baru yang kelak memegang izin persetujuan (mis. ganti role) belum punya kunci: ia perlu menyetelnya sendiri sebelum dapat menyetujui pada mode kunci.
+
+### Perilaku saat persetujuan
+- Field wajib mengikuti mode; kurang → 422 `approver_password` atau `approver_key` (pesan "diperlukan"). Kunci/sandi salah, akun tidak berwenang, atau akun tidak punya kunci → 422 generik "Kredensial persetujuan tidak valid atau tidak berwenang." pada `approver_password` (mode `password`) atau `approver_key` (mode lain), tanpa membedakan penyebab.
+- Pembatas laju per username tetap: 5 percobaan salah / 5 menit (pesan "Terlalu banyak percobaan"). Selain itu **penghitung permanen**: 10 kunci salah berturut-turut **mengunci kunci** (`locked: true`, audit `authorization_key.locked`) sampai pemilik menyetel ulang (PUT dengan password) atau kunci dicabut; kunci benar pun ditolak saat terkunci. Berhasil mengosongkan penghitung.
+- Audit `auth.reauth_ok` / `auth.reauth_failed` kini memuat `method` (`password|key|password_and_key`); kunci tidak pernah ditulis.
+- `GET /api/auth/me` kini memuat `approval_auth_mode` dan `authorization_key` (`eligible, has_key, type, locked`).
+
+### Cara frontend memakainya
+1. **Dialog persetujuan** (PR, PO, adjustment loss/expired, pengecualian kredit): baca `approval_auth_mode` dari `GET /api/auth/me`. `password` → username + password; `key` → username + kolom "Kunci otorisasi"; `password_and_key` → ketiganya. Kirim isian kunci sebagai `approver_key`. Tampilkan error pada kolom sesuai kuncinya (`approver_password` / `approver_key`). Kolom kunci jenis `code` boleh dimasked dan otomatis huruf kapital.
+2. **Profil → "Kunci otorisasi"** (tampil bila `authorization_key.eligible`): `GET /api/authorization-key`; form pilih jenis (kode 6 karakter / kalimat rahasia), opsi "Buatkan kode", dan password akun. Tampilkan `generated_key` satu kali dengan peringatan "tidak dapat dilihat lagi"; tampilkan peringatan jika `locked`.
+3. **Pengaturan → "Otorisasi persetujuan"** (`settings.manage`): `GET /api/settings/approval-auth`; tampilkan tiga mode, daftar periksa `blockers`, dan daftar `holders` dengan tombol "Cabut kunci" (`user.manage`, minta alasan). Ganti mode butuh password akun; setelah berhasil muat ulang `/api/auth/me`.
+
+ASUMSI: kunci per pengguna (bukan satu kunci bersama toko) agar dapat diaudit dan dicabut per orang; hash bcrypt dengan penguncian permanen dianggap cukup untuk kode 6 karakter; DELETE membawa body JSON (bila proxy membuang body DELETE, ubah ke POST).
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`, `routes/api/reports.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-11-03** — Prioritas #1: kunci otorisasi Owner/Admin (kode 6 karakter kapital atau kalimat rahasia), CRUD mandiri + pencabutan oleh pengelola, mode kredensial persetujuan per toko (`password` default / `key` / `password_and_key`) pada semua dialog re-auth (`approver_key`), penguncian permanen setelah 10 gagal, audit tanpa kunci, `approval_auth_mode` dan `authorization_key` pada `/api/auth/me`. Migration `authorization_keys` baru. Status: 🟡 menunggu test (`AuthorizationKeyTest` 12). Bagian 14.
 - **2026-11-02** — Prioritas #5: matriks kewenangan stok per toko (8 aturan: stok awal, penerimaan, transfer, ajuan adjustment per lokasi toko/gudang, persetujuan adjustment), permission baru `inventory.opening_balance`, permission stok diturunkan dari matriks oleh `PermissionResolver`, pemeriksaan lingkup lokasi di service, `stock_authority` pada `/api/auth/me`, remap Admin⇄Owner saat ganti model; FR-04 (Owner melihat PO `pending_confirmation` + harga). Status: 🟡 menunggu test (`StockAuthorityTest` 12). Bagian 13.
 - **2026-11-01** — Prioritas #4: model administrasi toko (`simple` / `standard`), 4 role baru (Owner, Finance, Purchasing, Accounting), peralihan dengan validasi akun per role + konversi Admin↔Owner, filter role pada `/api/roles` dan `/api/users`, middleware `can.any`, `admin_model` pada `/api/auth/me`. Status: 🟡 menunggu test (`AdminModelTest` 8; `SeederTest` dan `UserManagementTest` disesuaikan dengan daftar role baru). Bagian 12.
 - **2026-10-31** — Management Retail: API tenant yang sudah ada kini terhubung ke layar operator `/platform/stores`; login dan `/auth/me` mengarahkan operator global tanpa toko. CLI recovery memilih operator aktif berdasarkan ID (termasuk saat username terlupa), mengubah username/password, mencabut token lama, dan mencatat audit tanpa menyimpan password; UI login memberi instruksi recovery CLI tanpa endpoint publik. `PlatformStoreManagementTest` 7 lulus.

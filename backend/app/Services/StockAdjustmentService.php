@@ -249,16 +249,13 @@ class StockAdjustmentService
 
         $needsReauth = $approve && in_array($record->reason, ['loss', 'expired'], true);
         if ($needsReauth) {
-            if (empty($data['approver_username']) || empty($data['approver_password'])) {
-                throw ValidationException::withMessages([
-                    'approver_password' => ['Autentikasi ulang pemberi persetujuan diperlukan untuk kehilangan atau barang kedaluwarsa.'],
-                ]);
-            }
+            $this->reauth->assertProvided($data, $actor, 'Autentikasi ulang pemberi persetujuan diperlukan untuk kehilangan atau barang kedaluwarsa.');
             $approver = $this->reauth->confirm(
                 (string) $data['approver_username'],
-                (string) $data['approver_password'],
+                (string) ($data['approver_password'] ?? ''),
                 'inventory.adjust.approve',
                 $actor,
+                $data['approver_key'] ?? null,
             );
         } else {
             $approver = $actor;

@@ -6,6 +6,7 @@ use App\Http\Requests\LoginRequest;
 use App\Models\User;
 use App\Services\AdminModelService;
 use App\Services\AuditLogger;
+use App\Services\AuthorizationKeyService;
 use App\Services\PermissionResolver;
 use App\Services\PlatformAccess;
 use App\Services\StoreContext;
@@ -25,6 +26,7 @@ class AuthController extends Controller
         private AuditLogger $audit,
         private PlatformAccess $platformAccess,
         private AdminModelService $adminModel,
+        private AuthorizationKeyService $authKeys,
     ) {}
 
     public function login(LoginRequest $request): JsonResponse
@@ -111,6 +113,8 @@ class AuthController extends Controller
             'permissions' => $this->permissions->codes($user, $storeId),
             'admin_model' => $this->adminModel->current($storeId),
             'stock_authority' => StockAuthorityPolicy::userMap($user, $storeId),
+            'approval_auth_mode' => $this->authKeys->mode($storeId),
+            'authorization_key' => collect($this->authKeys->status($user, $storeId))->only(['eligible', 'has_key', 'type', 'locked'])->all(),
             'platform_operator' => $isPlatformOperator,
         ]);
     }

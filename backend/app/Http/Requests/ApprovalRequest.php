@@ -24,6 +24,7 @@ class ApprovalRequest extends FormRequest
             'note' => ['nullable', 'string', 'max:500'],
             'approver_username' => ['nullable', 'string', 'max:60'],
             'approver_password' => ['nullable', 'string', 'max:200'],
+            'approver_key' => ['nullable', 'string', 'max:200'],
         ];
     }
 }

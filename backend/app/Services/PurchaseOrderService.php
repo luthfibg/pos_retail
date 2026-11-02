@@ -327,17 +327,14 @@ class PurchaseOrderService
         $reauth = (bool) $this->setting($storeId, 'approval_reauth_required', true);
 
         if ($reauth) {
-            if (empty($data['approver_username']) || empty($data['approver_password'])) {
-                throw ValidationException::withMessages([
-                    'approver_password' => ['Autentikasi ulang pemberi persetujuan diperlukan.'],
-                ]);
-            }
+            $this->reauth->assertProvided($data, $actor);
 
             $approver = $this->reauth->confirm(
                 (string) $data['approver_username'],
-                (string) $data['approver_password'],
+                (string) ($data['approver_password'] ?? ''),
                 'purchase_requisition.approve',
                 $actor,
+                $data['approver_key'] ?? null,
             );
         } else {
             abort_unless($this->permissions->allows($actor, 'purchase_requisition.approve', $storeId), 403, 'Anda tidak berwenang mengonfirmasi PO.');
