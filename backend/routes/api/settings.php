@@ -3,12 +3,17 @@
 use App\Http\Controllers\AdminModelController;
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\StockAuthorityController;
+use App\Http\Controllers\StoreNameSettingController;
 use App\Http\Controllers\VatSettingController;
 use App\Http\Controllers\WarehouseSettingController;
 use Illuminate\Support\Facades\Route;
 
 // Dimuat dari routes/api.php (prefix /api sudah terpasang). Admin saja. Diskon tidak dihapus; gunakan is_active.
 Route::middleware('auth:sanctum')->group(function () {
+    // Pengguna Retail hanya dapat mengubah nama toko; CRUD tenant tetap khusus operator platform.
+    Route::patch('settings/store-name', [StoreNameSettingController::class, 'update'])
+        ->middleware('can:settings.manage');
+
     Route::get('discounts', [DiscountController::class, 'index'])->middleware('can:discount.manage');
     Route::post('discounts', [DiscountController::class, 'store'])->middleware('can:discount.manage');
     Route::get('discounts/{discount}', [DiscountController::class, 'show'])->whereNumber('discount')->middleware('can:discount.manage');

@@ -901,11 +901,22 @@ Body buat: `supplier_id`, `items[]` (`product_id`, `location_id`, `qty`, `batch_
 
 Respons detail memuat `doc_number` (`RET-000001`), supplier, status, waktu submit/keputusan, catatan, `loss_amount` (string uang/null), approver, dan `items[]` termasuk lokasi, batch, qty, HPP snapshot, serta batch pengganti. Draft tidak mengubah stok; submit gagal 422 jika stok berubah/tidak cukup dan transaksi tidak meninggalkan movement parsial. Status akhir tidak dapat dibatalkan atau diposting ulang. Aksi penting dicatat sebagai `supplier_return.create|submit|accept|reject|replacement_received|write_off|cancel`.
 
+## 16. Ubah Nama Toko oleh Pengguna Retail
+
+Pengguna toko dengan izin `settings.manage` dapat memperbarui nama toko aktifnya. Endpoint khusus ini tidak mengekspos baca detail toko dan menolak semua field selain nama. Pembuatan, pembacaan, dan perubahan status tenant tetap hanya melalui Management Retail untuk operator platform; tidak ada operasi hapus.
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| PATCH | `/api/settings/store-name` | `settings.manage` | Ubah nama toko aktif dengan `{ "name": "Nama Toko Baru" }`; panjang maksimum 150 karakter |
+
+Respons hanya `{ "data": { "name": "Nama Toko Baru" } }`. Perubahan dicatat di audit `settings.store_name`. Tidak ada migration atau permission baru.
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`, `routes/api/reports.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-11-02** — Endpoint Retail `PATCH /api/settings/store-name` hanya mengizinkan perubahan `name` (maks. 150 karakter), izin `settings.manage`, konteks toko aktif, dan audit `settings.store_name`; request menolak field toko lain. Tidak menambahkan endpoint read/create/delete atau perubahan atribut lain. `StoreNameSettingTest`: 3 test lulus.
 - **2026-11-03** — Prioritas #1: kunci otorisasi Owner/Admin (kode 6 karakter kapital atau kalimat rahasia), CRUD mandiri + pencabutan oleh pengelola, mode kredensial persetujuan per toko (`password` default / `key` / `password_and_key`) pada semua dialog re-auth (`approver_key`), penguncian permanen setelah 10 gagal, audit tanpa kunci, `approval_auth_mode` dan `authorization_key` pada `/api/auth/me`. Migration `authorization_keys` baru. Status: 🟡 menunggu test (`AuthorizationKeyTest` 12). Bagian 14.
 - **2026-11-02** — Retur supplier (Paket 3): draft/pengajuan dan karantina stok, keputusan supplier, penerimaan barang pengganti, serta write-off bernilai HPP setelah ditolak supplier dengan re-auth `inventory.adjust.approve`. Akses pengajuan/keputusan/penerimaan dikendalikan matriks stok (aturan kini 10). Migration, permission, endpoint, dan tes feature baru; kontrak bagian 15.
 - **2026-11-02** — Prioritas #5: matriks kewenangan stok per toko (stok awal, penerimaan, transfer, ajuan adjustment per lokasi toko/gudang, persetujuan adjustment), permission baru `inventory.opening_balance`, permission stok diturunkan dari matriks oleh `PermissionResolver`, pemeriksaan lingkup lokasi di service, `stock_authority` pada `/api/auth/me`, remap Admin⇄Owner saat ganti model; FR-04 (Owner melihat PO `pending_confirmation` + harga). Bagian 13.
