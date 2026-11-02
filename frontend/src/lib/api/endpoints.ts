@@ -12,6 +12,7 @@ import type {
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
   WarehouseSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting,
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
+  SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
 } from './types';
 
 export const authApi = {
@@ -232,6 +233,44 @@ export const goodsReceiptApi = {
     api<{ data: GoodsReceipt }>(`/goods-receipts/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }).then((r) => r.data),
   verifyDocuments: (id: number, input: { delivery_note_no: string; invoice_no: string }) =>
     api<{ data: GoodsReceipt }>(`/goods-receipts/${id}/verify-documents`, { method: 'POST', body: input }).then((r) => r.data),
+};
+
+export const supplierReturnApi = {
+  list: (f: { q?: string; status?: SupplierReturnStatus; supplier_id?: number; page?: number; per_page?: number } = {}) =>
+    api<Paginated<SupplierReturnSummary>>('/supplier-returns', { query: { ...f } }),
+  get: (id: number) => api<{ data: SupplierReturn }>(`/supplier-returns/${id}`).then((r) => r.data),
+  create: (input: SupplierReturnInput) =>
+    api<{ data: SupplierReturn }>('/supplier-returns', { method: 'POST', body: input }).then((r) => r.data),
+  submit: (id: number) =>
+    api<{ data: SupplierReturn }>(`/supplier-returns/${id}/submit`, { method: 'POST' }).then((r) => r.data),
+  supplierDecision: (id: number, decision: 'accept' | 'reject', note?: string) =>
+    api<{ data: SupplierReturn }>(`/supplier-returns/${id}/supplier-decision`, {
+      method: 'POST',
+      body: { decision, note },
+    }).then((r) => r.data),
+  receiveReplacement: (id: number, items: Array<{
+    return_item_id: number;
+    expiry_date?: string;
+    batch_code?: string;
+    shelf_position_id?: number;
+  }>) => api<{ data: SupplierReturn }>(`/supplier-returns/${id}/replacement-receipt`, {
+    method: 'POST',
+    body: { items },
+  }).then((r) => r.data),
+  writeOff: (id: number, input: {
+    note?: string;
+    approver_username: string;
+    approver_password?: string;
+    approver_key?: string;
+  }) => api<{ data: SupplierReturn }>(`/supplier-returns/${id}/write-off`, {
+    method: 'POST',
+    body: input,
+  }).then((r) => r.data),
+  cancel: (id: number, reason?: string) =>
+    api<{ data: SupplierReturn }>(`/supplier-returns/${id}/cancel`, {
+      method: 'POST',
+      body: reason ? { reason } : {},
+    }).then((r) => r.data),
 };
 
 export interface MovementFilters {

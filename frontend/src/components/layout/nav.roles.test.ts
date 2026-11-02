@@ -11,7 +11,7 @@ import { getVisibleNavGroups, type NavGroup } from './nav';
 const PERMISSIONS: Record<string, string[]> = {
   Kasir: [
     'product.create', 'shelf_layout.view', 'inventory.view', 'customer.create', 'customer.select', 'purchase_requisition.create',
-    'goods_receipt.create', 'stock_transfer.create', 'inventory.adjust.request', 'sales.create', 'receipt.reprint', 'shift.open',
+    'goods_receipt.create', 'supplier_return.create', 'stock_transfer.create', 'inventory.adjust.request', 'sales.create', 'receipt.reprint', 'shift.open',
     'shift.close', 'cash_movement.create', 'float.propose', 'cash_deposit.create', 'reports.view',
   ],
   Finance: [
@@ -45,7 +45,7 @@ describe('menu per role (model standar retail)', () => {
   it('Kasir melihat menu operasional toko', () => {
     expect(menuFor('Kasir')).toEqual([
       '/customers', '/dashboard', '/goods-receipts', '/inventory/adjustments', '/inventory/movements', '/inventory/transfers',
-      '/pos', '/products', '/purchase-requisitions', '/sales', '/shift',
+      '/pos', '/products', '/purchase-requisitions', '/sales', '/shift', '/supplier-returns',
     ]);
   });
 
@@ -71,6 +71,7 @@ describe('menu per role (model standar retail)', () => {
     expect(owner).toContain('/settings');
     expect(owner).toContain('/inventory/opening');
     expect(owner).toContain('/purchase-requisitions');
+    expect(owner).toContain('/supplier-returns');
     expect(owner).not.toContain('/users');
     expect(owner).not.toContain('/pos');
     expect(owner).not.toContain('/shift');
@@ -100,7 +101,7 @@ describe('susunan sidebar mengikuti alur kerja', () => {
     expect(sidebarFor(PERMISSIONS.Kasir ?? [])).toEqual([
       'Dashboard',
       'Penjualan > Shift Saya, Kasir, Riwayat Penjualan',
-      'Pembelian > Permintaan Pembelian, Penerimaan Barang',
+      'Pembelian > Permintaan Pembelian, Penerimaan Barang, Retur Supplier',
       'Inventory > Transfer Stok, Adjustment & Opname, Riwayat Stok',
       'Data Master > Produk, Karyawan',
     ]);
@@ -138,7 +139,7 @@ describe('susunan sidebar mengikuti alur kerja', () => {
     expect(sidebarFor(PERMISSIONS.Owner ?? [])).toEqual([
       'Dashboard',
       'Tinjau Shift',
-      'Permintaan Pembelian',
+      'Pembelian > Permintaan Pembelian, Retur Supplier',
       'Inventory > Stok Awal, Adjustment & Opname, Riwayat Stok',
       'Data Master > Produk, Karyawan',
       'Pengaturan',
@@ -150,7 +151,7 @@ describe('susunan sidebar mengikuti alur kerja', () => {
       'Dashboard',
       'Riwayat Penjualan',
       'Keuangan > Tinjau Shift, Setoran Masuk, Tagihan HRD',
-      'Pembelian > Permintaan Pembelian, Penerimaan Barang',
+      'Pembelian > Permintaan Pembelian, Penerimaan Barang, Retur Supplier',
       'Inventory > Stok Awal, Transfer Stok, Adjustment & Opname, Riwayat Stok',
       'Data Master > Kategori, Produk, Supplier, Karyawan',
       'Pengaturan',

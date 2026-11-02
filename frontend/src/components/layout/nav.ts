@@ -20,7 +20,7 @@ export interface NavGroup {
  *  1. Dashboard      beranda: ringkasan penjualan, kas, dan stok
  *  2. Penjualan      buka shift -> jual di kasir -> koreksi/cetak ulang struk
  *  3. Keuangan       tinjau shift -> terima setoran -> tagih HRD
- *  4. Pembelian      PR -> pemeriksaan Finance -> persetujuan Owner -> PO -> terima barang
+ *  4. Pembelian      PR -> pemeriksaan Finance -> persetujuan Owner -> PO -> terima barang/retur supplier
  *  5. Inventory      stok awal -> transfer/putaway -> adjustment & opname -> riwayat stok
  *  6. Data Master    kategori -> produk -> supplier -> karyawan (pembeli kredit)
  *  7. Pengaturan     satu layar untuk semua konfigurasi
@@ -64,6 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create' },
+      { to: '/supplier-returns', label: 'Retur Supplier', permission: ['supplier_return.create', 'inventory.adjust.approve'] },
     ],
   },
   {

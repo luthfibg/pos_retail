@@ -21,6 +21,7 @@ const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage')
 const AdjustmentsPage = lazy(() => import('@/features/inventory/AdjustmentsPage').then((module) => ({ default: module.AdjustmentsPage })));
 const TransfersPage = lazy(() => import('@/features/inventory/TransfersPage').then((module) => ({ default: module.TransfersPage })));
 const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
+const SupplierReturnsPage = lazy(() => import('@/features/purchasing/SupplierReturnsPage').then((module) => ({ default: module.SupplierReturnsPage })));
 const PurchasingEntryPage = lazy(() => import('@/features/purchasing/PurchaseBoardPage').then((module) => ({ default: module.PurchasingEntryPage })));
 const DashboardPage = lazy(() => import('@/features/reports/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 const BillingPage = lazy(() => import('@/features/billing/BillingPage').then((module) => ({ default: module.BillingPage })));
@@ -105,6 +106,10 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="goods_receipt.create" />,
             children: [{ path: 'goods-receipts', element: <LazyPage><GoodsReceiptsPage /></LazyPage> }],
+          },
+          {
+            element: <RequireAnyPermission permissions={['supplier_return.create', 'inventory.adjust.approve']} />,
+            children: [{ path: 'supplier-returns', element: <LazyPage><SupplierReturnsPage /></LazyPage> }],
           },
           {
             element: <RequireAnyPermission permissions={[

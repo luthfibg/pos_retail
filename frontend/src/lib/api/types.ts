@@ -542,6 +542,76 @@ export interface StockTransferInput {
   }>;
 }
 
+export type SupplierReturnStatus =
+  | 'draft'
+  | 'submitted'
+  | 'accepted'
+  | 'rejected'
+  | 'replacement_received'
+  | 'written_off'
+  | 'cancelled';
+export type SupplierReturnBucket = 'sellable' | 'damaged';
+
+export interface SupplierReturnSummary {
+  id: number;
+  doc_number: string;
+  supplier_id: number;
+  supplier_name: string;
+  status: SupplierReturnStatus;
+  requested_by: number;
+  requested_by_name: string;
+  submitted_at: string | null;
+  decided_by: number | null;
+  decided_by_name: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  loss_amount: Decimal | null;
+  approved_by: number | null;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  reauth_at: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface SupplierReturnItem {
+  id: number;
+  product_id: number;
+  sku: string;
+  product_name: string;
+  unit_name: string;
+  batch_id: number | null;
+  batch_code: string | null;
+  expiry_date: string | null;
+  location_id: number;
+  location_name: string;
+  shelf_position_id: number | null;
+  shelf_position: string | null;
+  source_bucket: SupplierReturnBucket;
+  qty: Decimal;
+  unit_cost: Decimal | null;
+  replacement_batch_id: number | null;
+  replacement_batch_code: string | null;
+  replacement_expiry_date: string | null;
+}
+
+export interface SupplierReturn extends SupplierReturnSummary {
+  items: SupplierReturnItem[];
+}
+
+export interface SupplierReturnInput {
+  supplier_id: number;
+  note?: string;
+  items: Array<{
+    product_id: number;
+    batch_id?: number;
+    location_id: number;
+    shelf_position_id?: number;
+    source_bucket: SupplierReturnBucket;
+    qty: Decimal;
+  }>;
+}
+
 export interface DailySalesReportRow {
   date: string;
   transaction_count: number;
