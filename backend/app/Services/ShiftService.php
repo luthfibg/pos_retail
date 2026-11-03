@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Shift kasir (satu toko, satu laci).
+ * Shift kasir (satu shift aktif per kasir dan per mesin/laci).
  *  - alur: open -> counting (penjualan baru diblokir) -> closed -> reviewed
  *  - saldo awal = endapan shift sebelumnya di laci yang sama (float_kept), 0 untuk shift pertama
  *  - kas diharapkan = saldo awal + penjualan tunai + kas masuk lain - kas keluar (- setoran parsial: modul setoran menyusul)
@@ -31,11 +31,25 @@ class ShiftService
     ) {}
 
     /** @return array<string, mixed> */
-    public function open(User $actor, int $storeId, ?string $countedOpeningCash): array
+    public function open(User $actor, int $storeId, ?string $countedOpeningCash, ?int $registerId): array
     {
         try {
-            $id = DB::transaction(function () use ($actor, $storeId, $countedOpeningCash) {
-                $register = DB::table('registers')->where('store_id', $storeId)->where('is_active', 1)->orderBy('id')->lockForUpdate()->first();
+            $id = DB::transaction(function () use ($actor, $storeId, $countedOpeningCash, $registerId) {
+                DB::table('users')->where('id', $actor->id)->lockForUpdate()->first();
+                $activeRegisters = DB::table('registers')->where('store_id', $storeId)->where('is_active', true);
+                if ($registerId === null) {
+                    $registerIds = $activeRegisters->orderBy('id')->pluck('id');
+                    if ($registerIds->count() !== 1) {
+                        throw ValidationException::withMessages([
+                            'register_id' => [$registerIds->isEmpty()
+                                ? 'Mesin kasir aktif belum tersedia.'
+                                : 'Pilih mesin kasir yang akan digunakan untuk membuka shift.'],
+                        ]);
+                    }
+                    $registerId = (int) $registerIds->first();
+                }
+                $register = DB::table('registers')->where('store_id', $storeId)->where('id', $registerId)
+                    ->where('is_active', true)->lockForUpdate()->first();
                 abort_if($register === null, 422, 'Kasir (register) aktif belum tersedia.');
 
                 $existing = DB::table('cash_shifts as s')->join('users as u', 'u.id', '=', 's.cashier_id')
@@ -43,7 +57,7 @@ class ShiftService
                     ->where(function ($q) use ($actor, $register) {
                         $q->where('s.cashier_id', $actor->id)->orWhere('s.register_id', $register->id);
                     })
-                    ->first(['s.cashier_id', 'u.name']);
+                    ->first(['s.cashier_id', 's.register_id', 'u.name']);
 
                 if ($existing !== null) {
                     $message = (int) $existing->cashier_id === $actor->id
@@ -75,7 +89,12 @@ class ShiftService
                     'opened_at' => $this->now(),
                 ]);
 
-                $after = ['doc_number' => $number, 'opening_balance' => $opening];
+                $after = [
+                    'doc_number' => $number,
+                    'register_id' => (int) $register->id,
+                    'register_name' => $register->name,
+                    'opening_balance' => $opening,
+                ];
                 if ($countedOpeningCash !== null) {
                     $after['counted_opening_cash'] = Decimal::moneyString(Decimal::money($countedOpeningCash));
                     $after['opening_difference'] = Decimal::moneyString(Decimal::money($countedOpeningCash) - Decimal::money($opening));
@@ -96,8 +115,9 @@ class ShiftService
     {
         $row = DB::table('cash_shifts as s')
             ->join('users as u', 'u.id', '=', 's.cashier_id')
+            ->join('registers as r', 'r.id', '=', 's.register_id')
             ->where('s.store_id', $storeId)->where('s.cashier_id', $actor->id)->whereIn('s.status', ['open', 'counting'])
-            ->first(['s.*', 'u.name as cashier_name']);
+            ->first(['s.*', 'u.name as cashier_name', 'r.name as register_name']);
 
         return $row === null ? null : $this->present($row, $this->canSeeExpected($actor));
     }
@@ -225,9 +245,10 @@ class ShiftService
     {
         $query = DB::table('cash_shifts as s')
             ->join('users as u', 'u.id', '=', 's.cashier_id')
+            ->join('registers as r', 'r.id', '=', 's.register_id')
             ->where('s.store_id', $storeId)
             ->orderByDesc('s.id')
-            ->select(['s.*', 'u.name as cashier_name']);
+            ->select(['s.*', 'u.name as cashier_name', 'r.name as register_name']);
 
         if (! empty($filters['status'])) {
             $query->where('s.status', $filters['status']);
@@ -290,8 +311,9 @@ class ShiftService
     {
         return DB::table('cash_shifts as s')
             ->join('users as u', 'u.id', '=', 's.cashier_id')
+            ->join('registers as r', 'r.id', '=', 's.register_id')
             ->where('s.store_id', $storeId)->where('s.id', $id)
-            ->first(['s.*', 'u.name as cashier_name']);
+            ->first(['s.*', 'u.name as cashier_name', 'r.name as register_name']);
     }
 
     private function canSeeExpected(User $user): bool
@@ -309,6 +331,7 @@ class ShiftService
             'id' => (int) $row->id,
             'doc_number' => $row->doc_number,
             'register_id' => (int) $row->register_id,
+            'register_name' => $row->register_name,
             'cashier_id' => (int) $row->cashier_id,
             'cashier_name' => $row->cashier_name,
             'status' => $row->status,

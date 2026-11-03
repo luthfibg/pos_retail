@@ -81,9 +81,7 @@ export function ShiftPage() {
               }}
             />
           )}
-          {!pendingDeposits.isLoading && !pendingDeposits.error && drafts.length === 0 && (
-            <OpenShiftCard onOpened={() => { void refresh(); }} />
-          )}
+          <OpenShiftCard onOpened={() => { void refresh(); void qc.invalidateQueries({ queryKey: ['cash-deposits', 'final-drafts'] }); }} />
         </>
       )}
 
@@ -101,15 +99,24 @@ export function ShiftPage() {
 // ------------------------------------------------------------------ buka shift
 
 function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
+  const registers = useQuery({ queryKey: ['registers', 'available'], queryFn: shiftApi.availableRegisters });
+  const [selectedRegisterId, setSelectedRegisterId] = useState('');
   const [counted, setCounted] = useState('');
   const [error, setError] = useState<string | undefined>();
+  const selectedRegister = selectedRegisterId || String(registers.data?.find((register) => register.is_available)?.id ?? '');
 
   const mutation = useMutation({
     mutationFn: () => {
       const v = normalizeDecimal(counted);
-      return shiftApi.open(v ? { counted_opening_cash: v } : {});
+      return shiftApi.open({
+        register_id: Number(selectedRegister),
+        ...(v ? { counted_opening_cash: v } : {}),
+      });
     },
-    onSuccess: onOpened,
+    onSuccess: async () => {
+      await onOpened();
+      await registers.refetch();
+    },
   });
 
   const server = mutation.error instanceof ApiError && mutation.error.status === 422 ? mutation.error.errors ?? {} : {};
@@ -135,6 +142,28 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
 
       {/* galat "shift" (mis. laci masih dipakai kasir lain) ditampilkan utuh */}
       <ErrorNotice error={mutation.error} />
+      <ErrorNotice error={registers.error} />
+
+      <Field label="Mesin kasir">
+        <select
+          className={inputCls}
+          required
+          value={selectedRegister}
+          onChange={(event) => setSelectedRegisterId(event.target.value)}
+          disabled={registers.isLoading || !registers.data?.length}
+        >
+          <option value="">{registers.isLoading ? 'Memuat mesin kasir…' : 'Pilih mesin kasir'}</option>
+          {registers.data?.map((register) => (
+            <option key={register.id} value={register.id} disabled={!register.is_available}>
+              {register.name}{register.is_available ? '' : ` — ${register.unavailable_reason}`}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {registers.data?.length === 0 && <p className="text-sm text-amber-800">Belum ada mesin kasir aktif. Hubungi Admin/Owner untuk menambah atau mengaktifkan mesin.</p>}
+      {registers.data?.length && !registers.data.some((register) => register.is_available)
+        ? <p className="text-sm text-amber-800">Semua mesin kasir sedang digunakan atau menunggu penyerahan setoran akhir.</p>
+        : null}
 
       <Field
         label="Uang di laci saat ini (opsional)"
@@ -144,7 +173,7 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
         <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={counted} onChange={(e) => setCounted(e.target.value)} placeholder="Rp" autoFocus />
       </Field>
 
-      <button type="submit" disabled={mutation.isPending} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+      <button type="submit" disabled={mutation.isPending || !selectedRegister || registers.data?.find((register) => String(register.id) === selectedRegister)?.is_available !== true} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
         {mutation.isPending ? 'Membuka…' : 'Buka kasir jaga'}
       </button>
     </form>
@@ -172,6 +201,7 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
         <div className="flex items-center justify-between">
           <div>
             <div className="font-mono text-sm text-slate-500">{shift.doc_number}</div>
+            <div className="text-sm font-medium">{shift.register_name}</div>
             <ShiftStatusBadge status={shift.status} />
           </div>
         </div>

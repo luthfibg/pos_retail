@@ -6,7 +6,7 @@ const only = (...permissions: string[]) => (permission: string) => permissions.i
 
 describe('settingsSections', () => {
   it('pemegang semua izin melihat semua bagian dalam urutan kategori', () => {
-    expect(visibleSections(all).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-authority', 'vat', 'discounts', 'float-policy', 'users', 'approval-auth']);
+    expect(visibleSections(all).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-authority', 'vat', 'discounts', 'float-policy', 'registers', 'users', 'approval-auth']);
   });
 
   it('bagian mengikuti izin masing-masing', () => {
@@ -14,6 +14,7 @@ describe('settingsSections', () => {
     expect(visibleSections(only('user.manage')).map((section) => section.id)).toEqual(['users', 'approval-auth']);
     expect(visibleSections(only('inventory.adjust.approve')).map((section) => section.id)).toEqual(['approval-auth']);
     expect(visibleSections(only('float.configure')).map((section) => section.id)).toEqual(['float-policy']);
+    expect(visibleSections(only('register.manage')).map((section) => section.id)).toEqual(['registers']);
     expect(visibleSections(only('settings.manage')).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-authority', 'vat', 'approval-auth']);
     expect(visibleSections(only('shift.review'))).toEqual([]);
   });

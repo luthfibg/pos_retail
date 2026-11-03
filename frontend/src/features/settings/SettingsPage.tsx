@@ -12,6 +12,7 @@ const Discounts = lazy(() => import('@/features/pricing/DiscountsPage').then((mo
 const FloatPolicy = lazy(() => import('@/features/shifts/FloatPolicyPage').then((module) => ({ default: module.FloatPolicyPage })));
 const Users = lazy(() => import('@/features/users/UsersPage').then((module) => ({ default: module.UsersPage })));
 const ApprovalAuth = lazy(() => import('./ApprovalAuthSettingsPage').then((module) => ({ default: module.ApprovalAuthSettingsPage })));
+const Registers = lazy(() => import('./RegisterSettingsPage').then((module) => ({ default: module.RegisterSettingsPage })));
 
 function SectionBody({ id }: { id: SectionId }) {
   switch (id) {
@@ -22,6 +23,7 @@ function SectionBody({ id }: { id: SectionId }) {
     case 'vat': return <Vat embedded />;
     case 'discounts': return <Discounts embedded />;
     case 'float-policy': return <FloatPolicy embedded />;
+    case 'registers': return <Registers embedded />;
     case 'users': return <Users embedded />;
     case 'approval-auth': return <ApprovalAuth embedded />;
   }

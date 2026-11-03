@@ -858,6 +858,27 @@ export interface ShiftSummary {
   partial_deposits: Decimal;
 }
 
+export interface Register {
+  id: number;
+  name: string;
+  is_active: boolean;
+  fund_account_id: number | null;
+  fund_account_name: string | null;
+  active_shift: {
+    id: number;
+    status: ShiftStatus;
+    cashier_id: number;
+    cashier_name: string;
+  } | null;
+}
+
+export interface AvailableRegister {
+  id: number;
+  name: string;
+  is_available: boolean;
+  unavailable_reason: string | null;
+}
+
 /**
  * Hitung buta: `expected_cash` dan `variance` bernilai null untuk Kasir selama shift berjalan;
  * baru terisi setelah ditutup (Admin dengan shift.review selalu melihatnya).
@@ -866,6 +887,7 @@ export interface Shift {
   id: number;
   doc_number: string;
   register_id: number;
+  register_name: string;
   cashier_id: number;
   cashier_name: string;
   status: ShiftStatus;

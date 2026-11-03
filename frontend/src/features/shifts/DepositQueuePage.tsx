@@ -136,7 +136,7 @@ function FundBalances({ funds, loading, error }: { funds: FundAccount[]; loading
         <div className="grid gap-3 sm:grid-cols-2">
           {funds.map((fund) => (
             <div key={fund.id} className="rounded-lg border border-slate-200 bg-white p-4">
-              <p className="text-sm text-slate-600">{fund.name}</p>
+              <p className="text-sm text-slate-600">{fund.name === 'Saldo Pembelian' ? 'Modal PO' : fund.name}</p>
               <p className="mt-1 text-lg font-semibold tabular-nums">{formatRupiah(fund.balance)}</p>
               <p className="mt-1 text-xs text-slate-500">{fund.type === 'petty_cash' ? 'Kas Kecil' : 'Kas Besar'}</p>
             </div>

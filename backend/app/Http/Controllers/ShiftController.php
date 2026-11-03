@@ -53,9 +53,15 @@ class ShiftController extends Controller
     {
         $user = $request->user();
         $counted = $request->validated('counted_opening_cash');
+        $registerId = $request->validated('register_id');
 
         return response()->json([
-            'data' => $this->shifts->open($user, $this->stores->requireIdFor($user), $counted === null ? null : (string) $counted),
+            'data' => $this->shifts->open(
+                $user,
+                $this->stores->requireIdFor($user),
+                $counted === null ? null : (string) $counted,
+                $registerId === null ? null : (int) $registerId,
+            ),
         ], 201);
     }
 

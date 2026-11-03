@@ -14,6 +14,7 @@ import type {
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
   SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
   BankAccount, PurchaseFundSummary,
+  AvailableRegister, Register,
 } from './types';
 
 export const authApi = {
@@ -401,8 +402,9 @@ export const shiftApi = {
   /** Shift aktif (open/counting) milik pengguna; data = null bila belum ada. */
   current: () => api<{ data: Shift | null }>('/shifts/current').then((r) => r.data),
   get: (id: number) => api<{ data: Shift }>(`/shifts/${id}`).then((r) => r.data),
-  open: (input: { counted_opening_cash?: string }) =>
+  open: (input: { register_id: number; counted_opening_cash?: string }) =>
     api<{ data: Shift }>('/shifts/open', { method: 'POST', body: input }).then((r) => r.data),
+  availableRegisters: () => api<{ data: AvailableRegister[] }>('/registers/available').then((r) => r.data),
   startCount: (id: number) =>
     api<{ data: Shift }>(`/shifts/${id}/start-count`, { method: 'POST' }).then((r) => r.data),
   close: (id: number, input: { counted_cash: string; variance_note?: string }) =>
@@ -410,6 +412,16 @@ export const shiftApi = {
   review: (id: number, input: { note?: string }) =>
     api<{ data: Shift }>(`/shifts/${id}/review`, { method: 'POST', body: input }).then((r) => r.data),
   list: (f: ShiftFilters = {}) => api<Paginated<Shift>>('/shifts', { query: { ...f } }),
+};
+
+export const registerApi = {
+  list: () => api<{ data: Register[] }>('/registers').then((r) => r.data),
+  get: (id: number) => api<{ data: Register }>(`/registers/${id}`).then((r) => r.data),
+  create: (name: string) => api<{ data: Register }>('/registers', { method: 'POST', body: { name } }).then((r) => r.data),
+  update: (id: number, input: { name?: string; is_active?: boolean; reason?: string }) =>
+    api<{ data: Register }>(`/registers/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
+  deactivate: (id: number, reason: string) =>
+    api<{ data: Register }>(`/registers/${id}`, { method: 'DELETE', body: { reason } }).then((r) => r.data),
 };
 
 export const cashDepositApi = {

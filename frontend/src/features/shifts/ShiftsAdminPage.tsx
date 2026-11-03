@@ -62,6 +62,7 @@ export function ShiftsAdminPage() {
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th className="px-3 py-2">Kasir</th>
+              <th className="px-3 py-2">Mesin kasir</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Dibuka</th>
               <th className="px-3 py-2 text-right">Diharapkan</th>
@@ -74,6 +75,7 @@ export function ShiftsAdminPage() {
             {rows.map((s) => (
               <tr key={s.id}>
                 <td className="px-3 py-2">{s.cashier_name}</td>
+                <td className="px-3 py-2">{s.register_name}</td>
                 <td className="px-3 py-2"><ShiftStatusBadge status={s.status} /></td>
                 <td className="whitespace-nowrap px-3 py-2">{formatDateTime(s.opened_at)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{s.expected_cash !== null ? formatRupiah(s.expected_cash) : '—'}</td>
@@ -86,9 +88,9 @@ export function ShiftsAdminPage() {
                 </td>
               </tr>
             ))}
-            {query.isLoading && <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>}
+            {query.isLoading && <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>}
             {!query.isLoading && rows.length === 0 && !rangeInvalid && (
-              <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Belum ada kasir jaga.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Belum ada kasir jaga.</td></tr>
             )}
           </tbody>
         </table>

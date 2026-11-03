@@ -26,6 +26,7 @@ export function ShiftReviewDialog({ shift: initial, onClose }: { shift: Shift; o
   return (
     <Modal title={`Kasir Jaga ${shift.doc_number}`} onClose={onClose}>
       <div className="space-y-4 p-5">
+        <p className="text-sm text-slate-600">Mesin kasir: <span className="font-medium text-slate-900">{shift.register_name}</span></p>
         <ShiftStatusBadge status={shift.status} />
         <ShiftFigures shift={shift} />
 

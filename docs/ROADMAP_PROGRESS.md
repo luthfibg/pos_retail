@@ -106,7 +106,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
 | 1.1 | Proyek Laravel + Sanctum + MySQL, 55 migration (lolos `migrate:fresh`) | ✅ | — |
-| 1.2 | Seeder: toko, role, 46 permission, register, akun dana, setting, akun admin | ✅ | SeederTest |
+| 1.2 | Seeder: toko, role, 54 permission, register, akun dana, setting, akun admin | ✅ | SeederTest |
 | 1.3 | Auth: login / logout / me, throttle, audit | ✅ | AuthTest |
 | 1.4 | RBAC (role + override per pengguna) dan re-auth persetujuan (`ReauthService`, lockout 5x) | ✅ | RbacTest, ReauthServiceTest |
 | 1.5 | Master data — kategori | ✅ | CategoryTest |
@@ -141,6 +141,8 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | 3.6 | Kas masuk / keluar lain (`cash_movements`) | ✅ | CashMovementTest (4) |
 | 3.7 | Pengaturan diskon dan PPN lewat API (Admin): CRUD diskon + saklar/tarif PPN berversi | ✅ | PricingSettingsTest |
 | 3.8 | Retur pelanggan dan credit note | ⏸ | Paket 2 |
+
+**Tambahan finalisasi — mesin kasir (di luar tahapan baseline):** `registers` ternyata sudah tersedia dan sudah menjadi FK shift. CRUD mesin, akun Kas Kecil per mesin, permission `register.manage`, pemilihan mesin saat buka shift, dan nama mesin pada laporan telah ditambahkan; `RegisterTest` serta `ShiftTest` lulus. Migration baru tidak membuat tabel; hanya melengkapi akun laci yang belum ada dan menegakkan keunikan nama mesin serta akun Kas Kecil per mesin. Status: ✅.
 
 ### Fase 4 — Pembelian
 

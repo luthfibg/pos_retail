@@ -55,6 +55,7 @@ final class PermissionCatalog
             'shift.open' => 'Membuka shift kas',
             'shift.close' => 'Menutup shift kas',
             'shift.review' => 'Meninjau shift dan selisih kas',
+            'register.manage' => 'Mengelola mesin kasir toko',
             'cash_movement.create' => 'Mencatat kas masuk/keluar nonpenjualan',
             'float.propose' => 'Mengusulkan endapan kas',
             'float.configure' => 'Menetapkan kebijakan endapan kas',
@@ -123,7 +124,7 @@ final class PermissionCatalog
             'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve',
             'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
-            'shift.review', 'float.configure', 'purchase_fund.view', 'reports.view', 'reports.profit.view',
+            'shift.review', 'register.manage', 'float.configure', 'purchase_fund.view', 'reports.view', 'reports.profit.view',
         ];
     }
 

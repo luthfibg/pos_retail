@@ -15,6 +15,7 @@ class OpenShiftRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'register_id' => ['nullable', 'integer', 'min:1'],
             // hitungan uang di laci saat buka; selisih dengan saldo awal dicatat di audit
             'counted_opening_cash' => ['nullable', 'numeric', 'min:0', 'max:999999999999', 'decimal:0,2'],
         ];

@@ -26,22 +26,32 @@ class TenantProvisioner
             ]);
         }
 
-        $registerId = DB::table('registers')->where('store_id', $storeId)->value('id');
-        if ($registerId === null) {
-            $registerId = DB::table('registers')->insertGetId([
+        if (! DB::table('registers')->where('store_id', $storeId)->exists()) {
+            DB::table('registers')->insert([
                 'store_id' => $storeId,
                 'name' => 'Kasir 1',
                 'is_active' => 1,
             ]);
         }
+        $registers = DB::table('registers')->where('store_id', $storeId)->get(['id', 'name']);
 
         foreach ([
-            ['type' => 'petty_cash', 'name' => 'Kas Kecil - Kasir 1', 'register_id' => $registerId],
             ['type' => 'main_cash', 'name' => 'Kas Besar', 'register_id' => null],
             ['type' => 'purchase_fund', 'name' => 'Saldo Pembelian', 'register_id' => null],
         ] as $account) {
             if (! DB::table('fund_accounts')->where('store_id', $storeId)->where('type', $account['type'])->exists()) {
                 DB::table('fund_accounts')->insert($account + ['store_id' => $storeId, 'is_active' => 1]);
+            }
+        }
+        foreach ($registers as $register) {
+            if (! DB::table('fund_accounts')->where('store_id', $storeId)->where('type', 'petty_cash')->where('register_id', $register->id)->exists()) {
+                DB::table('fund_accounts')->insert([
+                    'store_id' => $storeId,
+                    'type' => 'petty_cash',
+                    'name' => 'Kas Kecil - '.$register->name,
+                    'register_id' => $register->id,
+                    'is_active' => 1,
+                ]);
             }
         }
 

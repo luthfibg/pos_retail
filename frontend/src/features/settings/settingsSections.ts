@@ -2,7 +2,7 @@
  * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
  * Izin hanya untuk tampilan; backend tetap penentu akhir.
  */
-export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-authority' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
+export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-authority' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
 export type GroupId = 'store' | 'sales' | 'cash' | 'accounts';
 
 export interface SettingsSection {
@@ -58,6 +58,11 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     id: 'float-policy', group: 'cash', title: 'Kebijakan endapan', permission: 'float.configure', defaultOpen: true,
     description: 'Uang yang tetap di laci saat kasir jaga ditutup dan aturan setoran akhir kasir jaga.',
     keywords: ['endapan', 'laci', 'setoran', 'kas', 'shift'],
+  },
+  {
+    id: 'registers', group: 'cash', title: 'Mesin kasir', permission: 'register.manage', defaultOpen: true,
+    description: 'Kelola mesin kasir dan laci kas. Tiap mesin dipakai bergantian oleh kasir dan memiliki saldo kas kecil sendiri.',
+    keywords: ['register', 'laci', 'mesin', 'kasir jaga', 'shift'],
   },
   {
     id: 'users', group: 'accounts', title: 'Pengguna', permission: 'user.manage', defaultOpen: false,

@@ -3,12 +3,20 @@
 use App\Http\Controllers\CashDepositController;
 use App\Http\Controllers\CashMovementController;
 use App\Http\Controllers\FloatPolicyController;
+use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ShiftController;
 use Illuminate\Support\Facades\Route;
 
 // Dimuat dari routes/api.php (prefix /api sudah terpasang).
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('registers/available', [RegisterController::class, 'available'])->middleware('can:shift.open');
+    Route::get('registers', [RegisterController::class, 'index'])->middleware('can:register.manage');
+    Route::post('registers', [RegisterController::class, 'store'])->middleware('can:register.manage');
+    Route::get('registers/{register}', [RegisterController::class, 'show'])->whereNumber('register')->middleware('can:register.manage');
+    Route::patch('registers/{register}', [RegisterController::class, 'update'])->whereNumber('register')->middleware('can:register.manage');
+    Route::delete('registers/{register}', [RegisterController::class, 'destroy'])->whereNumber('register')->middleware('can:register.manage');
+
     // Shift kasir. Kasir hanya mengelola shift sendiri (dicek di service); Admin (shift.review) boleh semua.
     Route::get('shifts', [ShiftController::class, 'index'])->middleware('can:shift.review');
     Route::get('shifts/current', [ShiftController::class, 'current'])->middleware('can:shift.open');

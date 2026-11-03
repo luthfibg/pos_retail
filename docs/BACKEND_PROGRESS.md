@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 3 November 2026 · **Validasi terbaru alokasi PO:** `PurchaseOrderTest` 17 lulus (195 assertions), `GoodsReceiptTest` 16 lulus (200 assertions), Pint file backend baru lulus; frontend typecheck, 207 test, dan production build lulus. Suite penuh terakhir: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa). Ketiganya tidak terkait alokasi PO. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+**Diperbarui:** 3 November 2026 · **Validasi mesin kasir:** `RegisterTest` 4, `ShiftTest` 8, `CashDepositTest` 16, `SaleTest` 17, `SeederTest` 3, dan `AdminModelTest` 9 lulus; Pint, frontend typecheck, 6 tes pengaturan, dan production build lulus. `RbacTest` masih memiliki satu kegagalan lama: ekspektasi daftar permission Kasir belum memasukkan `supplier_return.create`. Suite penuh sebelumnya: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -257,7 +257,20 @@ Tipe saat ini: `customer.limit_needed` (`entity_type: "customer"`) → arahkan k
 
 ## 4. Shift Kasir ✅
 
-Alur: `open` → `counting` (penjualan baru **diblokir**) → `closed` → `reviewed`. Satu laci, satu shift aktif; Kasir hanya mengelola shift sendiri, Admin (`shift.review`) boleh semua.
+Alur: `open` → `counting` (penjualan baru **diblokir**) → `closed` → `reviewed`. Setiap mesin kasir memiliki laci/akun Kas Kecil sendiri; setiap mesin dan setiap kasir hanya dapat memiliki satu shift aktif. Kasir hanya mengelola shift sendiri, Admin (`shift.review`) boleh semua.
+
+Mesin kasir adalah entitas `registers` yang **sudah ada** dan sudah direlasikan ke shift. Tidak ada tabel mesin baru. API pengelolaan memakai izin `register.manage` (Owner/Admin); menghapus dilakukan dengan menonaktifkan mesin, bukan menghapus riwayat/akun kas.
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/registers` | `register.manage` | Daftar mesin, status, shift aktif, dan akun laci |
+| POST | `/api/registers` | `register.manage` | Buat mesin dan akun Kas Kecil tersendiri secara atomik (`{"name":"Kasir Depan"}`) |
+| GET | `/api/registers/{id}` | `register.manage` | Detail mesin |
+| PATCH | `/api/registers/{id}` | `register.manage` | Ubah nama atau status (`is_active`); alasan wajib saat menonaktifkan |
+| DELETE | `/api/registers/{id}` | `register.manage` | Nonaktifkan dengan alasan; tidak menghapus riwayat atau saldo |
+| GET | `/api/registers/available` | `shift.open` | Mesin aktif dan ketersediaannya untuk pemilihan kasir |
+
+`POST /api/shifts/open` menerima `register_id`. Bila toko hanya memiliki satu mesin aktif, field boleh dihilangkan demi kompatibilitas; bila lebih dari satu, pemilihan wajib eksplisit. Mesin yang sedang dipakai atau masih memiliki setoran akhir draft tidak tersedia. Mesin yang memiliki shift aktif tidak dapat dinonaktifkan. `register_name` ikut dikembalikan pada respons shift dan daftar laporan.
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
@@ -273,7 +286,7 @@ Nomor shift baru memakai `KASIR-JAGA-DDMMYYYY-slug-nama-kasir` (tanggal WIB), mi
 
 Respons shift (`data`):
 ```json
-{ "id": 1, "doc_number": "KASIR-JAGA-03112026-kasir-jual", "register_id": 1, "cashier_id": 4, "cashier_name": "Kasir-jual",
+{ "id": 1, "doc_number": "KASIR-JAGA-03112026-kasir-jual", "register_id": 1, "register_name": "Kasir Depan", "cashier_id": 4, "cashier_name": "Kasir-jual",
   "status": "open", "opening_balance": "0.00", "opened_at": "2026-10-23 03:00:00.000", "closed_at": null,
   "summary": { "cash_sales_count": 1, "cash_sales_total": "27500.00", "credit_sales_count": 0,
                "credit_sales_total": "0.00", "cash_in": "0.00", "cash_out": "0.00" },
