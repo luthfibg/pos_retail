@@ -785,7 +785,7 @@ CREATE TABLE invoice_payments (
 CREATE TABLE cash_shifts (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   store_id BIGINT UNSIGNED NOT NULL,
-  doc_number VARCHAR(30) NOT NULL,
+  doc_number VARCHAR(180) NOT NULL,
   register_id BIGINT UNSIGNED NOT NULL,
   cashier_id BIGINT UNSIGNED NOT NULL,
   opening_balance DECIMAL(18,2) NOT NULL DEFAULT 0, -- = endapan shift/setoran sebelumnya

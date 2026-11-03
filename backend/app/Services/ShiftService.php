@@ -4,11 +4,11 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Support\Decimal;
-use App\Support\DocumentNumber;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -27,10 +27,8 @@ class ShiftService
 {
     public function __construct(
         private AuditLogger $audit,
-        private NumberSequence $sequences,
         private CashDepositService $deposits,
-    ) {
-    }
+    ) {}
 
     /** @return array<string, mixed> */
     public function open(User $actor, int $storeId, ?string $countedOpeningCash): array
@@ -65,8 +63,7 @@ class ShiftService
                     ->orderByDesc('id')->first(['float_kept']);
                 $opening = $previous?->float_kept ?? '0.00';
 
-                $period = Carbon::now('Asia/Jakarta')->format('Ym');
-                $number = DocumentNumber::format('SHIFT', $this->sequences->next($storeId, 'SHIFT', $period), $period);
+                $number = $this->documentNumber($storeId, $actor);
 
                 $id = DB::table('cash_shifts')->insertGetId([
                     'store_id' => $storeId,
@@ -346,5 +343,21 @@ class ShiftService
     private function now(): string
     {
         return Carbon::now('UTC')->format('Y-m-d H:i:s.v');
+    }
+
+    private function documentNumber(int $storeId, User $cashier): string
+    {
+        $date = Carbon::now('Asia/Jakarta')->format('dmY');
+        $name = Str::substr(Str::slug($cashier->name), 0, 150) ?: "kasir-{$cashier->id}";
+        $base = "KASIR-JAGA-{$date}-{$name}";
+        $candidate = $base;
+        $suffix = 2;
+
+        while (DB::table('cash_shifts')->where('store_id', $storeId)->where('doc_number', $candidate)->exists()) {
+            $candidate = "{$base}-{$suffix}";
+            $suffix++;
+        }
+
+        return $candidate;
     }
 }

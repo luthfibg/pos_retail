@@ -15,9 +15,9 @@ class ShiftTest extends SeededTestCase
         $this->getJson('/api/shifts/current')->assertOk()->assertJsonPath('data', null);
 
         $response = $this->postJson('/api/shifts/open', ['counted_opening_cash' => '0'])->assertCreated();
-        $period = now('Asia/Jakarta')->format('Ym');
+        $date = now('Asia/Jakarta')->format('dmY');
 
-        $response->assertJsonPath('data.doc_number', "SHIFT-{$period}-000001")
+        $response->assertJsonPath('data.doc_number', "KASIR-JAGA-{$date}-kasir-uji")
             ->assertJsonPath('data.status', 'open')
             ->assertJsonPath('data.opening_balance', '0.00')
             ->assertJsonPath('data.cashier_id', $cashier->id)
@@ -35,6 +35,19 @@ class ShiftTest extends SeededTestCase
 
         $this->signIn('Kasir', 'kasir-dua');
         $this->postJson('/api/shifts/open')->assertUnprocessable()->assertJsonValidationErrors(['shift']);
+    }
+
+    public function test_reopened_shift_gets_a_unique_suffix_for_the_same_cashier_and_date(): void
+    {
+        $this->signIn('Kasir');
+        $date = now('Asia/Jakarta')->format('dmY');
+
+        $first = $this->postJson('/api/shifts/open')->assertCreated();
+        $first->assertJsonPath('data.doc_number', "KASIR-JAGA-{$date}-kasir-uji");
+
+        $this->postJson("/api/shifts/{$first->json('data.id')}/close", ['counted_cash' => '0'])->assertOk();
+        $second = $this->postJson('/api/shifts/open')->assertCreated();
+        $second->assertJsonPath('data.doc_number', "KASIR-JAGA-{$date}-kasir-uji-2");
     }
 
     public function test_close_computes_variance_requires_note_and_carries_float_to_next_shift(): void
