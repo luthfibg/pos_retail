@@ -37,6 +37,7 @@ class PurchaseOrderService
         private ReauthService $reauth,
         private NotificationService $notifications,
         private PurchaseRequisitionService $requisitions,
+        private PurchaseFundService $purchaseFunds,
     ) {
     }
 
@@ -55,7 +56,9 @@ class PurchaseOrderService
 
         $manager = $this->permissions->allows($user, 'purchase_order.create', $storeId)
             || $this->permissions->allows($user, 'purchase_order.send', $storeId)
-            || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId);
+            || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId)
+            || $this->permissions->allows($user, 'purchase_fund.view', $storeId)
+            || $this->permissions->allows($user, 'purchase_fund.allocate', $storeId);
 
         if (! $manager || ! empty($filters['receivable'])) {
             $query->whereIn('po.status', self::RECEIVABLE);
@@ -112,7 +115,9 @@ class PurchaseOrderService
         // Kasir hanya melihat PO yang dapat menerima barang
         $canManage = $this->permissions->allows($user, 'purchase_order.create', $storeId)
             || $this->permissions->allows($user, 'purchase_order.send', $storeId)
-            || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId);
+            || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId)
+            || $this->permissions->allows($user, 'purchase_fund.view', $storeId)
+            || $this->permissions->allows($user, 'purchase_fund.allocate', $storeId);
 
         if (! $canManage
             && ! in_array($detail['status'], self::RECEIVABLE, true)) {
@@ -227,6 +232,9 @@ class PurchaseOrderService
             }
 
             if ($changes !== []) {
+                if (isset($changes['total']) && Decimal::money((string) $changes['total']) !== Decimal::money((string) $po->total)) {
+                    $this->purchaseFunds->releaseForPo($actor, $storeId, $id, 'Alokasi dilepas karena nilai PO berubah.');
+                }
                 DB::table('purchase_orders')->where('id', $id)->update($changes);
 
                 $this->audit->log(
@@ -247,7 +255,7 @@ class PurchaseOrderService
     }
 
     /**
-     * Draft -> menunggu konfirmasi; otomatis disetujui bila total tidak melebihi total PR (lihat kelas).
+     * Draft -> menunggu konfirmasi Owner setelah dana untuk total PO dialokasikan Finance.
      *
      * @return array<string, mixed>
      */
@@ -261,63 +269,51 @@ class PurchaseOrderService
                 throw ValidationException::withMessages(['items' => ['PO minimal berisi satu item.']]);
             }
 
-            $pr = DB::table('purchase_requisitions')->where('id', $po->pr_id)->lockForUpdate()->first();
+            $allocation = DB::table('purchase_fund_allocations')
+                ->where('purchase_order_id', $id)->where('status', 'reserved')->lockForUpdate()->first();
+            if ($allocation === null || Decimal::money((string) $allocation->amount) !== Decimal::money((string) $po->total)) {
+                throw ValidationException::withMessages(['allocation' => ['Alokasikan dana sebesar total PO sebelum mengajukan ke Owner.']]);
+            }
 
-            $cumulative = Decimal::money((string) DB::table('purchase_orders')
-                ->where('pr_id', $po->pr_id)->where('status', '<>', 'cancelled')
-                ->selectRaw('COALESCE(SUM(total), 0) as t')->value('t'));
-            $ceiling = Decimal::money($pr->est_total);
-
-            $auto = $ceiling > 0 && $cumulative <= $ceiling;
-            $newStatus = $auto ? 'approved' : 'pending_confirmation';
-
-            DB::table('purchase_orders')->where('id', $id)->update(['status' => $newStatus]);
+            DB::table('purchase_orders')->where('id', $id)->update(['status' => 'pending_confirmation']);
 
             $this->audit->log(
                 'purchase_order.submit',
                 'purchase_order',
                 $id,
                 before: ['status' => 'draft'],
-                after: ['status' => $newStatus],
+                after: ['status' => 'pending_confirmation', 'allocation_id' => (int) $allocation->id],
                 actorId: $actor->id,
                 storeId: $storeId,
             );
 
-            if ($auto) {
-                $this->audit->log(
-                    'purchase_order.approve',
-                    'purchase_order',
-                    $id,
-                    before: ['status' => 'pending_confirmation'],
-                    after: ['status' => 'approved'],
-                    reason: 'Otomatis: total PO tidak melebihi total PR yang disetujui.',
-                    actorId: $actor->id,
-                    storeId: $storeId,
-                );
-            }
-
-            return [$po, $auto];
+            return $po;
         });
 
-        [$po, $auto] = $result;
-
-        if (! $auto) {
-            $this->notifications->notifyPermission(
-                $storeId,
-                'purchase_requisition.approve',
-                'po.needs_confirmation',
-                "PO {$po->doc_number} melebihi total PR atau PR tanpa estimasi; menunggu konfirmasi Owner.",
-                'purchase_order',
-                $id,
-                $actor->id,
-            );
-        }
+        $po = $result;
+        $this->notifications->notifyPermission(
+            $storeId,
+            'purchase_requisition.approve',
+            'po.needs_confirmation',
+            "PO {$po->doc_number} sudah didanai di sistem dan menunggu persetujuan Owner.",
+            'purchase_order',
+            $id,
+            $actor->id,
+        );
 
         return $this->load($storeId, $id, true) ?? [];
     }
 
+    /** @return array<string, mixed> */
+    public function allocateFunds(User $actor, int $storeId, int $id, int $bankAccountId): array
+    {
+        $allocation = $this->purchaseFunds->allocate($actor, $storeId, $id, $bankAccountId);
+
+        return $this->load($storeId, $id, true) ?? ['fund_allocation' => $allocation];
+    }
+
     /**
-     * Konfirmasi Owner untuk PO yang melebihi total PR. Re-auth wajib selama approval_reauth_required aktif.
+     * Konfirmasi Owner untuk PO yang sudah didanai. Re-auth wajib selama approval_reauth_required aktif.
      *
      * @param  array<string, mixed>  $data  approver_username?, approver_password?, note?
      * @return array<string, mixed>
@@ -344,6 +340,11 @@ class PurchaseOrderService
         $po = DB::transaction(function () use ($actor, $approver, $storeId, $id, $data) {
             $po = $this->lock($storeId, $id);
             $this->assertStatus($po, ['pending_confirmation'], 'PO tidak sedang menunggu konfirmasi.');
+            $allocation = DB::table('purchase_fund_allocations')
+                ->where('purchase_order_id', $id)->where('status', 'reserved')->lockForUpdate()->first();
+            if ($allocation === null || Decimal::money((string) $allocation->amount) !== Decimal::money((string) $po->total)) {
+                throw ValidationException::withMessages(['allocation' => ['Alokasi dana PO tidak tersedia atau nilainya sudah tidak sesuai.']]);
+            }
 
             DB::table('purchase_orders')->where('id', $id)->update(['status' => 'approved']);
 
@@ -375,6 +376,9 @@ class PurchaseOrderService
         DB::transaction(function () use ($actor, $storeId, $id) {
             $po = $this->lock($storeId, $id);
             $this->assertStatus($po, ['approved'], 'Hanya PO yang sudah disetujui yang dapat dikirim ke supplier.');
+            if (! DB::table('purchase_fund_allocations')->where('purchase_order_id', $id)->where('status', 'reserved')->exists()) {
+                throw ValidationException::withMessages(['allocation' => ['Alokasi dana harus tetap aktif sebelum PO dikirim ke supplier.']]);
+            }
 
             DB::table('purchase_orders')->where('id', $id)->update(['status' => 'sent']);
 
@@ -404,6 +408,7 @@ class PurchaseOrderService
                 throw ValidationException::withMessages(['status' => ['PO sudah memiliki penerimaan terposting; gunakan "tutup".']]);
             }
 
+            $this->purchaseFunds->releaseForPo($actor, $storeId, $id, $reason);
             DB::table('purchase_orders')->where('id', $id)->update(['status' => 'cancelled']);
             $this->syncConversion((int) $po->pr_id, $actor, $storeId);
 
@@ -476,6 +481,8 @@ class PurchaseOrderService
             $this->permissions->allows($user, 'purchase_order.create', $storeId)
                 || $this->permissions->allows($user, 'purchase_order.send', $storeId)
                 || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId)
+                || $this->permissions->allows($user, 'purchase_fund.view', $storeId)
+                || $this->permissions->allows($user, 'purchase_fund.allocate', $storeId)
                 || $this->permissions->allows($user, 'goods_receipt.create', $storeId),
             403,
             'Anda tidak berwenang melihat PO.',
@@ -486,6 +493,8 @@ class PurchaseOrderService
     {
         return $this->permissions->allows($user, 'purchase_order.create', $storeId)
             || $this->permissions->allows($user, 'purchase_requisition.approve', $storeId)
+            || $this->permissions->allows($user, 'purchase_fund.view', $storeId)
+            || $this->permissions->allows($user, 'purchase_fund.allocate', $storeId)
             || $this->permissions->allows($user, 'goods_receipt.verify_documents', $storeId);
     }
 
@@ -675,6 +684,18 @@ class PurchaseOrderService
                 'line_total' => $prices ? LineTotal::money($row->qty_ordered, $row->unit_price) : null,
             ])->all();
 
+        $allocation = DB::table('purchase_fund_allocations as a')
+            ->join('bank_accounts as b', 'b.id', '=', 'a.bank_account_id')
+            ->where('a.purchase_order_id', $id)->where('a.status', 'reserved')->orderByDesc('a.id')->first([
+                'a.id', 'a.bank_account_id', 'a.amount', 'a.status', 'a.created_at',
+                'b.bank_name', 'b.account_name', 'b.account_number',
+            ]);
+        $maskedAccountNumber = $allocation === null
+            ? null
+            : (strlen($allocation->account_number) <= 4
+                ? str_repeat('•', strlen($allocation->account_number))
+                : '••••'.substr($allocation->account_number, -4));
+
         $receipts = DB::table('goods_receipts')->where('po_id', $id)->orderBy('id')
             ->get(['id', 'doc_number', 'status', 'document_status', 'posted_at'])
             ->map(fn ($row) => [
@@ -699,6 +720,16 @@ class PurchaseOrderService
             'order_date' => $po->order_date,
             'expected_date' => $po->expected_date,
             'total' => $prices ? $po->total : null,
+            'fund_allocation' => $allocation === null ? null : [
+                'id' => (int) $allocation->id,
+                'bank_account_id' => (int) $allocation->bank_account_id,
+                'bank_name' => $allocation->bank_name,
+                'account_name' => $allocation->account_name,
+                'account_number_masked' => $maskedAccountNumber,
+                'amount' => $allocation->amount,
+                'status' => $allocation->status,
+                'created_at' => $allocation->created_at,
+            ],
             'created_by' => (int) $po->created_by,
             'created_by_name' => $po->created_by_name,
             'created_at' => $po->created_at,

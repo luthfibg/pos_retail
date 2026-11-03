@@ -1,11 +1,11 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 31 Oktober 2026 (suite backend terakhir: **243 lulus, 1 gagal** pada fixture tanggal `ReportTest`; detail di `BACKEND_PROGRESS.md`) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 3 November 2026 (suite backend terakhir: **294 lulus, 3 gagal** pada test lama yang tidak terkait alokasi PO; detail di `BACKEND_PROGRESS.md`) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
 | ✅ | Selesai **dan** `php artisan test` sudah dijalankan dan hijau |
-| 🟡 | Kode + test sudah ditulis, **belum dijalankan** (agent tidak punya PHP). Boleh dibuatkan UI terhadap kontraknya, tetapi respons nyata bisa sedikit berbeda sampai test hijau |
+| 🟡 | Kode + test sudah ditulis, tetapi validasi belum lengkap/hijau atau masih menunggu konfirmasi pengguna |
 | ⏳ | Belum dikerjakan |
 | ⏸ | Ditunda: menunggu klien atau di luar cakupan 1 bulan (Paket 2/3) |
 
@@ -78,7 +78,7 @@ UI Manajemen Pengguna `/users` kini menyediakan daftar/cari/filter, tambah dan u
 
 UI Tagihan HRD `/billing` mengelola periode, merinci kredit per karyawan, membuat/mencetak invoice, memproses penerbitan dan serah terima, serta mencatat pembayaran sebagian. Cetakan A4 mencakup status invoice, ringkasan pembayaran, dan sisa tagihan. Pengguna mengonfirmasi uji klik berjalan lancar.
 
-UI Dashboard `/dashboard` menggunakan endpoint laporan gabungan untuk penjualan/kas/inventori, serta endpoint laba terpisah. Pemegang `reports.profit.view` saja melihat laba valid dan expected, total laba kotor, komposisi status pembayaran, pendapatan, HPP, dan rincian tunai/kredit gaji. Laba memakai filter tanggal tetapi mencakup semua kasir; bila filter ID kasir dipakai untuk bagian dashboard lain, UI menampilkan penjelasan agar cakupan laba tidak disalahartikan. UI `/settings` juga menyediakan perubahan nama toko untuk pemegang `settings.manage`, berdasarkan `store.name` dari `/auth/me` dan memperbarui sesi setelah berhasil. Pengguna sebelumnya telah mengonfirmasi filter dashboard menampilkan data yang benar; visual profit dan nama toko baru menunggu uji klik.
+UI Dashboard `/dashboard` memakai endpoint laporan gabungan dan laba, serta menampilkan kartu ringkasan untuk setiap menu sidebar yang diizinkan bagi pengguna aktif. Kartu mencakup status/antrean shift, penjualan, setoran, pembelian, persediaan, dan data master; detail grafik dan laporan tetap tersedia dalam panel terpisah. Laba diterima/belum diterima hanya terlihat bagi pemegang `reports.profit.view`; perbedaan cakupan filter kasir dijelaskan. Ringkasan memakai endpoint daftar yang telah ada dan kesalahan dilaporkan per kartu. UI `/settings` juga tetap menyediakan perubahan nama toko berdasarkan `store.name` dari `/auth/me`. Perubahan dashboard menunggu uji klik.
 
 Tahap sebelumnya mencakup UI Transfer Stok `/inventory/transfers` (daftar/filter, Draft dari saldo sellable per batch/posisi, detail, posting, pembatalan) dan lampiran privat di detail `/goods-receipts` (unggah/unduh JPEG, PNG, WebP, PDF). Backend belum menyediakan katalog posisi rak, jadi posisi tujuan transfer dapat diisi sebagai ID opsional; transfer antar lokasi tetap berfungsi tanpa posisi tujuan.
 
@@ -192,7 +192,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
-| P2 | Paket 2: Saldo Pembelian + alokasi, pembayaran supplier, setoran bank, expenses, retur pelanggan, credit note | ⏸ |  |
+| P2 | Paket 2: Saldo Pembelian + alokasi, pembayaran supplier, setoran bank, expenses, retur pelanggan, credit note | 🟡 | Fondasi rekening bank, Kas Pembelian, alokasi dana PO, persetujuan Owner, dan pelepasan alokasi sudah dibuat; `PurchaseOrderTest` dan `GoodsReceiptTest` lulus terarah. Suite penuh 294/297 dengan tiga kegagalan test lama yang tidak terkait. Pembayaran supplier dan modul P2 lainnya belum dikerjakan |
 | P3 | Paket 3: retur supplier + write-off, rekonsiliasi bank, laporan analitik Owner | 🟡 | Retur supplier/write-off backend dan UI tersedia; test frontend lulus, uji klik menunggu. Rekonsiliasi bank dan analitik Owner masih tersisa |
 
 ---
@@ -204,7 +204,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | SeederTest, AuthTest, RbacTest, ReauthServiceTest, CategoryTest, SupplierTest, ProductTest, NumberSequenceTest, DecimalTest, Ean13Test, StockStatusTest | 3 · 8 · 7 · 6 · 8 · 4 · 15 · 1 · 4 · 2 · 5 | ✅ | pengguna (24 Okt 2026) |
 | InventoryServiceTest, OpeningBalanceTest, CustomerTest, NotificationTest | 10 · 9 · 12 · 4 | ✅ | pengguna (24 Okt 2026) |
 | ShiftTest, SaleTest | 7 · 17 | ✅ | pengguna (24 Okt 2026) |
-| PurchaseRequisitionTest, PurchaseOrderTest, GoodsReceiptTest (+ `tests/Concerns/BuildsPurchasing.php`) | 12 · 13 · 16 | ✅ | backend test run (27 Okt 2026) |
+| PurchaseRequisitionTest, PurchaseOrderTest, GoodsReceiptTest (+ `tests/Concerns/BuildsPurchasing.php`) | 12 · 17 · 16 | 🟡 | `PurchaseOrderTest` (17) dan `GoodsReceiptTest` (16) lulus terarah; suite penuh 294/297 dengan tiga kegagalan test lama yang tidak terkait |
 | SaleVoidTest, CashDepositTest | 6 · 16 | ✅ | test backend (28 Okt 2026) |
 | BillingTest | 10 | ✅ | pengguna (25 Okt 2026) |
 | PricingSettingsTest | 6 | ✅ | pengguna (25 Okt 2026) |

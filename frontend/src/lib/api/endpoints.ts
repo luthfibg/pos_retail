@@ -13,6 +13,7 @@ import type {
   WarehouseSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting,
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
   SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
+  BankAccount, PurchaseFundSummary,
 } from './types';
 
 export const authApi = {
@@ -209,10 +210,34 @@ export const purchaseOrderApi = {
     api<{ data: PurchaseOrder }>(`/purchase-orders/${id}/send`, { method: 'POST' }).then((r) => r.data),
 };
 
+export const purchaseFundApi = {
+  summary: () => api<{ data: PurchaseFundSummary }>('/purchase-fund').then((r) => r.data),
+  createBankAccount: (input: {
+    bank_name: string;
+    account_name: string;
+    account_number: string;
+    opening_balance: string;
+    reason: string;
+  }) => api<{ data: BankAccount }>('/bank-accounts', { method: 'POST', body: input }).then((r) => r.data),
+  adjustBankAccount: (id: number, input: { direction: 'increase' | 'decrease'; amount: string; reason: string }) =>
+    api<{ data: BankAccount }>(`/bank-accounts/${id}/adjustments`, { method: 'POST', body: input }).then((r) => r.data),
+  allocate: (poId: number, bank_account_id: number) =>
+    api<{ data: PurchaseOrder }>(`/purchase-orders/${poId}/fund-allocation`, {
+      method: 'POST',
+      body: { bank_account_id },
+    }).then((r) => r.data),
+};
+
 export const goodsReceiptApi = {
   receivingLocations: () =>
     api<{ data: GoodsReceiptLocation[] }>('/goods-receipts/receiving-locations').then((r) => r.data),
-  list: (f: { q?: string; page?: number; per_page?: number } = {}) =>
+  list: (f: {
+    q?: string;
+    status?: GoodsReceipt['status'];
+    document_status?: GoodsReceipt['document_status'];
+    page?: number;
+    per_page?: number;
+  } = {}) =>
     api<Paginated<GoodsReceiptSummary>>('/goods-receipts', { query: { ...f } }),
   get: (id: number) => api<{ data: GoodsReceipt }>(`/goods-receipts/${id}`).then((r) => r.data),
   uploadAttachment: (id: number, file: File) => {

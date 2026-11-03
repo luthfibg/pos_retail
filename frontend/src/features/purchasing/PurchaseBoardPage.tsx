@@ -8,6 +8,7 @@ import type { PurchaseOrder, PurchaseOrderSummary, PurchaseRequisition, Purchase
 import { formatDate, formatDateTime, formatRupiah } from '@/lib/format';
 import { ORDER_STATUS_LABEL, PurchaseOrderCreateDialog, PurchaseOrderManageDialog } from './PurchaseOrderDialogs';
 import { PurchasePrintSheet, type PrintJob } from './PurchasePrint';
+import { PurchaseFundPanel } from './PurchaseFundPanel';
 import {
   PurchaseRequisitionDetailDialog,
   PurchaseRequisitionForm,
@@ -42,7 +43,9 @@ export function PurchasingEntryPage() {
   const manages = can('purchase_requisition.finance_check')
     || can('purchase_requisition.approve')
     || can('purchase_order.create')
-    || can('purchase_order.send');
+    || can('purchase_order.send')
+    || can('purchase_fund.view')
+    || can('purchase_fund.allocate');
   return manages ? <PurchaseBoardPage /> : <PurchaseRequisitionsPage />;
 }
 
@@ -53,7 +56,8 @@ export function PurchaseBoardPage() {
   const canApprove = can('purchase_requisition.approve');
   const canCreatePo = can('purchase_order.create');
   const canSendPo = can('purchase_order.send');
-  const canManagePo = canCreatePo || canSendPo || canApprove;
+  const canViewPurchaseFund = can('purchase_fund.view') || can('purchase_fund.allocate');
+  const canManagePo = canCreatePo || canSendPo || canApprove || canViewPurchaseFund;
 
   const [tab, setTab] = useState<FlowTab>('pr_new');
   const [search, setSearch] = useState('');
@@ -182,7 +186,7 @@ export function PurchaseBoardPage() {
     pr_new: canFinanceCheck,
     owner: canApprove,
     ready: canCreatePo,
-    po_process: canCreatePo || canSendPo || canApprove,
+    po_process: canManagePo,
     po_out: false,
   };
   const activeStage = FLOW_STAGES.find((stage) => stage.key === tab);
@@ -210,6 +214,8 @@ export function PurchaseBoardPage() {
             {canCreatePr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat PR</button>}
           </div>
         </header>
+
+        {canViewPurchaseFund && <PurchaseFundPanel />}
 
         <div role="tablist" aria-label="Tahap pembelian" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
           {visibleStages.map((stage, index) => {

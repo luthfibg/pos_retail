@@ -7,6 +7,7 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import type { ProfitReport } from '@/lib/api/types';
 import { chartHeight, profitComposition, validateDashboardFilters, type DashboardFilterValues } from './dashboardFilters';
+import { DashboardMenuSummaries } from './DashboardMenuSummaries';
 
 function todayWib(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -63,18 +64,11 @@ export function DashboardPage() {
   }
 
   const report = query.data;
-  const summaryCards = report ? [
-    { label: 'Penjualan bersih', value: amountLabel(report.sales.summary.net_sales), detail: `${report.sales.summary.transaction_count} transaksi` },
-    { label: 'Penjualan tunai', value: amountLabel(report.sales.by_payment_mode.cash.net_sales), detail: `${report.sales.by_payment_mode.cash.transaction_count} transaksi` },
-    { label: 'Kredit gaji', value: amountLabel(report.sales.by_payment_mode.payroll_credit.net_sales), detail: `${report.sales.by_payment_mode.payroll_credit.transaction_count} transaksi` },
-    { label: 'Pergerakan kas bersih', value: amountLabel(report.cash.net_cash_movement), detail: `${report.cash.shift_count} shift dibuka` },
-  ] : [];
-
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <header>
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-600">Ringkasan penjualan, kas, dan kondisi persediaan toko.</p>
+        <p className="mt-1 text-sm text-slate-600">Ringkasan menu yang tersedia untuk akun Anda.</p>
       </header>
 
       <form onSubmit={applyFilters} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
@@ -105,14 +99,29 @@ export function DashboardPage() {
       </form>
 
       <ErrorNotice error={query.error} />
+      {canViewProfit && <ErrorNotice error={profitQuery.error} />}
+      {canViewProfit && canReviewShifts && applied.cashierId && (
+        <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
+          Laba mencakup semua kasir di toko; filter kasir hanya berlaku untuk ringkasan penjualan dan kas.
+        </p>
+      )}
+      <DashboardMenuSummaries
+        report={report}
+        profit={profitQuery.data}
+        reportPending={query.isPending}
+        profitPending={profitQuery.isPending}
+        applied={applied}
+      />
       {query.isPending ? (
         <p role="status" className="py-8 text-center text-sm text-slate-500">Memuat dashboard…</p>
       ) : report ? (
-        <div className="space-y-6" aria-busy={query.isFetching}>
+        <details className="rounded-lg border border-slate-200 bg-white p-4" aria-busy={query.isFetching}>
+          <summary className="cursor-pointer font-semibold">Rincian penjualan, kas, persediaan, dan laba</summary>
+          <div className="mt-4 space-y-6">
           {canViewProfit && (
             <section aria-label="Laporan laba kotor" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
               <div>
-                <h2 className="text-lg font-semibold">Laba kotor</h2>
+                <h2 className="text-lg font-semibold">Laporan Laba/Rugi (Gross Profit)</h2>
                 <p className="text-sm text-slate-500">
                   {profitQuery.data
                     ? `${formatDate(profitQuery.data.period.date_from)} – ${formatDate(profitQuery.data.period.date_to)}`
@@ -120,12 +129,6 @@ export function DashboardPage() {
                   {' · '}Pendapatan setelah diskon, sebelum PPN, dikurangi HPP snapshot.
                 </p>
               </div>
-              {canReviewShifts && applied.cashierId && (
-                <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                  Laporan laba mencakup semua kasir di toko; filter ID kasir hanya berlaku untuk ringkasan penjualan dan kas.
-                </p>
-              )}
-              <ErrorNotice error={profitQuery.error} />
               {profitQuery.isPending ? (
                 <p role="status" className="py-4 text-sm text-slate-500">Memuat laporan laba…</p>
               ) : profitQuery.data ? (
@@ -133,16 +136,6 @@ export function DashboardPage() {
               ) : null}
             </section>
           )}
-
-          <section aria-label="Ringkasan" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {summaryCards.map((card) => (
-              <article key={card.label} className="rounded-lg border border-slate-200 bg-white p-4">
-                <h2 className="text-sm text-slate-600">{card.label}</h2>
-                <p className="mt-2 text-xl font-semibold">{card.value}</p>
-                <p className="mt-1 text-xs text-slate-500">{card.detail}</p>
-              </article>
-            ))}
-          </section>
 
           <section className="grid gap-6 xl:grid-cols-2">
             <article className="min-w-0 rounded-lg border border-slate-200 bg-white p-4">
@@ -192,7 +185,7 @@ export function DashboardPage() {
                 <Metric label="Setoran dihitung" value={amountLabel(report.cash.deposits.counted_amount)} />
                 <Metric label="Setoran diterima" value={amountLabel(report.cash.deposits.received_amount)} />
                 <Metric label="Setoran final / diajukan" value={amountLabel(report.cash.deposits.settled_amount)} />
-                <Metric label="Kredit gaji" value={amountLabel(report.cash.sales.payroll_credit)} />
+                <Metric label="Penjualan potong gaji" value={amountLabel(report.cash.sales.payroll_credit)} />
               </dl>
               {canReviewShifts && report.cash.fund_balances.length > 0 && (
                 <div className="mt-5 border-t border-slate-100 pt-4">
@@ -267,7 +260,8 @@ export function DashboardPage() {
             </article>
           </section>
           <p className="text-xs text-slate-500">Ambang peringatan kedaluwarsa toko: {report.inventory.warning_days} hari. Data inventori menunjukkan kondisi stok saat ini.</p>
-        </div>
+          </div>
+        </details>
       ) : null}
     </div>
   );
@@ -279,12 +273,12 @@ function ProfitSummary({ report }: { report: ProfitReport }) {
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <article className="rounded-md border border-emerald-200 bg-emerald-50/60 p-4">
-          <h3 className="text-sm font-medium text-emerald-900">Laba valid</h3>
+          <h3 className="text-sm font-medium text-emerald-900">Laba kotor diterima</h3>
           <p className="mt-1 text-2xl font-semibold text-emerald-950">{amountLabel(report.valid_profit)}</p>
           <p className="mt-1 text-xs text-emerald-900">Tunai + bagian laba kredit HRD yang sudah dibayar.</p>
         </article>
         <article className="rounded-md border border-amber-200 bg-amber-50/70 p-4">
-          <h3 className="text-sm font-medium text-amber-900">Laba expected</h3>
+          <h3 className="text-sm font-medium text-amber-900">Laba kotor belum diterima</h3>
           <p className="mt-1 text-2xl font-semibold text-amber-950">{amountLabel(report.expected_profit)}</p>
           <p className="mt-1 text-xs text-amber-900">Bagian laba kredit HRD yang belum tervalidasi pembayaran.</p>
         </article>
@@ -331,13 +325,13 @@ function ProfitSummary({ report }: { report: ProfitReport }) {
           <h3 className="font-semibold">Rincian menurut pembayaran</h3>
           <dl className="mt-3 space-y-3 text-sm">
             <div className="rounded-md bg-slate-50 p-3">
-              <dt className="font-medium">Penjualan tunai</dt>
-              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba valid</span><span className="font-medium">{amountLabel(report.by_payment_mode.cash.valid_profit)}</span></dd>
+              <dt className="font-medium">Penjualan tunai kasir</dt>
+              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba kotor diterima</span><span className="font-medium">{amountLabel(report.by_payment_mode.cash.valid_profit)}</span></dd>
             </div>
             <div className="rounded-md bg-slate-50 p-3">
-              <dt className="font-medium">Kredit gaji</dt>
-              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba valid</span><span className="font-medium">{amountLabel(report.by_payment_mode.payroll_credit.valid_profit)}</span></dd>
-              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba expected</span><span className="font-medium">{amountLabel(report.by_payment_mode.payroll_credit.expected_profit)}</span></dd>
+              <dt className="font-medium">Penjualan potong gaji</dt>
+              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba kotor diterima</span><span className="font-medium">{amountLabel(report.by_payment_mode.payroll_credit.valid_profit)}</span></dd>
+              <dd className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Laba kotor belum diterima</span><span className="font-medium">{amountLabel(report.by_payment_mode.payroll_credit.expected_profit)}</span></dd>
             </div>
           </dl>
         </div>

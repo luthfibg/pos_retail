@@ -976,7 +976,43 @@ export interface PurchaseOrderSummary {
   order_date: string;
   expected_date: string | null;
   total: Decimal | null;
+  fund_allocation?: PurchaseFundAllocation | null;
   created_at: string;
+}
+
+export interface PurchaseFundAllocation {
+  id: number;
+  bank_account_id: number;
+  bank_name: string;
+  account_name: string;
+  account_number_masked: string;
+  amount: Decimal;
+  status: 'reserved';
+  created_at: string;
+}
+
+export interface BankAccount {
+  id: number;
+  bank_name: string;
+  account_name: string;
+  account_number_masked: string;
+  is_active: boolean;
+  balance: Decimal;
+  reserved_for_purchase_fund: Decimal;
+  available_balance: Decimal;
+}
+
+export interface PurchaseFundSummary {
+  balance: Decimal;
+  reserved_total: Decimal;
+  bank_accounts: BankAccount[];
+  allocations: Array<{
+    allocation_id: number;
+    purchase_order_id: number;
+    po_doc_number: string;
+    po_status: PurchaseOrderStatus;
+    amount: Decimal;
+  }>;
 }
 
 export interface PurchaseOrderItem {

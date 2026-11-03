@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 2 November 2026 · **Validasi terbaru:** `SupplierReturnTest` 6 lulus (60 assertions); regresi `StockAuthorityTest`, `StockAdjustmentTest`, `GoodsReceiptTest`, dan `SaleTest` 54 lulus (611 assertions); frontend `stockAuthorityLogic.test.ts` 7 lulus dan typecheck lulus. Suite penuh terakhir: 243 lulus, 1 gagal pada `ReportTest` karena fixture tanggal `2026-10-30` diklasifikasikan `hari_ini` alih-alih `akan_kedaluwarsa` (gagal juga saat dijalankan tersendiri). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+**Diperbarui:** 3 November 2026 · **Validasi terbaru alokasi PO:** `PurchaseOrderTest` 17 lulus (195 assertions), `GoodsReceiptTest` 16 lulus (200 assertions), Pint file backend baru lulus; frontend typecheck, 207 test, dan production build lulus. Suite penuh terakhir: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa). Ketiganya tidak terkait alokasi PO. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -427,13 +427,14 @@ Daftar supplier dapat dibaca oleh pemegang `supplier.manage` atau `purchase_orde
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
-| GET | `/api/purchase-orders` | Salah satu: `purchase_order.create`, `purchase_order.send`, `purchase_requisition.approve`, `goods_receipt.create` | Daftar. Pengelola PO: semua; **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
-| GET | `/api/purchase-orders/{po}` | Sama dengan izin daftar | Detail + item + daftar penerimaan; pembatasan status untuk Kasir tetap berlaku |
+| GET | `/api/purchase-orders` | Salah satu: `purchase_order.create`, `purchase_order.send`, `purchase_requisition.approve`, `purchase_fund.view`, `purchase_fund.allocate`, `goods_receipt.create` | Daftar. Pengelola PO: semua; **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
+| GET | `/api/purchase-orders/{po}` | Sama dengan izin daftar | Detail + item + daftar penerimaan dan alokasi aktif; pembatasan status untuk Kasir tetap berlaku |
 | POST | `/api/purchase-orders` | `purchase_order.create` | Buat PO **draft** dari PR `approved` |
 | PATCH | `/api/purchase-orders/{po}` | `purchase_order.create` | Ubah saat `draft` (`pr_id` tidak dapat diubah) |
-| POST | `/api/purchase-orders/{po}/submit` | `purchase_order.create` | `draft` → **otomatis `approved`** bila total PO ≤ total estimasi PR, selain itu `pending_confirmation` |
+| POST | `/api/purchase-orders/{po}/fund-allocation` | `purchase_fund.allocate` | `{ "bank_account_id": 1 }`; mencadangkan **seluruh total PO** dari saldo rekening yang tersedia ke Kas Pembelian. Tidak mengirim transfer bank |
+| POST | `/api/purchase-orders/{po}/submit` | Salah satu: `purchase_order.create`, `purchase_fund.allocate` | Hanya bisa setelah alokasi penuh; selalu `draft` → `pending_confirmation` |
 | POST | `/api/purchase-orders/{po}/confirm` | `purchase_requisition.approve` | Konfirmasi Owner untuk `pending_confirmation` (`approver_username`, `approver_password`, `note?`) |
-| POST | `/api/purchase-orders/{po}/send` | `purchase_order.send` | `approved` → `sent` |
+| POST | `/api/purchase-orders/{po}/send` | `purchase_order.send` | `approved` → `sent`; alokasi harus tetap aktif |
 | POST | `/api/purchase-orders/{po}/cancel` | `purchase_order.create` | `{ "reason" }` wajib; sebelum ada penerimaan |
 | POST | `/api/purchase-orders/{po}/close` | `purchase_order.create` | `{ "reason" }` wajib; tutup manual PO yang sebagian diterima |
 
@@ -444,11 +445,22 @@ Permintaan buat:
 ```
 `payment_terms` (`prepaid|credit|cod`) default dari supplier. `order_date` default hari ini (WIB).
 
-Status PO: `draft` → (`pending_confirmation`) → `approved` → `sent` → `partially_received` → `received`; cabang `cancelled`. Status penerimaan terpisah: `receipt_status` = `none|partial|complete`; `payment_status` = `unpaid` (pembayaran = Paket 2).
+Status PO: `draft` → `pending_confirmation` → `approved` → `sent` → `partially_received` → `received`; cabang `cancelled`. Semua PO wajib menunggu konfirmasi Owner, tanpa auto-approval berdasarkan estimasi PR. Status penerimaan terpisah: `receipt_status` = `none|partial|complete`; `payment_status` = `unpaid` (pembayaran = Paket 2).
 
 Aturan: PO **wajib dari PR `approved`**; satu PR boleh dipecah ke beberapa PO (per supplier); qty per produk **kumulatif** tidak boleh melebihi qty PR (422 `errors["items.N.qty_ordered"]` memuat sisa); PR otomatis menjadi `converted` bila semua item sudah tercakup dan kembali `approved` bila PO dibatalkan.
 
-Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_status, payment_terms, pr_id, pr_doc_number, supplier_id, supplier_name, order_date, expected_date, total, created_by_name`, `items[]` (`id` = **`po_item_id`** untuk penerimaan, `product_id, sku, name, unit_name, qty_ordered, qty_received, qty_remaining, unit_price, line_total`), `receipts[]` (`id, doc_number, status, document_status, posted_at`).
+Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_status, payment_terms, pr_id, pr_doc_number, supplier_id, supplier_name, order_date, expected_date, total, fund_allocation|null, created_by_name`, `fund_allocation` (`id, bank_account_id, bank_name, account_name, account_number_masked, amount, status, created_at`), `items[]` (`id` = **`po_item_id`** untuk penerimaan, `product_id, sku, name, unit_name, qty_ordered, qty_received, qty_remaining, unit_price, line_total`), `receipts[]` (`id, doc_number, status, document_status, posted_at`).
+
+### 6.2.1 Rekening bank dan Kas Pembelian
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/bank-accounts` | Salah satu: `purchase_fund.view`, `purchase_fund.allocate` | Saldo rekening tercatat manual, saldo yang dicadangkan untuk PO, dan saldo tersedia untuk alokasi. Nomor rekening dimasking kecuali 4 digit terakhir |
+| POST | `/api/bank-accounts` | `bank_account.manage` | `{ "bank_name", "account_name", "account_number", "opening_balance", "reason" }`; buat rekening + catat saldo awal manual beserta alasan; nomor rekening unik per toko |
+| POST | `/api/bank-accounts/{account}/adjustments` | `bank_account.manage` | `{ "direction": "increase|decrease", "amount": "100000", "reason": "..." }`; ledger dan audit, saldo tidak boleh di bawah pencadangan aktif |
+| GET | `/api/purchase-fund` | Salah satu: `purchase_fund.view`, `purchase_fund.allocate` | Saldo Kas Pembelian, total pencadangan, rekening, dan daftar alokasi aktif |
+
+Saldo bank adalah catatan manual dan tidak tersambung ke bank. Alokasi hanya memindahkan nilai secara internal ke ledger Kas Pembelian serta mencadangkan saldo tersedia; tidak melakukan debit atau transfer aktual. Saat PO diedit nilainya, dibatalkan, atau alokasinya dilepas, ledger Kas Pembelian dan pencadangan rekening disesuaikan atomik. Permission `purchase_fund.view` diberikan kepada Owner dan Finance; `purchase_fund.allocate` serta `bank_account.manage` kepada Finance; Admin mewarisi seluruh permission.
 
 ### 6.3 Penerimaan barang (Goods Receipt)
 
@@ -930,6 +942,7 @@ Respons hanya `{ "data": { "name": "Nama Toko Baru" } }`. Perubahan dicatat di a
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-11-03** — Alokasi Kas Pembelian untuk PO: ledger rekening bank manual, saldo awal/penyesuaian ber-audit, alokasi penuh berdasarkan nilai PO, saldo tersedia dikurangi pencadangan tanpa mengklaim transfer bank, dan pelepasan alokasi saat PO dibatalkan atau nilainya berubah. Setiap PO kini menunggu konfirmasi Owner setelah dana dicadangkan. Rekening dimasking di endpoint; Finance diberi permission kelola/alokasi, Owner melihat, Admin mewarisi semua. `PurchaseOrderTest` (17) dan `GoodsReceiptTest` (16) lulus; suite penuh 294/297 dengan tiga kegagalan di test lama yang tidak terkait. Pint file baru lulus. Migrasi 000060 dan PermissionSeeder perlu dijalankan pada database existing.
 - **2026-11-02** — Laporan laba kotor `GET /api/reports/profit` memakai `line_total` dan HPP snapshot per item; penjualan kredit dipisah expected/valid dan pembayaran parsial Finance mengakui laba secara proporsional. Pencatatan pembayaran HRD kini masuk atomik ke ledger akun `main_cash`. Permission baru `reports.profit.view` untuk Admin, Owner, Finance, dan Accounting; `BillingTest` 11 lulus dan tes profit terarah 1 lulus.
 - **2026-11-02** — Endpoint Retail `PATCH /api/settings/store-name` hanya mengizinkan perubahan `name` (maks. 150 karakter), izin `settings.manage`, konteks toko aktif, dan audit `settings.store_name`; request menolak field toko lain. Tidak menambahkan endpoint read/create/delete atau perubahan atribut lain. `StoreNameSettingTest`: 3 test lulus.
 - **2026-11-03** — Prioritas #1: kunci otorisasi Owner/Admin (kode 6 karakter kapital atau kalimat rahasia), CRUD mandiri + pencabutan oleh pengelola, mode kredensial persetujuan per toko (`password` default / `key` / `password_and_key`) pada semua dialog re-auth (`approver_key`), penguncian permanen setelah 10 gagal, audit tanpa kunci, `approval_auth_mode` dan `authorization_key` pada `/api/auth/me`. Migration `authorization_keys` baru. Status: 🟡 menunggu test (`AuthorizationKeyTest` 12). Bagian 14.
