@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 3 November 2026 (suite backend terakhir: **294 lulus, 3 gagal** pada test lama yang tidak terkait alokasi PO; detail di `BACKEND_PROGRESS.md`) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 3 November 2026 (suite backend terakhir: **294 lulus, 3 gagal** pada test lama yang tidak terkait alokasi PO; ID shift baru memakai `KASIR-JAGA-DDMMYYYY-slug-nama-kasir`; detail di `BACKEND_PROGRESS.md`) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|

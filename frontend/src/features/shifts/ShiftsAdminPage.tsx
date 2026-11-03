@@ -61,7 +61,6 @@ export function ShiftsAdminPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-3 py-2">Kasir Jaga</th>
               <th className="px-3 py-2">Kasir</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Dibuka</th>
@@ -74,7 +73,6 @@ export function ShiftsAdminPage() {
           <tbody className="divide-y divide-slate-100">
             {rows.map((s) => (
               <tr key={s.id}>
-                <td className="px-3 py-2 font-mono text-xs">{s.doc_number}</td>
                 <td className="px-3 py-2">{s.cashier_name}</td>
                 <td className="px-3 py-2"><ShiftStatusBadge status={s.status} /></td>
                 <td className="whitespace-nowrap px-3 py-2">{formatDateTime(s.opened_at)}</td>
@@ -88,9 +86,9 @@ export function ShiftsAdminPage() {
                 </td>
               </tr>
             ))}
-            {query.isLoading && <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>}
+            {query.isLoading && <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>}
             {!query.isLoading && rows.length === 0 && !rangeInvalid && (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Belum ada kasir jaga.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Belum ada kasir jaga.</td></tr>
             )}
           </tbody>
         </table>

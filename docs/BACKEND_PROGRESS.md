@@ -269,9 +269,11 @@ Alur: `open` → `counting` (penjualan baru **diblokir**) → `closed` → `revi
 | POST | `/api/shifts/{id}/review` | `shift.review` (Admin) | Tinjau shift `closed` → `reviewed` (`{"note"}` opsional) |
 | GET | `/api/shifts` | `shift.review` (Admin) | Daftar: `status`, `cashier_id`, `date_from`, `date_to`, `per_page` |
 
+Nomor shift baru memakai `KASIR-JAGA-DDMMYYYY-slug-nama-kasir` (tanggal WIB), misalnya `KASIR-JAGA-03112026-kasir-jual`. Jika nama kasir yang sama membuka lebih dari satu shift pada tanggal yang sama, nomor berikutnya mendapat akhiran `-2`, `-3`, dan seterusnya. Nomor shift lama tidak diubah.
+
 Respons shift (`data`):
 ```json
-{ "id": 1, "doc_number": "SHIFT-202610-000001", "register_id": 1, "cashier_id": 4, "cashier_name": "Kasir-jual",
+{ "id": 1, "doc_number": "KASIR-JAGA-03112026-kasir-jual", "register_id": 1, "cashier_id": 4, "cashier_name": "Kasir-jual",
   "status": "open", "opening_balance": "0.00", "opened_at": "2026-10-23 03:00:00.000", "closed_at": null,
   "summary": { "cash_sales_count": 1, "cash_sales_total": "27500.00", "credit_sales_count": 0,
                "credit_sales_total": "0.00", "cash_in": "0.00", "cash_out": "0.00" },
