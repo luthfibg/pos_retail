@@ -93,7 +93,7 @@ export function DepositQueuePage() {
                   <span>
                     <span className="block font-mono text-sm font-medium">{deposit.doc_number}</span>
                     <span className="mt-1 block text-xs text-slate-600">
-                      {deposit.kind === 'partial' ? 'Parsial' : 'Akhir shift'} · Shift {deposit.shift_doc_number} · {deposit.created_by_name}
+                      {deposit.kind === 'partial' ? 'Parsial' : 'Akhir kasir jaga'} · Kasir jaga {deposit.shift_doc_number} · {deposit.created_by_name}
                     </span>
                     <span className="mt-1 block text-xs text-slate-500">{STATUS_LABEL[deposit.status]} · {formatDateTime(deposit.created_at)}</span>
                   </span>
@@ -214,8 +214,8 @@ function DepositDetailDialog({ depositId, onClose }: { depositId: number; onClos
         <div className="space-y-4 p-5">
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <Detail label="Nomor" value={deposit.doc_number} />
-            <Detail label="Jenis" value={deposit.kind === 'partial' ? 'Setoran parsial' : 'Setoran akhir shift'} />
-            <Detail label="Shift" value={deposit.shift_doc_number} />
+            <Detail label="Jenis" value={deposit.kind === 'partial' ? 'Setoran parsial' : 'Setoran akhir kasir jaga'} />
+            <Detail label="Kasir jaga" value={deposit.shift_doc_number} />
             <Detail label="Kasir" value={deposit.created_by_name} />
             <Detail label="Status" value={STATUS_LABEL[deposit.status]} />
             <Detail label="Dibuat" value={formatDateTime(deposit.created_at)} />

@@ -380,7 +380,7 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onCreatePo
   onPrint: (pr: PurchaseRequisitionSummary) => void;
 }) {
   if (rows.length === 0) return <Empty text={PR_EMPTY[stage]} />;
-  const primary = stage === 'pr_new' ? 'Periksa' : stage === 'owner' ? 'Tinjau & putuskan' : null;
+  const primary = stage === 'pr_new' ? 'Periksa' : stage === 'owner' ? 'Periksa & putuskan' : null;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-left text-sm">

@@ -183,7 +183,7 @@ export function PosPage() {
   }
 
   // ---------------------------------------------------------------- tampilan
-  if (shiftQuery.isLoading) return <div className="p-6 text-slate-500">Memuat shift…</div>;
+  if (shiftQuery.isLoading) return <div className="p-6 text-slate-500">Memuat kasir jaga…</div>;
 
   if (done) {
     return (
@@ -231,9 +231,9 @@ export function PosPage() {
         {!shiftQuery.error && !sellingAllowed && (
           <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             {shift?.status === 'counting'
-              ? 'Shift sedang dihitung; penjualan baru diblokir sampai shift ditutup.'
-              : 'Belum ada shift berjalan. Buka shift terlebih dahulu sebelum berjualan.'}{' '}
-            <Link to="/shift" className="font-medium underline">Ke Shift Saya</Link>
+              ? 'Kasir jaga sedang dihitung; penjualan baru diblokir sampai kasir jaga ditutup.'
+              : 'Belum ada kasir jaga berjalan. Buka kasir jaga terlebih dahulu sebelum berjualan.'}{' '}
+            <Link to="/shift" className="font-medium underline">Ke Kasir Jaga Saya</Link>
           </div>
         )}
 

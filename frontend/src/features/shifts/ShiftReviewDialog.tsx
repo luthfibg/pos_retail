@@ -24,17 +24,17 @@ export function ShiftReviewDialog({ shift: initial, onClose }: { shift: Shift; o
   const hasVariance = varianceKind(shift.variance) === 'over' || varianceKind(shift.variance) === 'short';
 
   return (
-    <Modal title={`Shift ${shift.doc_number}`} onClose={onClose}>
+    <Modal title={`Kasir Jaga ${shift.doc_number}`} onClose={onClose}>
       <div className="space-y-4 p-5">
         <ShiftStatusBadge status={shift.status} />
         <ShiftFigures shift={shift} />
 
         {shift.status === 'closed' && (
           <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4">
-            <h3 className="font-medium">Tinjau shift</h3>
-            {hasVariance && <p className="text-sm text-amber-800">Shift ini memiliki selisih kas. Periksa keterangan kasir sebelum menandai ditinjau.</p>}
+            <h3 className="font-medium">Laporan kasir jaga</h3>
+            {hasVariance && <p className="text-sm text-amber-800">Kasir jaga ini memiliki selisih kas. Periksa keterangan kasir sebelum menandai diperiksa.</p>}
             <ErrorNotice error={mutation.error} />
-            <Field label="Catatan tinjauan (opsional)" hint="Tercatat di audit log.">
+            <Field label="Catatan pemeriksaan (opsional)" hint="Tercatat di audit log.">
               <input className={inputCls} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
             </Field>
             <button
@@ -43,7 +43,7 @@ export function ShiftReviewDialog({ shift: initial, onClose }: { shift: Shift; o
               onClick={() => { if (!mutation.isPending) mutation.mutate(); }}
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
-              {mutation.isPending ? 'Menyimpan…' : 'Tandai sudah ditinjau'}
+              {mutation.isPending ? 'Menyimpan…' : 'Tandai sudah diperiksa'}
             </button>
           </div>
         )}

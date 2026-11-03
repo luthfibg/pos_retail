@@ -18,8 +18,8 @@ export interface NavGroup {
  * Satu sumber menu, disusun mengikuti alur operasional toko:
  *
  *  1. Dashboard      beranda: ringkasan penjualan, kas, dan stok
- *  2. Penjualan      buka shift -> jual di kasir -> koreksi/cetak ulang struk
- *  3. Keuangan       tinjau shift -> terima setoran -> tagih HRD
+ *  2. Penjualan      buka kasir jaga -> jual di kasir -> koreksi/cetak ulang struk
+ *  3. Keuangan       periksa kasir jaga -> terima setoran -> tagih HRD
  *  4. Pembelian      PR -> pemeriksaan Finance -> persetujuan Owner -> PO -> terima barang/retur supplier
  *  5. Inventory      stok awal -> transfer/putaway -> adjustment & opname -> riwayat stok
  *  6. Data Master    kategori -> produk -> supplier -> karyawan (pembeli kredit)
@@ -36,7 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Penjualan',
     items: [
-      { to: '/shift', label: 'Shift Saya', permission: 'shift.open', cashierOnly: true },
+      { to: '/shift', label: 'Kasir Jaga Saya', permission: 'shift.open', cashierOnly: true },
       { to: '/pos', label: 'Kasir', permission: 'sales.create', cashierOnly: true },
       { to: '/sales', label: 'Riwayat Penjualan', permission: 'sales.create' },
     ],
@@ -44,7 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Keuangan',
     items: [
-      { to: '/shifts', label: 'Tinjau Shift', permission: 'shift.review' },
+      { to: '/shifts', label: 'Laporan Kasir Jaga', permission: 'shift.review' },
       { to: '/cash-deposits', label: 'Setoran Masuk', permission: 'cash_deposit.receive' },
       { to: '/billing', label: 'Tagihan HRD', permission: ['billing_period.manage', 'invoice.generate'] },
     ],

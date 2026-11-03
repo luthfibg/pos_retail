@@ -79,9 +79,9 @@ export function DashboardMenuSummaries({
     if (visibleRoutes.has(to)) cards.push({ to, label, queryKey, load });
   }
 
-  add('/shift', 'Shift Saya', ['dashboard-menu', 'shift'], async () => {
+  add('/shift', 'Kasir Jaga Saya', ['dashboard-menu', 'shift'], async () => {
     const shift = await shiftApi.current();
-    if (!shift) return { value: 'Belum dibuka', detail: 'Buka shift untuk mulai berjualan.' };
+    if (!shift) return { value: 'Belum dibuka', detail: 'Buka kasir jaga untuk mulai berjualan.' };
     const status = shift.status === 'open' ? 'Sedang berjalan' : 'Sedang dihitung';
     return { value: status, detail: shift.doc_number };
   });
@@ -97,9 +97,9 @@ export function DashboardMenuSummaries({
       : 'Ringkasan penjualan pada periode terpilih.',
   }));
 
-  add('/shifts', 'Tinjau Shift', ['dashboard-menu', 'shifts-to-review'], async () => {
+  add('/shifts', 'Laporan Kasir Jaga', ['dashboard-menu', 'shifts-to-review'], async () => {
     const shifts = await shiftApi.list({ status: 'closed', per_page: 1 });
-    return { value: countLabel(shifts.total, 'shift'), detail: 'Menunggu ditinjau.' };
+    return { value: countLabel(shifts.total, 'kasir jaga'), detail: 'Menunggu diperiksa.' };
   });
 
   add('/cash-deposits', 'Setoran Masuk', ['dashboard-menu', 'deposits-to-process'], async () => {

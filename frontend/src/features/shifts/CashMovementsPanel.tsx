@@ -98,7 +98,7 @@ export function CashMovementsPanel({ shift }: { shift: Shift }) {
         </form>
       ) : (
         <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-          Pencatatan kas hanya tersedia selama shift berstatus Berjalan. Riwayat di bawah tetap dapat dilihat.
+          Pencatatan kas hanya tersedia selama kasir jaga berstatus Berjalan. Riwayat di bawah tetap dapat dilihat.
         </p>
       )}
 
@@ -106,7 +106,7 @@ export function CashMovementsPanel({ shift }: { shift: Shift }) {
       {query.isLoading ? (
         <p className="text-sm text-slate-500">Memuat riwayat kas…</p>
       ) : query.error && !query.data ? null : movements.length === 0 ? (
-        <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada kas masuk/keluar nonpenjualan pada shift ini.</p>
+        <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada kas masuk/keluar nonpenjualan pada kasir jaga ini.</p>
       ) : (
         <div className="space-y-3">
           <ul className="divide-y divide-slate-100">

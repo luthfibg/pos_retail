@@ -79,7 +79,7 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
       <div>
         <SettingsTitle embedded={embedded}>Kebijakan Endapan</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          Atur uang yang tetap berada di laci saat shift ditutup. Kebijakan ini menentukan endapan dan setoran akhir shift berikutnya.
+          Atur uang yang tetap berada di laci saat kasir jaga ditutup. Kebijakan ini menentukan endapan dan setoran akhir kasir jaga berikutnya.
         </p>
       </div>
 
@@ -97,7 +97,7 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
           <p className="mt-1">
             {saved.mode === 'fixed'
               ? `Endapan tetap ${formatRupiah(saved.fixed_amount)}`
-              : `Endapan ${formatQty(saved.percent)}% dari ${saved.percent_base === 'cash_sales_shift' ? 'penjualan tunai shift' : 'kas terhitung'}`}
+              : `Endapan ${formatQty(saved.percent)}% dari ${saved.percent_base === 'cash_sales_shift' ? 'penjualan tunai kasir jaga' : 'kas terhitung'}`}
             {saved.min_amount !== null && ` · minimum ${formatRupiah(saved.min_amount)}`}
             {saved.max_amount !== null && ` · maksimum ${formatRupiah(saved.max_amount)}`}
             {` · pembulatan setoran Rp${formatQty(String(saved.rounding_unit))}`}
@@ -108,7 +108,7 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
 
       <form onSubmit={review} noValidate className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
         {!is422 && <ErrorNotice error={mutation.error} />}
-        {savedNotice && <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">Kebijakan endapan tersimpan dan berlaku untuk penutupan shift berikutnya.</p>}
+        {savedNotice && <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">Kebijakan endapan tersimpan dan berlaku untuk penutupan kasir jaga berikutnya.</p>}
 
         <fieldset className="space-y-2">
           <legend className="mb-1 text-sm font-medium">Cara menentukan endapan</legend>
@@ -134,7 +134,7 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
             <Field label="Dasar perhitungan" error={errors.percentBase ?? serverError('percent_base')}>
               <select className={inputCls} value={values.percentBase} onChange={(event) => set('percentBase', event.target.value as FloatPolicyFormValues['percentBase'])}>
                 <option value="">Pilih dasar</option>
-                <option value="cash_sales_shift">Penjualan tunai shift</option>
+                <option value="cash_sales_shift">Penjualan tunai kasir jaga</option>
                 <option value="cash_on_hand">Kas terhitung di laci</option>
               </select>
             </Field>
@@ -167,7 +167,7 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
         <Modal title="Terapkan kebijakan endapan?" onClose={() => !mutation.isPending && setConfirming(false)}>
           <div className="space-y-2 p-5 text-sm">
             <p>Menyimpan akan membuat versi kebijakan baru untuk laci dan langsung mengganti kebijakan aktif sebelumnya.</p>
-            <p className="text-slate-600">Setoran dan endapan dihitung server saat shift ditutup. Shift yang sudah ditutup tidak berubah.</p>
+            <p className="text-slate-600">Setoran dan endapan dihitung server saat kasir jaga ditutup. Kasir jaga yang sudah ditutup tidak berubah.</p>
             <ErrorNotice error={mutation.error} />
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">

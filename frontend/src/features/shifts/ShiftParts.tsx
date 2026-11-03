@@ -45,7 +45,7 @@ export function ShiftFigures({ shift }: { shift: Shift }) {
       {shift.counted_cash !== null && row('Kas terhitung', formatRupiah(shift.counted_cash))}
       {shift.variance !== null && row('Selisih', <VarianceText value={shift.variance} />)}
       {shift.variance_note && row('Keterangan selisih', <span className="whitespace-pre-wrap">{shift.variance_note}</span>)}
-      {shift.reviewed_at && row('Ditinjau', formatDateTime(shift.reviewed_at))}
+      {shift.reviewed_at && row('Diperiksa', formatDateTime(shift.reviewed_at))}
     </dl>
   );
 }

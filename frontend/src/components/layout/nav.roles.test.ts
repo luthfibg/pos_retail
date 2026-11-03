@@ -49,7 +49,7 @@ describe('menu per role (model standar retail)', () => {
     ]);
   });
 
-  it('Finance melihat tinjau shift, setoran masuk, dan pemeriksaan PR', () => {
+  it('Finance melihat laporan kasir jaga, setoran masuk, dan pemeriksaan PR', () => {
     expect(menuFor('Finance')).toEqual([
       '/cash-deposits', '/customers', '/dashboard', '/inventory/movements', '/products', '/purchase-requisitions', '/shifts',
     ]);
@@ -61,7 +61,7 @@ describe('menu per role (model standar retail)', () => {
     ]);
   });
 
-  it('Accounting melihat tagihan HRD dan tinjau shift', () => {
+  it('Accounting melihat tagihan HRD dan laporan kasir jaga', () => {
     // Catatan: verifikasi surat jalan/faktur (`goods_receipt.verify_documents`) belum punya menu; lihat catatan di FRONTEND_PROGRESS.
     expect(menuFor('Accounting')).toEqual(['/billing', '/dashboard', '/inventory/movements', '/products', '/shifts']);
   });
@@ -97,10 +97,10 @@ function sidebarFor(permissions: string[] | 'all', isAdmin?: boolean): string[] 
 }
 
 describe('susunan sidebar mengikuti alur kerja', () => {
-  it('Kasir: shift -> kasir -> riwayat, lalu pembelian, inventory, dan data master', () => {
+  it('Kasir jaga -> kasir -> riwayat, lalu pembelian, inventory, dan data master', () => {
     expect(sidebarFor(PERMISSIONS.Kasir ?? [])).toEqual([
       'Dashboard',
-      'Penjualan > Shift Saya, Kasir, Riwayat Penjualan',
+      'Penjualan > Kasir Jaga Saya, Kasir, Riwayat Penjualan',
       'Pembelian > Permintaan Pembelian, Penerimaan Barang, Retur Supplier',
       'Inventory > Transfer Stok, Adjustment & Opname, Riwayat Stok',
       'Data Master > Produk, Karyawan',
@@ -110,7 +110,7 @@ describe('susunan sidebar mengikuti alur kerja', () => {
   it('Finance: grup bermenu tunggal menjadi tautan langsung', () => {
     expect(sidebarFor(PERMISSIONS.Finance ?? [])).toEqual([
       'Dashboard',
-      'Keuangan > Tinjau Shift, Setoran Masuk',
+      'Keuangan > Laporan Kasir Jaga, Setoran Masuk',
       'Permintaan Pembelian',
       'Riwayat Stok',
       'Data Master > Produk, Karyawan',
@@ -129,7 +129,7 @@ describe('susunan sidebar mengikuti alur kerja', () => {
   it('Accounting', () => {
     expect(sidebarFor(PERMISSIONS.Accounting ?? [])).toEqual([
       'Dashboard',
-      'Keuangan > Tinjau Shift, Tagihan HRD',
+      'Keuangan > Laporan Kasir Jaga, Tagihan HRD',
       'Riwayat Stok',
       'Produk',
     ]);
@@ -138,7 +138,7 @@ describe('susunan sidebar mengikuti alur kerja', () => {
   it('Owner', () => {
     expect(sidebarFor(PERMISSIONS.Owner ?? [])).toEqual([
       'Dashboard',
-      'Tinjau Shift',
+      'Laporan Kasir Jaga',
       'Pembelian > Permintaan Pembelian, Retur Supplier',
       'Inventory > Stok Awal, Adjustment & Opname, Riwayat Stok',
       'Data Master > Produk, Karyawan',
@@ -150,7 +150,7 @@ describe('susunan sidebar mengikuti alur kerja', () => {
     expect(sidebarFor('all', true)).toEqual([
       'Dashboard',
       'Riwayat Penjualan',
-      'Keuangan > Tinjau Shift, Setoran Masuk, Tagihan HRD',
+      'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Tagihan HRD',
       'Pembelian > Permintaan Pembelian, Penerimaan Barang, Retur Supplier',
       'Inventory > Stok Awal, Transfer Stok, Adjustment & Opname, Riwayat Stok',
       'Data Master > Kategori, Produk, Supplier, Karyawan',

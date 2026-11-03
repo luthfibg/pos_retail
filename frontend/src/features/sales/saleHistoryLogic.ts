@@ -24,7 +24,7 @@ export function voidUnavailableReason(sale: SaleSummary, shiftStatus: ShiftStatu
     return 'Struk kredit yang sudah ditagihkan tidak dapat dibatalkan; diperlukan credit note.';
   }
   if (sale.payment_mode === 'cash' && shiftStatus !== 'open') {
-    return 'Struk tunai hanya dapat dibatalkan selama shift terkait masih berjalan.';
+    return 'Struk tunai hanya dapat dibatalkan selama kasir jaga terkait masih berjalan.';
   }
   return null;
 }

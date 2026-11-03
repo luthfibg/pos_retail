@@ -3,8 +3,8 @@ import type { Decimal, DepositStatus, ShiftStatus } from '@/lib/api/types';
 export const SHIFT_STATUS_LABEL: Record<ShiftStatus, string> = {
   open: 'Berjalan',
   counting: 'Penghitungan kas',
-  closed: 'Ditutup — menunggu tinjauan',
-  reviewed: 'Ditinjau',
+  closed: 'Ditutup — menunggu pemeriksaan',
+  reviewed: 'Diperiksa',
 };
 
 export const SHIFT_STATUS_CLS: Record<ShiftStatus, string> = {

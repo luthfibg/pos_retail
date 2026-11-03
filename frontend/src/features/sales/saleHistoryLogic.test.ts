@@ -38,7 +38,7 @@ describe('canVoidSale', () => {
 
 describe('voidUnavailableReason', () => {
   it('explains backend void restrictions', () => {
-    expect(voidUnavailableReason(base, 'closed')).toContain('shift');
+    expect(voidUnavailableReason(base, 'closed')).toContain('kasir jaga');
     expect(voidUnavailableReason({ ...base, payment_mode: 'payroll_credit', billing_status: 'paid' }, 'open')).toContain('credit note');
     expect(voidUnavailableReason(base, 'open')).toBeNull();
   });

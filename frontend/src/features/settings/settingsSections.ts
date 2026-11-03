@@ -56,7 +56,7 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
   },
   {
     id: 'float-policy', group: 'cash', title: 'Kebijakan endapan', permission: 'float.configure', defaultOpen: true,
-    description: 'Uang yang tetap di laci saat shift ditutup dan aturan setoran akhir shift.',
+    description: 'Uang yang tetap di laci saat kasir jaga ditutup dan aturan setoran akhir kasir jaga.',
     keywords: ['endapan', 'laci', 'setoran', 'kas', 'shift'],
   },
   {

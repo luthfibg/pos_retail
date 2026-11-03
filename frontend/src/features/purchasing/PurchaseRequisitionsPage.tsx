@@ -82,7 +82,7 @@ export function PurchaseRequisitionsPage() {
           <h1 className="text-xl font-semibold">Permintaan Pembelian</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             {canViewAll
-              ? 'Tinjau PR toko dan pantau status pemeriksaan Finance, persetujuan Owner, hingga PO.'
+              ? 'Periksa PR toko dan pantau status pemeriksaan Finance, persetujuan Owner, hingga PO.'
               : 'Buat PR untuk kebutuhan barang. Setelah diajukan, PR diperiksa Finance lalu menunggu persetujuan Owner.'}
           </p>
         </div>

@@ -30,8 +30,8 @@ export function ShiftsAdminPage() {
   return (
     <div className="space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Tinjau Shift</h1>
-        <p className="mt-1 text-sm text-slate-600">Shift yang sudah ditutup menunggu tinjauan Admin. Selisih kas ditampilkan sebagai teks dan nominal.</p>
+        <h1 className="text-xl font-semibold">Laporan Kasir Jaga</h1>
+        <p className="mt-1 text-sm text-slate-600">Kasir jaga yang sudah ditutup menunggu pemeriksaan Admin. Selisih kas ditampilkan sebagai status dan nominal.</p>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -61,7 +61,7 @@ export function ShiftsAdminPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-3 py-2">Shift</th>
+              <th className="px-3 py-2">Kasir Jaga</th>
               <th className="px-3 py-2">Kasir</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Dibuka</th>
@@ -83,14 +83,14 @@ export function ShiftsAdminPage() {
                 <td className="px-3 py-2"><VarianceText value={s.variance} /></td>
                 <td className="px-3 py-2 text-right">
                   <button type="button" onClick={() => setSelected(s)} className="text-sm text-slate-700 underline">
-                    {s.status === 'closed' ? 'Tinjau' : 'Detail'}
+                    {s.status === 'closed' ? 'Periksa' : 'Detail'}
                   </button>
                 </td>
               </tr>
             ))}
             {query.isLoading && <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>}
             {!query.isLoading && rows.length === 0 && !rangeInvalid && (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Belum ada shift.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Belum ada kasir jaga.</td></tr>
             )}
           </tbody>
         </table>

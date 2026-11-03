@@ -71,7 +71,7 @@ export function SalesHistoryPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Riwayat Penjualan</h1>
-          <p className="mt-1 text-sm text-slate-600">Cari transaksi, lihat detail struk, cetak salinan, atau batalkan transaksi sesuai aturan shift dan tagihan.</p>
+          <p className="mt-1 text-sm text-slate-600">Cari transaksi, lihat detail struk, cetak salinan, atau batalkan transaksi sesuai aturan kasir jaga dan tagihan.</p>
         </div>
         <Field label="Ukuran kertas cetak">
           <select className={inputCls} value={thermalPaperSize} onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}>
@@ -255,7 +255,7 @@ function SaleDetailDialog({
               {!canVoidNow && !shift.isLoading && !shift.error && voidReasonUnavailable && (
                 <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{voidReasonUnavailable}</p>
               )}
-              {shift.isLoading && sale.payment_mode === 'cash' && <p className="text-xs text-slate-500">Memeriksa status shift untuk aturan pembatalan…</p>}
+              {shift.isLoading && sale.payment_mode === 'cash' && <p className="text-xs text-slate-500">Memeriksa status kasir jaga untuk aturan pembatalan…</p>}
             </div>
           )}
           <ReceiptView sale={sale} />

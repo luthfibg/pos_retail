@@ -68,7 +68,7 @@ export function PartialDepositsPanel({ shift, hasDraft, checkingDraft }: { shift
       <div>
         <h2 className="font-semibold">Setoran parsial</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Buat saat shift berjalan untuk menyetor sebagian kas. Sistem menghitung jumlah setoran sesuai kebijakan endapan aktif.
+          Buat saat kasir jaga berjalan untuk menyetor sebagian kas. Sistem menghitung jumlah setoran sesuai kebijakan endapan aktif.
         </p>
       </div>
 
@@ -90,9 +90,9 @@ export function PartialDepositsPanel({ shift, hasDraft, checkingDraft }: { shift
 
       <ErrorNotice error={query.error} />
       {query.isLoading ? (
-        <p className="text-sm text-slate-500">Memuat setoran shift…</p>
+        <p className="text-sm text-slate-500">Memuat setoran kasir jaga…</p>
       ) : query.error && !query.data ? null : query.data?.data.length === 0 ? (
-        <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada setoran parsial untuk shift ini.</p>
+        <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada setoran parsial untuk kasir jaga ini.</p>
       ) : (
         <div className="space-y-3">
           <ul className="divide-y divide-slate-100">
@@ -117,8 +117,8 @@ export function PartialDepositsPanel({ shift, hasDraft, checkingDraft }: { shift
         <Modal title="Buat Draft setoran parsial?" onClose={() => !create.isPending && setConfirmCreate(false)}>
           <div className="space-y-2 p-5 text-sm">
             <p>Hitungan kas yang akan dipakai untuk menghitung setoran: <strong>{formatRupiah(values.amount.replace(',', '.'))}</strong>.</p>
-            <p>Draft belum memindahkan saldo. Serahkan uang dan catat penyerahan agar kas yang diharapkan pada shift diperbarui.</p>
-            <p className="text-amber-800">Satu Draft setoran parsial sekaligus. Shift tidak dapat ditutup sebelum Draft diserahkan atau dibatalkan.</p>
+            <p>Draft belum memindahkan saldo. Serahkan uang dan catat penyerahan agar kas yang diharapkan pada kasir jaga diperbarui.</p>
+            <p className="text-amber-800">Satu Draft setoran parsial sekaligus. Kasir jaga tidak dapat ditutup sebelum Draft diserahkan atau dibatalkan.</p>
             <ErrorNotice error={create.error} />
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
@@ -175,7 +175,7 @@ function PartialDepositRow({ deposit, shift }: { deposit: CashDeposit; shift: Sh
             {action === 'submit' ? (
               <>
                 <p>Pastikan uang sebesar <strong>{formatRupiah(deposit.deposit_amount)}</strong> diserahkan kepada Finance.</p>
-                <p>Setelah diserahkan, setoran mengurangi kas yang diharapkan di shift dan tidak dapat dibatalkan.</p>
+                <p>Setelah diserahkan, setoran mengurangi kas yang diharapkan pada kasir jaga dan tidak dapat dibatalkan.</p>
               </>
             ) : (
               <p>Draft ini belum mengubah saldo. Pembatalan menghapus Draft dan membuka kemungkinan membuat setoran baru.</p>
