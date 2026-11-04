@@ -28,6 +28,8 @@ export function BillingPage() {
   const canGenerateInvoice = can('invoice.generate');
   const canIssueInvoice = can('invoice.issue');
   const canRecordPayment = can('invoice.record_payment');
+  const canViewPeriods = canManagePeriod || canClosePeriod;
+  const [activeTab, setActiveTab] = useState<'periods' | 'invoices'>('periods');
   const [periodPage, setPeriodPage] = useState(1);
   const [invoicePage, setInvoicePage] = useState(1);
   const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus | ''>('');
@@ -102,6 +104,7 @@ export function BillingPage() {
     onSuccess: (invoice) => {
       refreshBilling();
       setSelectedInvoiceId(invoice.id);
+      setActiveTab('invoices');
     },
   });
   const issueInvoice = useMutation({
@@ -137,6 +140,8 @@ export function BillingPage() {
 
   const selectedPeriod = periodDetail.data;
   const invoice = invoiceDetail.data;
+  const activeTabAvailable = activeTab === 'periods' ? canViewPeriods : canGenerateInvoice;
+  const visibleTab = activeTabAvailable ? activeTab : canViewPeriods ? 'periods' : 'invoices';
 
   return (
     <>
@@ -146,8 +151,48 @@ export function BillingPage() {
           <p className="mt-1 text-sm text-slate-600">Kelola periode kredit karyawan, terbitkan invoice, dan catat pembayaran HRD.</p>
         </header>
 
-        {(canManagePeriod || canClosePeriod) && (
-          <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+        {(canViewPeriods || canGenerateInvoice) && (
+          <div role="tablist" aria-label="Bagian tagihan HRD" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            {canViewPeriods && (
+              <button type="button" role="tab" aria-selected={visibleTab === 'periods'} onClick={() => setActiveTab('periods')} className={`flex-1 border-b-2 px-4 py-3 text-sm ${visibleTab === 'periods' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}>
+                Periode tagihan
+              </button>
+            )}
+            {canGenerateInvoice && (
+              <button type="button" role="tab" aria-selected={visibleTab === 'invoices'} onClick={() => setActiveTab('invoices')} className={`flex-1 border-b-2 px-4 py-3 text-sm ${visibleTab === 'invoices' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}>
+                Invoice HRD
+              </button>
+            )}
+          </div>
+        )}
+
+        {canViewPeriods && visibleTab === 'periods' && (
+          <div role="tabpanel" className="grid items-start gap-4 lg:grid-cols-2">
+            <section className="order-2 min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+              {selectedPeriodId !== null && canManagePeriod ? (
+                <PeriodDetail
+                  period={selectedPeriod}
+                  loading={periodDetail.isLoading}
+                  error={periodDetail.error}
+                  canEdit={canManagePeriod}
+                  canGenerateInvoice={canGenerateInvoice}
+                  billTo={billTo}
+                  onBillTo={setBillTo}
+                  onGenerate={(id) => generateInvoice.mutate(id)}
+                  generating={generateInvoice.isPending}
+                  generateError={generateInvoice.error}
+                  updatePeriod={updatePeriod.mutate}
+                  updating={updatePeriod.isPending}
+                  updateError={updatePeriod.error}
+                  onClose={() => setSelectedPeriodId(null)}
+                  onOpenInvoice={(id) => { setSelectedInvoiceId(id); setActiveTab('invoices'); }}
+                />
+              ) : (
+                <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">Klik salah satu periode di daftar kiri untuk membuka rincian.</p>
+              )}
+            </section>
+
+            <section className="order-1 min-w-0 space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-semibold">Periode tagihan</h2>
@@ -201,12 +246,12 @@ export function BillingPage() {
             <ErrorNotice error={periods.error} />
             {canManagePeriod && (
               <div>
-                <h3 className="mb-2 text-sm font-semibold">Riwayat periode</h3>
+                <h3 className="mb-2 text-sm font-semibold">Daftar periode</h3>
                 {periods.isLoading ? <p className="text-sm text-slate-500">Memuat riwayat…</p> : periods.error && !periods.data ? null : periods.data?.data.length ? (
                   <>
                     <div className="divide-y divide-slate-100">
                       {periods.data.data.map((period) => (
-                        <button key={period.id} type="button" onClick={() => setSelectedPeriodId(period.id)} className="flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-slate-50">
+                        <button key={period.id} type="button" aria-current={selectedPeriodId === period.id ? 'true' : undefined} onClick={() => setSelectedPeriodId(period.id)} className={`flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-slate-50 ${selectedPeriodId === period.id ? 'bg-slate-50' : ''}`}>
                           <span><span className="block font-medium">{period.label}</span><span className="text-xs text-slate-500">{PERIOD_STATUS_LABEL[period.status]} · {period.sales_count} struk · {formatDateTime(period.starts_at)}</span></span>
                           <span className="text-right text-sm font-semibold">{formatRupiah(period.sales_total)}{period.invoice_id && <span className="block text-xs font-normal text-slate-500">Invoice #{period.invoice_id}</span>}</span>
                         </button>
@@ -217,31 +262,41 @@ export function BillingPage() {
                 ) : <p className="text-sm text-slate-500">Belum ada riwayat periode.</p>}
               </div>
             )}
-          </section>
+            </section>
+          </div>
         )}
 
-        {selectedPeriodId !== null && canManagePeriod && (
-          <PeriodDetail
-            period={selectedPeriod}
-            loading={periodDetail.isLoading}
-            error={periodDetail.error}
-            canEdit={canManagePeriod}
-            canGenerateInvoice={canGenerateInvoice}
-            billTo={billTo}
-            onBillTo={setBillTo}
-            onGenerate={(id) => generateInvoice.mutate(id)}
-            generating={generateInvoice.isPending}
-            generateError={generateInvoice.error}
-            updatePeriod={updatePeriod.mutate}
-            updating={updatePeriod.isPending}
-            updateError={updatePeriod.error}
-            onClose={() => setSelectedPeriodId(null)}
-            onOpenInvoice={(id) => setSelectedInvoiceId(id)}
-          />
-        )}
+        {canGenerateInvoice && visibleTab === 'invoices' && (
+          <div role="tabpanel" className="grid items-start gap-4 lg:grid-cols-2">
+            <section className="order-2 min-w-0">
+              {selectedInvoiceId !== null ? (
+                <InvoiceDetail
+                  invoice={invoice}
+                  loading={invoiceDetail.isLoading}
+                  error={invoiceDetail.error}
+                  canIssue={canIssueInvoice}
+                  canPay={canRecordPayment}
+                  paymentValues={paymentValues}
+                  setPaymentValues={setPaymentValues}
+                  paymentError={paymentError}
+                  onPaymentSubmit={submitPayment}
+                  paymentPending={recordPayment.isPending}
+                  paymentMutationError={recordPayment.error}
+                  issueError={issueInvoice.error ?? handOverInvoice.error}
+                  issuePending={issueInvoice.isPending || handOverInvoice.isPending}
+                  onIssue={() => invoice && issueInvoice.mutate(invoice.id)}
+                  onHandOver={() => invoice && handOverInvoice.mutate(invoice.id)}
+                  onPrint={() => invoice && setPrintInvoice(invoice)}
+                  onClose={() => setSelectedInvoiceId(null)}
+                />
+              ) : (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+                  <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">Klik salah satu invoice di daftar kiri untuk membuka rincian.</p>
+                </div>
+              )}
+            </section>
 
-        {canGenerateInvoice && (
-          <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+            <section className="order-1 min-w-0 space-y-3 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div><h2 className="font-semibold">Invoice HRD</h2><p className="text-sm text-slate-500">Daftar invoice dan status pelunasan.</p></div>
               <Field label="Status">
@@ -256,7 +311,7 @@ export function BillingPage() {
               <>
                 <div className="divide-y divide-slate-100">
                   {invoices.data.data.map((item) => (
-                    <button key={item.id} type="button" onClick={() => setSelectedInvoiceId(item.id)} className="flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-slate-50">
+                    <button key={item.id} type="button" aria-current={selectedInvoiceId === item.id ? 'true' : undefined} onClick={() => setSelectedInvoiceId(item.id)} className={`flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-slate-50 ${selectedInvoiceId === item.id ? 'bg-slate-50' : ''}`}>
                       <span><span className="block font-mono text-sm font-semibold">{item.document_no}</span><span className="text-xs text-slate-500">{item.bill_to} · {item.period_label} · {INVOICE_STATUS_LABEL[item.status]}</span></span>
                       <span className="text-right text-sm"><span className="block font-semibold">{formatRupiah(item.total)}</span><span className="text-xs text-slate-500">Sisa {formatRupiah(item.amount_remaining)}</span></span>
                     </button>
@@ -265,29 +320,8 @@ export function BillingPage() {
                 <Pagination page={invoices.data.current_page} lastPage={invoices.data.last_page} from={invoices.data.from} to={invoices.data.to} total={invoices.data.total} onPage={setInvoicePage} />
               </>
             ) : <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada invoice untuk ditampilkan.</p>}
-          </section>
-        )}
-
-        {selectedInvoiceId !== null && canGenerateInvoice && (
-          <InvoiceDetail
-            invoice={invoice}
-            loading={invoiceDetail.isLoading}
-            error={invoiceDetail.error}
-            canIssue={canIssueInvoice}
-            canPay={canRecordPayment}
-            paymentValues={paymentValues}
-            setPaymentValues={setPaymentValues}
-            paymentError={paymentError}
-            onPaymentSubmit={submitPayment}
-            paymentPending={recordPayment.isPending}
-            paymentMutationError={recordPayment.error}
-            issueError={issueInvoice.error ?? handOverInvoice.error}
-            issuePending={issueInvoice.isPending || handOverInvoice.isPending}
-            onIssue={() => invoice && issueInvoice.mutate(invoice.id)}
-            onHandOver={() => invoice && handOverInvoice.mutate(invoice.id)}
-            onPrint={() => invoice && setPrintInvoice(invoice)}
-            onClose={() => setSelectedInvoiceId(null)}
-          />
+            </section>
+          </div>
         )}
       </div>
       {printInvoice && <InvoicePrint invoice={printInvoice} storeName={me?.store?.name ?? ''} onDone={clearPrintInvoice} />}
