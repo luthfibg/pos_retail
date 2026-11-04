@@ -29,6 +29,7 @@ class UpdateProductRequest extends FormRequest
             'sell_price' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999999999'],
             'min_stock' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999999'],
             'critical_stock' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999999'],
+            'restock_quantity' => ['sometimes', 'required', 'numeric', 'min:0', 'max:99999', 'regex:/^\d+(?:\.\d{1,3})?$/'],
             'status' => ['sometimes', 'required', Rule::in(['active', 'inactive'])],
             'reason' => ['nullable', 'string', 'max:500'],
         ];

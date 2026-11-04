@@ -81,6 +81,40 @@ class ProductTest extends SeededTestCase
         $this->assertDatabaseCount('price_history', 0);
     }
 
+    public function test_product_restock_quantity_is_saved_and_returned(): void
+    {
+        $this->signIn('Admin');
+
+        $response = $this->postJson('/api/products', [
+            'name' => 'Stok Otomatis',
+            'sell_price' => '5000',
+            'restock_quantity' => '2.500',
+        ])->assertCreated()
+            ->assertJsonPath('data.restock_quantity', '2.500');
+
+        $id = $response->json('data.id');
+        $this->assertDatabaseHas('products', ['id' => $id, 'restock_quantity' => '2.500']);
+
+        $this->patchJson("/api/products/{$id}", ['restock_quantity' => '4.125'])
+            ->assertOk()
+            ->assertJsonPath('data.restock_quantity', '4.125');
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'product.update',
+            'entity_id' => $id,
+            'store_id' => $this->storeId(),
+        ]);
+    }
+
+    public function test_restock_quantity_must_fit_purchase_quantity_precision(): void
+    {
+        $this->signIn('Admin');
+
+        $this->postJson('/api/products', [
+            'name' => 'Kuantitas Tidak Valid',
+            'restock_quantity' => '1.2345',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['restock_quantity']);
+    }
+
     public function test_cashier_creates_pending_product_with_generated_sku_and_barcode(): void
     {
         $this->signIn('Kasir');

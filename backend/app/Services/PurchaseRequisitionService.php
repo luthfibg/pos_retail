@@ -17,7 +17,8 @@ use Illuminate\Validation\ValidationException;
  *   approved -> converted (otomatis oleh PurchaseOrderService bila seluruh item sudah masuk PO)
  *
  * Aturan:
- *  - Kasir boleh membuat dan mengajukan PR; hanya melihat PR miliknya. Pemegang finance_check/approve/purchase_order.create melihat semua.
+ *  - Kasir dapat meneruskan PR stok otomatis; PR manual hanya dibuat Admin/Purchasing.
+ *    PR otomatis terlihat oleh seluruh pemegang purchase_requisition.create.
  *  - Pemeriksaan Finance Paket 1 tanpa Saldo Pembelian: Finance menilai kelayakan secara manual (cek saldo = Paket 2).
  *  - Persetujuan Owner wajib autentikasi ulang (setting approval_reauth_required). Pembuat PR menyetujui sendiri hanya bila
  *    setting SoD mengizinkan (mode minimalis) dan ditandai is_self_approval di pr_approvals + audit.
@@ -35,8 +36,7 @@ class PurchaseRequisitionService
         private PermissionResolver $permissions,
         private ReauthService $reauth,
         private NotificationService $notifications,
-    ) {
-    }
+    ) {}
 
     // ------------------------------------------------------------------ baca
 
@@ -54,7 +54,13 @@ class PurchaseRequisitionService
             );
 
         if (! $this->seesAll($user, $storeId) || ! empty($filters['mine'])) {
-            $query->where('pr.requested_by', $user->id);
+            if (! empty($filters['mine'])) {
+                $query->where('pr.requested_by', $user->id);
+            } else {
+                $query->where(fn ($q) => $q
+                    ->where('pr.requested_by', $user->id)
+                    ->orWhere('pr.is_auto_generated', 1));
+            }
         }
 
         if (! empty($filters['status'])) {
@@ -75,6 +81,7 @@ class PurchaseRequisitionService
             'items_count' => (int) $row->items_count,
             'requested_by' => (int) $row->requested_by,
             'requester_name' => $row->requester_name,
+            'is_auto_generated' => (bool) $row->is_auto_generated,
             'submitted_at' => $row->submitted_at,
             'created_at' => $row->created_at,
         ]);
@@ -91,7 +98,7 @@ class PurchaseRequisitionService
             return null;
         }
 
-        if (! $this->seesAll($user, $storeId) && $detail['requested_by'] !== $user->id) {
+        if (! $this->seesAll($user, $storeId) && $detail['requested_by'] !== $user->id && ! $detail['is_auto_generated']) {
             return null;
         }
 
@@ -132,6 +139,13 @@ class PurchaseRequisitionService
      */
     public function create(User $actor, int $storeId, array $data): array
     {
+        abort_unless(
+            $this->permissions->allows($actor, 'settings.manage', $storeId)
+                || $this->permissions->allows($actor, 'purchase_order.create', $storeId),
+            403,
+            'PR manual hanya dapat dibuat oleh Admin atau Purchasing. Kasir dapat meneruskan PR otomatis.',
+        );
+
         $id = DB::transaction(function () use ($actor, $storeId, $data) {
             $items = $this->normalizeItems($storeId, $data['items']);
             $total = $this->sumTotal($items);
@@ -164,6 +178,196 @@ class PurchaseRequisitionService
     }
 
     /**
+     * Reconcile low-stock products into the store's single editable automatic PR draft.
+     *
+     * @param  list<int>|null  $productIds  Products affected by a stock/master-data change; null means all products
+     * @return array<string, mixed>|null
+     */
+    public function synchronizeAutomatic(User $actor, int $storeId, ?array $productIds = null): ?array
+    {
+        $id = DB::transaction(function () use ($actor, $storeId, $productIds) {
+            DB::table('settings')->insertOrIgnore([
+                'store_id' => $storeId,
+                'setting_key' => 'inventory_low_stock_threshold',
+                'setting_value' => json_encode('3.000'),
+            ]);
+
+            $setting = DB::table('settings')
+                ->where('store_id', $storeId)
+                ->where('setting_key', 'inventory_low_stock_threshold')
+                ->lockForUpdate()
+                ->value('setting_value');
+            $thresholdValue = json_decode((string) $setting, true);
+            if (! is_string($thresholdValue) && ! is_numeric($thresholdValue)) {
+                throw new \LogicException('Ambang stok minimum tersimpan tidak valid.');
+            }
+            $threshold = Decimal::qtyString(Decimal::qty((string) $thresholdValue));
+
+            $draft = DB::table('purchase_requisitions')
+                ->where('store_id', $storeId)
+                ->where('is_auto_generated', 1)
+                ->where('status', 'draft')
+                ->lockForUpdate()
+                ->first();
+
+            $fullRefresh = $productIds === null || $productIds === [] || $draft === null;
+            $affectedIds = $fullRefresh
+                ? null
+                : array_values(array_unique(array_map('intval', $productIds)));
+
+            $currentItems = $draft === null
+                ? []
+                : DB::table('purchase_requisition_items')
+                    ->where('pr_id', $draft->id)
+                    ->get(['product_id', 'qty', 'est_price', 'note'])
+                    ->keyBy('product_id')
+                    ->all();
+
+            $desiredItems = [];
+            if (! $fullRefresh) {
+                foreach ($currentItems as $productId => $item) {
+                    if (! in_array((int) $productId, $affectedIds, true)) {
+                        $desiredItems[(int) $productId] = [
+                            'product_id' => (int) $productId,
+                            'qty' => (string) $item->qty,
+                            'est_price' => $item->est_price,
+                            'note' => $item->note,
+                        ];
+                    }
+                }
+            }
+
+            $stock = DB::table('inventory_balances')
+                ->select('product_id')
+                ->selectRaw('SUM(qty_sellable) as stock_sellable')
+                ->groupBy('product_id');
+            $products = DB::table('products as p')
+                ->leftJoinSub($stock, 'stock', fn ($join) => $join->on('stock.product_id', '=', 'p.id'))
+                ->where('p.store_id', $storeId)
+                ->where('p.status', 'active')
+                ->where('p.restock_quantity', '>', 0)
+                ->when($affectedIds !== null, fn ($query) => $query->whereIn('p.id', $affectedIds))
+                ->orderBy('p.id')
+                ->get([
+                    'p.id',
+                    'p.restock_quantity',
+                    'p.avg_cost',
+                    DB::raw('COALESCE(stock.stock_sellable, 0) as stock_sellable'),
+                    DB::raw('ROUND(p.avg_cost, 2) as est_price'),
+                ]);
+
+            $coveredProductIds = $this->coveredByOpenRequisitions(
+                $storeId,
+                $products->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            );
+            $covered = array_fill_keys($coveredProductIds, true);
+
+            foreach ($products as $product) {
+                $productId = (int) $product->id;
+                $onHand = Decimal::qty((string) $product->stock_sellable);
+                $restockQuantity = Decimal::qty((string) $product->restock_quantity);
+
+                if ($onHand > Decimal::qty($threshold) || $restockQuantity <= 0 || isset($covered[$productId])) {
+                    unset($desiredItems[$productId]);
+
+                    continue;
+                }
+
+                $desiredItems[$productId] = [
+                    'product_id' => $productId,
+                    'qty' => Decimal::qtyString($restockQuantity),
+                    'est_price' => (string) $product->est_price,
+                    'note' => 'Stok saat ini '.Decimal::qtyString($onHand).'; ambang '.$threshold,
+                ];
+            }
+
+            ksort($desiredItems);
+            $desiredItems = array_values($desiredItems);
+
+            if ($draft === null && $desiredItems === []) {
+                return null;
+            }
+
+            if ($draft !== null && $desiredItems === []) {
+                DB::table('purchase_requisition_items')->where('pr_id', $draft->id)->delete();
+                DB::table('purchase_requisitions')->where('id', $draft->id)->update([
+                    'status' => 'cancelled',
+                    'est_total' => '0.00',
+                    'reason' => 'Pemantauan stok otomatis dibatalkan karena tidak ada stok menipis.',
+                ]);
+                $this->audit->log(
+                    'purchase_requisition.auto_cancel',
+                    'purchase_requisition',
+                    (int) $draft->id,
+                    before: ['status' => 'draft', 'items' => count($currentItems), 'est_total' => $draft->est_total],
+                    after: ['status' => 'cancelled', 'items' => 0, 'est_total' => '0.00'],
+                    actorId: $actor->id,
+                    storeId: $storeId,
+                );
+
+                return null;
+            }
+
+            $total = $this->sumTotal($desiredItems);
+            $totalString = Decimal::moneyString($total);
+
+            if ($draft === null) {
+                $id = DB::table('purchase_requisitions')->insertGetId([
+                    'store_id' => $storeId,
+                    'doc_number' => $this->nextDocNumber($storeId, 'PR'),
+                    'requested_by' => $actor->id,
+                    'reason' => 'Pemantauan stok otomatis',
+                    'est_total' => $totalString,
+                    'status' => 'draft',
+                    'is_auto_generated' => 1,
+                ]);
+                $this->insertItems($id, $desiredItems);
+                $this->audit->log(
+                    'purchase_requisition.auto_create',
+                    'purchase_requisition',
+                    $id,
+                    after: ['items' => count($desiredItems), 'est_total' => $totalString],
+                    actorId: $actor->id,
+                    storeId: $storeId,
+                );
+
+                return $id;
+            }
+
+            $currentLines = [];
+            foreach ($currentItems as $productId => $item) {
+                $currentLines[(int) $productId] = [
+                    'product_id' => (int) $productId,
+                    'qty' => (string) $item->qty,
+                    'est_price' => $item->est_price,
+                    'note' => $item->note,
+                ];
+            }
+            ksort($currentLines);
+            $currentLines = array_values($currentLines);
+
+            if ($currentLines !== $desiredItems) {
+                DB::table('purchase_requisition_items')->where('pr_id', $draft->id)->delete();
+                $this->insertItems((int) $draft->id, $desiredItems);
+                DB::table('purchase_requisitions')->where('id', $draft->id)->update(['est_total' => $totalString]);
+                $this->audit->log(
+                    'purchase_requisition.auto_update',
+                    'purchase_requisition',
+                    (int) $draft->id,
+                    before: ['items' => count($currentLines), 'est_total' => $draft->est_total],
+                    after: ['items' => count($desiredItems), 'est_total' => $totalString],
+                    actorId: $actor->id,
+                    storeId: $storeId,
+                );
+            }
+
+            return (int) $draft->id;
+        });
+
+        return $id === null ? null : $this->load($storeId, $id);
+    }
+
+    /**
      * Mengubah PR berstatus draft/returned. `items` (bila dikirim) menggantikan seluruh item.
      *
      * @param  array<string, mixed>  $data
@@ -173,6 +377,14 @@ class PurchaseRequisitionService
     {
         DB::transaction(function () use ($actor, $storeId, $id, $data) {
             $pr = $this->lock($storeId, $id);
+            abort_if((bool) $pr->is_auto_generated, 403, 'PR otomatis dikelola sistem dan tidak dapat diubah manual.');
+            abort_unless(
+                $this->permissions->allows($actor, 'settings.manage', $storeId)
+                    || $this->permissions->allows($actor, 'purchase_order.create', $storeId)
+                    || $this->permissions->allows($actor, 'purchase_requisition.finance_check', $storeId),
+                403,
+                'PR manual hanya dapat diubah Admin, Purchasing, atau Finance.',
+            );
             $this->assertCanManage($actor, $storeId, $pr);
             $this->assertStatus($pr, self::EDITABLE, 'PR hanya dapat diubah saat berstatus draft atau dikembalikan.');
 
@@ -421,6 +633,7 @@ class PurchaseRequisitionService
     {
         DB::transaction(function () use ($actor, $storeId, $id, $reason) {
             $pr = $this->lock($storeId, $id);
+            abort_if((bool) $pr->is_auto_generated, 403, 'PR otomatis tidak dapat dibatalkan manual.');
             $this->assertCanManage($actor, $storeId, $pr);
             $this->assertStatus($pr, ['draft', 'returned', 'submitted'], 'PR hanya dapat dibatalkan saat draft, dikembalikan, atau diajukan.');
 
@@ -478,11 +691,55 @@ class PurchaseRequisitionService
 
     private function assertCanManage(User $actor, int $storeId, object $pr): void
     {
+        if ((bool) $pr->is_auto_generated) {
+            abort_unless(
+                $this->permissions->allows($actor, 'purchase_requisition.create', $storeId),
+                403,
+                'Anda tidak berwenang meneruskan PR otomatis.',
+            );
+
+            return;
+        }
+
         abort_unless(
             (int) $pr->requested_by === $actor->id || $this->permissions->allows($actor, 'purchase_requisition.finance_check', $storeId),
             403,
             'Anda tidak berwenang mengelola PR ini.',
         );
+    }
+
+    /**
+     * Products already covered by a requisition awaiting fulfillment must not be requested twice.
+     *
+     * @param  list<int>  $productIds
+     * @return list<int>
+     */
+    private function coveredByOpenRequisitions(int $storeId, array $productIds): array
+    {
+        if ($productIds === []) {
+            return [];
+        }
+
+        return DB::table('purchase_requisition_items as i')
+            ->join('purchase_requisitions as pr', 'pr.id', '=', 'i.pr_id')
+            ->where('pr.store_id', $storeId)
+            ->whereIn('i.product_id', $productIds)
+            ->where(function ($query) {
+                $query->whereIn('pr.status', ['submitted', 'finance_checked', 'approved', 'returned'])
+                    ->orWhere(function ($query) {
+                        $query->where('pr.status', 'converted')
+                            ->whereExists(function ($query) {
+                                $query->selectRaw('1')
+                                    ->from('purchase_orders as po')
+                                    ->whereColumn('po.pr_id', 'pr.id')
+                                    ->whereIn('po.status', ['draft', 'pending_confirmation', 'approved', 'sent', 'partially_received']);
+                            });
+                    });
+            })
+            ->distinct()
+            ->pluck('i.product_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     /** @param list<string> $allowed */
@@ -540,16 +797,19 @@ class PurchaseRequisitionService
 
             if ($product === null) {
                 $errors["items.{$i}.product_id"] = ['Produk tidak ditemukan.'];
+
                 continue;
             }
 
             if ($product->status === 'inactive') {
                 $errors["items.{$i}.product_id"] = ["Produk {$product->name} nonaktif."];
+
                 continue;
             }
 
             if (isset($seen[$productId])) {
                 $errors["items.{$i}.product_id"] = ["Produk {$product->name} sudah ada di daftar; gabungkan jumlahnya."];
+
                 continue;
             }
             $seen[$productId] = true;
@@ -662,6 +922,7 @@ class PurchaseRequisitionService
             'est_total' => $pr->est_total,
             'requested_by' => (int) $pr->requested_by,
             'requester_name' => $pr->requester_name,
+            'is_auto_generated' => (bool) $pr->is_auto_generated,
             'submitted_at' => $pr->submitted_at,
             'created_at' => $pr->created_at,
             'items' => $items,

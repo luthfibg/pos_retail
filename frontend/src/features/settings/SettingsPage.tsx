@@ -6,6 +6,7 @@ import { groupSections, sectionFromHash, visibleSections, type SectionId, type S
 const AdminModel = lazy(() => import('./AdminModelSettingsPage').then((module) => ({ default: module.AdminModelSettingsPage })));
 const StoreName = lazy(() => import('./StoreNameSettingsPage').then((module) => ({ default: module.StoreNameSettingsPage })));
 const Warehouse = lazy(() => import('./WarehouseSettingsPage').then((module) => ({ default: module.WarehouseSettingsPage })));
+const StockMonitoring = lazy(() => import('./StockMonitoringSettingsPage').then((module) => ({ default: module.StockMonitoringSettingsPage })));
 const StockAuthority = lazy(() => import('./StockAuthoritySettingsPage').then((module) => ({ default: module.StockAuthoritySettingsPage })));
 const Vat = lazy(() => import('@/features/pricing/VatSettingsPage').then((module) => ({ default: module.VatSettingsPage })));
 const Discounts = lazy(() => import('@/features/pricing/DiscountsPage').then((module) => ({ default: module.DiscountsPage })));
@@ -19,6 +20,7 @@ function SectionBody({ id }: { id: SectionId }) {
     case 'store-name': return <StoreName embedded />;
     case 'admin-model': return <AdminModel embedded />;
     case 'warehouse': return <Warehouse embedded />;
+    case 'stock-monitoring': return <StockMonitoring embedded />;
     case 'stock-authority': return <StockAuthority embedded />;
     case 'vat': return <Vat embedded />;
     case 'discounts': return <Discounts embedded />;

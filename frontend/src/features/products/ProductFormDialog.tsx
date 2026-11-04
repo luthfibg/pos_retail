@@ -6,6 +6,7 @@ import type { Product, ProductStatus } from '@/lib/api/types';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { Modal } from '@/components/ui/Modal';
 import { Field, inputCls } from '@/components/ui/Field';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { formatRupiah } from '@/lib/format';
 import {
@@ -47,6 +48,7 @@ export function ProductFormDialog({ product, onClose }: Props) {
     onSuccess: (saved, job) => {
       void qc.invalidateQueries({ queryKey: ['products'] });
       void qc.invalidateQueries({ queryKey: ['categories'] });
+      void qc.invalidateQueries({ queryKey: ['purchase-requisitions'] });
       if (job.kind === 'create') setCreated(saved);
       else onClose();
     },
@@ -181,6 +183,15 @@ export function ProductFormDialog({ product, onClose }: Props) {
               <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.criticalStock} onChange={(e) => set('criticalStock', e.target.value)} />
             </Field>
           </div>
+
+          <Field label="Jumlah isi ulang" error={err('restock_quantity')} hint="Jumlah unit yang diminta sistem saat stok mencapai ambang pemantauan. Isi 0 untuk tidak dibuatkan PR otomatis.">
+            <LocalDecimalInput
+              className={`${inputCls} tabular-nums`}
+              kind="quantity"
+              value={values.restockQuantity}
+              onChange={(value) => set('restockQuantity', value)}
+            />
+          </Field>
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={values.trackExpiry} onChange={(e) => set('trackExpiry', e.target.checked)} />

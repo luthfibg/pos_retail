@@ -402,6 +402,12 @@ class GoodsReceiptService
                 ];
             }
 
+            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+                $actor,
+                $storeId,
+                $items->pluck('product_id')->map(fn ($productId) => (int) $productId)->unique()->values()->all(),
+            );
+
             // 3. qty PO dan status PO; qty_short = sisa pesanan setelah penerimaan ini (dicatat di baris GR pertama per baris PO)
             $allDone = true;
             $anyReceived = false;

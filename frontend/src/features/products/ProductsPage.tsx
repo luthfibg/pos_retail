@@ -95,6 +95,7 @@ export function ProductsPage() {
               <th className="px-3 py-2">Kategori</th>
               <th className="px-3 py-2 text-right">Harga jual</th>
               <th className="px-3 py-2 text-right">Stok</th>
+              <th className="px-3 py-2 text-right">Isi ulang</th>
               <th className="px-3 py-2">Kondisi stok</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2" />
@@ -111,6 +112,7 @@ export function ProductsPage() {
                 <td className="px-3 py-2 text-slate-600">{p.category_name ?? '—'}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.sell_price)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.stock_sellable)} {p.unit_name}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.restock_quantity)} {p.unit_name}</td>
                 <td className="px-3 py-2"><StockBadge status={p.stock_status} /></td>
                 <td className="px-3 py-2 text-slate-600">{STATUS_LABEL[p.status]}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-right">
@@ -122,10 +124,10 @@ export function ProductsPage() {
               </tr>
             ))}
             {!products.isLoading && rows.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
+              <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
             )}
             {products.isLoading && (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
+              <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
             )}
           </tbody>
         </table>

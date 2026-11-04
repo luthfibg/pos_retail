@@ -2,7 +2,7 @@
  * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
  * Izin hanya untuk tampilan; backend tetap penentu akhir.
  */
-export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-authority' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
+export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'stock-authority' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
 export type GroupId = 'store' | 'sales' | 'cash' | 'accounts';
 
 export interface SettingsSection {
@@ -38,6 +38,11 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     id: 'warehouse', group: 'store', title: 'Gudang', permission: 'settings.manage', defaultOpen: true,
     description: 'Aktifkan lokasi Gudang untuk penerimaan barang dan transfer stok.',
     keywords: ['lokasi', 'stok', 'transfer'],
+  },
+  {
+    id: 'stock-monitoring', group: 'store', title: 'Pemantauan stok', permission: 'settings.manage', defaultOpen: true,
+    description: 'Atur ambang stok menipis untuk pembuatan PR otomatis oleh sistem.',
+    keywords: ['inventory', 'stok', 'minimum', 'menipis', 'pembelian', 'restock', 'isi ulang', 'pr otomatis'],
   },
   {
     id: 'stock-authority', group: 'store', title: 'Kewenangan stok', permission: 'settings.manage', defaultOpen: false,

@@ -19,11 +19,13 @@ use Illuminate\Validation\ValidationException;
  */
 class ProductService
 {
-    private const PLAIN_FIELDS = ['name', 'category_id', 'unit_name', 'min_stock', 'critical_stock'];
+    private const PLAIN_FIELDS = ['name', 'category_id', 'unit_name', 'min_stock', 'critical_stock', 'restock_quantity'];
 
-    public function __construct(private AuditLogger $audit, private NumberSequence $sequences)
-    {
-    }
+    public function __construct(
+        private AuditLogger $audit,
+        private NumberSequence $sequences,
+        private PurchaseRequisitionService $requisitions,
+    ) {}
 
     /** @param array<string, mixed> $filters */
     public function search(int $storeId, array $filters, int $perPage): LengthAwarePaginator
@@ -97,6 +99,7 @@ class ProductService
                     'sell_price' => $price,
                     'min_stock' => $min,
                     'critical_stock' => $critical,
+                    'restock_quantity' => $data['restock_quantity'] ?? '0.000',
                     'status' => $status,
                     'created_by' => $actor->id,
                 ]);
@@ -114,10 +117,19 @@ class ProductService
                     'product.create',
                     'product',
                     $id,
-                    after: ['sku' => $sku, 'barcode' => $barcode, 'name' => $data['name'], 'status' => $status, 'sell_price' => $price],
+                    after: [
+                        'sku' => $sku,
+                        'barcode' => $barcode,
+                        'name' => $data['name'],
+                        'status' => $status,
+                        'sell_price' => $price,
+                        'restock_quantity' => $data['restock_quantity'] ?? '0.000',
+                    ],
                     storeId: $storeId,
                     actorId: $actor->id,
                 );
+
+                $this->requisitions->synchronizeAutomatic($actor, $storeId, [$id]);
 
                 return $id;
             });
@@ -235,6 +247,10 @@ class ProductService
                     actorId: $actor->id,
                 );
             }
+
+            if (array_key_exists('restock_quantity', $changes) || $statusChanged) {
+                $this->requisitions->synchronizeAutomatic($actor, $storeId, [$id]);
+            }
         });
 
         return $this->find($storeId, $id);
@@ -269,6 +285,7 @@ class ProductService
             'avg_cost' => $row->avg_cost,
             'min_stock' => $row->min_stock,
             'critical_stock' => $row->critical_stock,
+            'restock_quantity' => $row->restock_quantity,
             'status' => $row->status,
             'stock_sellable' => $stock,
             'stock_status' => StockStatus::for($stock, $row->min_stock, $row->critical_stock),

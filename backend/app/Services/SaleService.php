@@ -252,6 +252,11 @@ class SaleService
                 ];
             }
             $this->inventory->voidSale($storeId, $allocations, 'sale', $id, $actor->id);
+            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+                $actor,
+                $storeId,
+                array_values(array_unique(array_column($allocations, 'product_id'))),
+            );
 
             // tunai: balikkan ledger Kas Kecil (uang kembali ke pembeli dari laci shift yang sama)
             if (! $isCredit) {
@@ -421,6 +426,12 @@ class SaleService
                 ]);
             }
         }
+
+        $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+            $actor,
+            $storeId,
+            array_column($computed, 'product_id'),
+        );
 
         // 8. tunai: pembayaran + ledger kas kecil
         if (! $isCredit) {

@@ -16,7 +16,8 @@ import {
 function pr(id: number, status: PurchaseRequisitionSummary['status']): PurchaseRequisitionSummary {
   return {
     id, doc_number: `PR-${id}`, status, reason: null, est_total: '0', items_count: 1,
-    requested_by: 1, requester_name: 'Kasir Satu', submitted_at: null, created_at: '2026-10-27 00:00:00',
+    requested_by: 1, requester_name: 'Kasir Satu', is_auto_generated: false,
+    submitted_at: null, created_at: '2026-10-27 00:00:00',
   };
 }
 

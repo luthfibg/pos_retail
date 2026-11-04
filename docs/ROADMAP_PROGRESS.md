@@ -34,6 +34,7 @@
 - **Masuk dan hak akses:** login/logout, role Admin dan Kasir, izin yang bisa didelegasikan, persetujuan dengan mengetik ulang password pemberi persetujuan. ✅
 - **Master data:** kategori, supplier, produk (harga + riwayat harga, barcode otomatis, status stok). ✅
 - **Stok:** Admin memasukkan stok awal; stok dilihat per batch dengan urutan FEFO dan lencana kedaluwarsa; riwayat pergerakan stok. ✅
+- **Pemantauan stok & PR otomatis:** ambang toko default 3 unit dapat diatur; kuantitas pengisian ulang ditetapkan pada master produk; draft PR tersinkron otomatis dan Kasir hanya meneruskan. ✅ `StockMonitoringTest` serta 10 test feature stok/pembelian terkait lulus; total validasi terarah 122 test (1.158 assertions).
 - **Transfer stok:** transfer antarposisi dan putaway gudang↔toko mengikuti status draft/posting, menjaga batch dan saldo total, serta menghormati `warehouse_enabled`. ✅
 - **Adjustment dan opname:** Kasir membuat dan mengajukan snapshot hitung stok; Admin menyetujui (re-auth wajib untuk loss/expired) dan posting movement penyesuaian secara atomik. ✅
 - **Karyawan:** Kasir menambah karyawan (menunggu verifikasi, hanya tunai), Admin memverifikasi dan menetapkan batas kredit, notifikasi ke Admin. ✅

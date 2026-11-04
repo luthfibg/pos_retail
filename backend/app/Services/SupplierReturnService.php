@@ -184,6 +184,11 @@ class SupplierReturnService
             $items = $this->itemsForUpdate($id);
             $this->assertScopes($actor, $storeId, $items);
             $this->inventory->quarantineSupplierReturn($storeId, $id, $items, $actor->id);
+            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+                $actor,
+                $storeId,
+                array_values(array_unique(array_map('intval', array_column($items, 'product_id')))),
+            );
             DB::table('supplier_returns')->where('id', $id)->update([
                 'status' => 'submitted',
                 'submitted_at' => $this->nowUtc(),
@@ -221,6 +226,11 @@ class SupplierReturnService
             $lossAmount = $accepted ? null : $this->lossAmount($items);
             if ($accepted) {
                 $this->inventory->closeSupplierReturn($storeId, $id, $items, $actor->id, 'supplier_return_out');
+                $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+                    $actor,
+                    $storeId,
+                    array_values(array_unique(array_map('intval', array_column($items, 'product_id')))),
+                );
             }
 
             DB::table('supplier_returns')->where('id', $id)->update([
@@ -340,6 +350,12 @@ class SupplierReturnService
                     ->update(['replacement_batch_id' => $received['batch_id']]);
             }
 
+            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+                $actor,
+                $storeId,
+                array_values(array_unique(array_map('intval', array_column($returnItems, 'product_id')))),
+            );
+
             DB::table('supplier_returns')->where('id', $id)->update(['status' => 'replacement_received']);
             $this->audit->log(
                 'supplier_return.replacement_received',
@@ -384,6 +400,11 @@ class SupplierReturnService
 
             $items = $this->itemsForUpdate($id);
             $this->inventory->closeSupplierReturn($storeId, $id, $items, $approver->id, 'write_off');
+            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+                $actor,
+                $storeId,
+                array_values(array_unique(array_map('intval', array_column($items, 'product_id')))),
+            );
             DB::table('supplier_returns')->where('id', $id)->update([
                 'status' => 'written_off',
                 'approved_by' => $approver->id,

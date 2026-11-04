@@ -24,7 +24,7 @@ erDiagram
   shelves ||--o{ shelf_positions : has
   customers ||--o{ customer_credit_limits : "limit history"
   users ||--o{ customers : "created_by / verified_by"
-  products { varchar sku UK; varchar barcode UK; enum status; bool track_expiry; decimal avg_cost }
+  products { varchar sku UK; varchar barcode UK; enum status; bool track_expiry; decimal avg_cost; decimal restock_quantity }
   customers { varchar customer_no UK; enum status }
   customer_credit_limits { decimal limit_amount; datetime effective_from }
 ```
@@ -48,6 +48,7 @@ erDiagram
   shelf_positions ||--o{ inventory_balances : at
   product_batches ||--o{ inventory_balances : of
   products ||--o{ inventory_movements : history
+  purchase_requisitions { bool is_auto_generated }
   product_batches ||--o{ inventory_movements : of
   stock_transfers ||--|{ stock_transfer_items : has
   stock_adjustments ||--|{ stock_adjustment_items : has

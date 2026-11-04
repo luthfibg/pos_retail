@@ -10,7 +10,7 @@ import type {
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, ProfitReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
-  WarehouseSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting,
+  WarehouseSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting, StockMonitoringSetting,
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
   SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
   BankAccount, PurchaseFundSummary,
@@ -27,6 +27,15 @@ export const authApi = {
 export const storeSettingsApi = {
   updateName: (name: string) =>
     api<{ data: { name: string } }>('/settings/store-name', { method: 'PATCH', body: { name } }).then((response) => response.data),
+};
+
+export const stockMonitoringApi = {
+  get: () => api<{ data: StockMonitoringSetting }>('/settings/inventory/stock-monitoring').then((r) => r.data),
+  update: (low_stock_threshold: string) =>
+    api<{ data: StockMonitoringSetting }>('/settings/inventory/stock-monitoring', {
+      method: 'PUT',
+      body: { low_stock_threshold },
+    }).then((r) => r.data),
 };
 
 export const platformCliLoginApi = {

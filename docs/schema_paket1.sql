@@ -227,6 +227,7 @@ CREATE TABLE products (
   last_cost DECIMAL(18,2) NULL,
   min_stock DECIMAL(18,3) NOT NULL DEFAULT 0,
   critical_stock DECIMAL(18,3) NOT NULL DEFAULT 0,
+  restock_quantity DECIMAL(18,3) NOT NULL DEFAULT 0,
   status ENUM('pending_price','active','inactive') NOT NULL DEFAULT 'pending_price',
   created_by BIGINT UNSIGNED NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -355,11 +356,14 @@ CREATE TABLE purchase_requisitions (
   reason VARCHAR(500) NULL,
   est_total DECIMAL(18,2) NOT NULL DEFAULT 0,
   status ENUM('draft','submitted','finance_checked','approved','rejected','returned','converted','cancelled') NOT NULL DEFAULT 'draft',
+  is_auto_generated TINYINT(1) NOT NULL DEFAULT 0,
+  auto_draft_store_key BIGINT UNSIGNED GENERATED ALWAYS AS (IF(is_auto_generated = 1 AND status = 'draft', store_id, NULL)) STORED,
   submitted_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
   UNIQUE KEY uq_pr_number (store_id, doc_number),
+  UNIQUE KEY uq_auto_pr_draft_store (auto_draft_store_key),
   KEY idx_pr_status (status),
   CONSTRAINT fk_pr_user FOREIGN KEY (requested_by) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

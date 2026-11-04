@@ -16,12 +16,13 @@ export interface ProductFormValues {
   sellPrice: string;
   minStock: string;
   criticalStock: string;
+  restockQuantity: string;
   status: ProductStatus;
   reason: string;
 }
 
 export type FormErrors = Partial<Record<
-  'sku' | 'barcode' | 'name' | 'category_id' | 'unit_name' | 'sell_price' | 'min_stock' | 'critical_stock' | 'status',
+  'sku' | 'barcode' | 'name' | 'category_id' | 'unit_name' | 'sell_price' | 'min_stock' | 'critical_stock' | 'restock_quantity' | 'status',
   string
 >>;
 
@@ -33,7 +34,7 @@ export type UpdatePayload = Partial<Omit<ProductInput, 'sku' | 'barcode'>> & {
 export function emptyValues(): ProductFormValues {
   return {
     sku: '', barcode: '', name: '', categoryId: '', unitName: 'pcs', trackExpiry: false,
-    sellPrice: '', minStock: '0', criticalStock: '0', status: 'pending_price', reason: '',
+    sellPrice: '', minStock: '0', criticalStock: '0', restockQuantity: '0', status: 'pending_price', reason: '',
   };
 }
 
@@ -48,6 +49,7 @@ export function valuesFromProduct(p: Product): ProductFormValues {
     sellPrice: p.sell_price ?? '',
     minStock: p.min_stock,
     criticalStock: p.critical_stock,
+    restockQuantity: p.restock_quantity,
     status: p.status,
     reason: '',
   };
@@ -96,6 +98,18 @@ export function validateProduct(
   if (!e.min_stock && !e.critical_stock && Number(crit) > Number(min)) {
     e.critical_stock = 'Batas kritis tidak boleh lebih besar dari batas minimum.';
   }
+  const restock = normalizeDecimal(v.restockQuantity);
+  const restockMatch = /^(\d+)(?:\.(\d{1,3}))?$/.exec(restock);
+  const restockInteger = restockMatch?.[1]?.replace(/^0+(?=\d)/, '');
+  if (
+    !restockMatch
+    || !restockInteger
+    || restockInteger.length > 5
+    || (restockInteger.length === 5 && restockInteger > '99999')
+    || (restockInteger === '99999' && /[1-9]/.test(restockMatch[2] ?? ''))
+  ) {
+    e.restock_quantity = 'Isi angka 0–99.999 dengan maksimal 3 desimal.';
+  }
 
   if (mode === 'edit' && v.status === 'active') {
     const hasPrice = caps.canSetPrice ? price !== '' : original?.sell_price != null;
@@ -112,6 +126,7 @@ export function buildCreatePayload(v: ProductFormValues, caps: ProductCaps): Pro
     track_expiry: v.trackExpiry,
     min_stock: normalizeDecimal(v.minStock),
     critical_stock: normalizeDecimal(v.criticalStock),
+    restock_quantity: normalizeDecimal(v.restockQuantity),
   };
   if (v.sku.trim()) input.sku = v.sku.trim();
   if (v.barcode.trim()) input.barcode = v.barcode.trim();
@@ -143,6 +158,9 @@ export function buildUpdatePayload(
   const crit = normalizeDecimal(v.criticalStock);
   if (!sameNumber(original.min_stock, min)) p.min_stock = min;
   if (!sameNumber(original.critical_stock, crit)) p.critical_stock = crit;
+
+  const restock = normalizeDecimal(v.restockQuantity);
+  if (!sameNumber(original.restock_quantity, restock)) p.restock_quantity = restock;
 
   const price = normalizeDecimal(v.sellPrice);
   if (caps.canSetPrice && price && !sameNumber(original.sell_price, price)) p.sell_price = price;

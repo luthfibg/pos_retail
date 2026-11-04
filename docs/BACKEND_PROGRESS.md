@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 3 November 2026 · **Validasi mesin kasir:** `RegisterTest` 4, `ShiftTest` 8, `CashDepositTest` 16, `SaleTest` 17, `SeederTest` 3, dan `AdminModelTest` 9 lulus; Pint, frontend typecheck, 6 tes pengaturan, dan production build lulus. `RbacTest` masih memiliki satu kegagalan lama: ekspektasi daftar permission Kasir belum memasukkan `supplier_return.create`. Suite penuh sebelumnya: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+**Diperbarui:** 4 November 2026 · **Validasi mesin kasir:** `RegisterTest` 4, `ShiftTest` 8, `CashDepositTest` 16, `SaleTest` 17, `SeederTest` 3, dan `AdminModelTest` 9 lulus; Pint, frontend typecheck, 6 tes pengaturan, dan production build lulus. `RbacTest` masih memiliki satu kegagalan lama: ekspektasi daftar permission Kasir belum memasukkan `supplier_return.create`. Suite penuh sebelumnya: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
@@ -955,11 +955,29 @@ Pengguna toko dengan izin `settings.manage` dapat memperbarui nama toko aktifnya
 
 Respons hanya `{ "data": { "name": "Nama Toko Baru" } }`. Perubahan dicatat di audit `settings.store_name`. Tidak ada migration atau permission baru.
 
+## 17. Pemantauan Stok dan PR Otomatis ✅
+
+PR draft otomatis dibuat dan disinkronkan backend ketika stok berubah, ambang pengaturan berubah, atau kuantitas pengisian ulang master produk berubah. Nilai stok yang dipantau adalah jumlah `qty_sellable` seluruh lokasi toko; hanya produk berstatus `active` yang dimasukkan. Produk terdeteksi menipis saat stok ≤ ambang. Nilai ambang default `3.000`; jumlah pembelian memakai `restock_quantity` pada master produk. Produk dengan `restock_quantity` nol tidak dimasukkan.
+
+| Method | Path | Izin | Fungsi |
+|---|---|---|---|
+| GET | `/api/settings/inventory/stock-monitoring` | `settings.manage` | Baca `low_stock_threshold` |
+| PUT | `/api/settings/inventory/stock-monitoring` | `settings.manage` | Ubah `low_stock_threshold` (qty 0–99.999, maks. 3 desimal) |
+
+`low_stock_threshold` dikirim sebagai string qty (contoh `"3.000"`). Pada data produk, `restock_quantity` diterima di `POST /api/products` dan `PATCH /api/products/{id}`, serta dikembalikan pada daftar/detail produk. Field ini qty desimal (maks. 99.999, 3 desimal), default `"0.000"` untuk kompatibilitas produk lama.
+
+Satu PR otomatis draft per toko memuat setiap produk menipis dengan kuantitas pengisian ulang produk. `est_price` diambil dari `avg_cost` master dan dibulatkan 2 desimal sesuai skema harga estimasi PR; `est_total` dihitung ulang atomik. Draft diperbarui saat stok/HPP/master/ambang berubah; baris yang tidak lagi memenuhi kriteria dihapus dan draft kosong dibatalkan sistem. Produk yang sudah tercakup PR yang menunggu proses atau PO aktif tidak diminta ulang.
+
+Kasir dapat melihat PR otomatis dan hanya dapat meneruskannya (`POST /api/purchase-requisitions/{id}/submit`); data PR otomatis tidak dapat dibuat manual, diedit, atau dibatalkan oleh Kasir. PR manual tetap tersedia untuk Admin/Purchasing. Setelah diajukan, PR otomatis tidak berubah; deteksi berikutnya membuat draft baru untuk barang yang belum tercakup dokumen pembelian aktif.
+
+Sinkronisasi dipanggil atomik dari stok awal, penjualan/void, penerimaan barang, adjustment/opname, retur supplier/pengganti, serta perubahan produk dan pengaturan. Validasi terarah lulus: 122 test, 1.158 assertions mencakup `PurchaseRequisitionTest`, `PurchaseOrderTest`, `StockMonitoringTest`, `ProductTest`, `GoodsReceiptTest`, `InventoryServiceTest`, `OpeningBalanceTest`, `SaleTest`, `SaleVoidTest`, `StockAdjustmentTest`, dan `SupplierReturnTest`. Pint lulus untuk seluruh file PHP yang berubah.
+
 ## Perubahan lain yang memengaruhi frontend
 - `routes/api.php` kini memuat `routes/api/inventory.php`, `routes/api/customers.php`, `routes/api/pos.php`, `routes/api/billing.php`, `routes/api/reports.php`; URL lama tidak berubah.
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-11-04** — Pemantauan stok per toko dengan ambang default 3.000, field `restock_quantity` di master produk, dan satu PR otomatis dinamis yang menghitung estimasi HPP/total; sinkronisasi atomik pada perubahan stok/master/setting, sementara Kasir hanya dapat meneruskan PR otomatis. Migration 000065. Validasi terarah 122 test (1.158 assertions) dan Pint lulus.
 - **2026-11-03** — Alokasi Kas Pembelian untuk PO: ledger rekening bank manual, saldo awal/penyesuaian ber-audit, alokasi penuh berdasarkan nilai PO, saldo tersedia dikurangi pencadangan tanpa mengklaim transfer bank, dan pelepasan alokasi saat PO dibatalkan atau nilainya berubah. Setiap PO kini menunggu konfirmasi Owner setelah dana dicadangkan. Rekening dimasking di endpoint; Finance diberi permission kelola/alokasi, Owner melihat, Admin mewarisi semua. `PurchaseOrderTest` (17) dan `GoodsReceiptTest` (16) lulus; suite penuh 294/297 dengan tiga kegagalan di test lama yang tidak terkait. Pint file baru lulus. Migrasi 000060 dan PermissionSeeder perlu dijalankan pada database existing.
 - **2026-11-02** — Laporan laba kotor `GET /api/reports/profit` memakai `line_total` dan HPP snapshot per item; penjualan kredit dipisah expected/valid dan pembayaran parsial Finance mengakui laba secara proporsional. Pencatatan pembayaran HRD kini masuk atomik ke ledger akun `main_cash`. Permission baru `reports.profit.view` untuk Admin, Owner, Finance, dan Accounting; `BillingTest` 11 lulus dan tes profit terarah 1 lulus.
 - **2026-11-02** — Endpoint Retail `PATCH /api/settings/store-name` hanya mengizinkan perubahan `name` (maks. 150 karakter), izin `settings.manage`, konteks toko aktif, dan audit `settings.store_name`; request menolak field toko lain. Tidak menambahkan endpoint read/create/delete atau perubahan atribut lain. `StoreNameSettingTest`: 3 test lulus.

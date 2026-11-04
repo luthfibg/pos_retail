@@ -45,6 +45,7 @@ export function PurchaseRequisitionsPage() {
     || can('purchase_order.create')
     || can('purchase_order.send');
   const canCreatePr = can('purchase_requisition.create');
+  const canCreateManualPr = can('settings.manage') || can('purchase_order.create');
   const canManagePo = can('purchase_order.create')
     || can('purchase_order.send')
     || can('purchase_requisition.approve');
@@ -59,11 +60,10 @@ export function PurchaseRequisitionsPage() {
   const [managePoId, setManagePoId] = useState<number | null>(null);
 
   const list = useQuery({
-    queryKey: ['purchase-requisitions', canViewAll ? 'all' : 'mine', queryText, status, page],
+    queryKey: ['purchase-requisitions', canViewAll ? 'all' : 'visible', queryText, status, page],
     queryFn: () => purchaseRequisitionApi.list({
       q: queryText || undefined,
       status: status || undefined,
-      mine: !canViewAll,
       page,
       per_page: 25,
     }),
@@ -83,10 +83,10 @@ export function PurchaseRequisitionsPage() {
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             {canViewAll
               ? 'Periksa PR toko dan pantau status pemeriksaan Finance, persetujuan Owner, hingga PO.'
-              : 'Buat PR untuk kebutuhan barang. Setelah diajukan, PR diperiksa Finance lalu menunggu persetujuan Owner.'}
+              : 'Ajukan PR otomatis dari pemantauan stok ke Finance. PR manual dibuat oleh Admin atau Purchasing.'}
           </p>
         </div>
-        {canCreatePr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat PR</button>}
+        {canCreateManualPr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat PR</button>}
       </header>
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
@@ -125,8 +125,11 @@ export function PurchaseRequisitionsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {list.data.data.map((pr) => (
                     <tr key={pr.id}>
-                      <td className="px-3 py-2 font-mono font-medium">{pr.doc_number}</td>
-                      {canViewAll && <td className="px-3 py-2">{pr.requester_name}</td>}
+                      <td className="px-3 py-2 font-mono font-medium">
+                        {pr.doc_number}
+                        {pr.is_auto_generated && <span className="mt-1 block font-sans text-xs font-medium text-blue-700">Otomatis · pemantauan stok</span>}
+                      </td>
+                      {canViewAll && <td className="px-3 py-2">{pr.is_auto_generated ? 'Sistem pemantauan stok' : pr.requester_name}</td>}
                       <td className="max-w-xs truncate px-3 py-2">{pr.reason || '—'}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{pr.items_count}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(pr.est_total)}</td>
@@ -396,6 +399,12 @@ export function PurchaseRequisitionDetailDialog({
             <Detail label="Diajukan" value={formatDateTime(pr.submitted_at)} />
             <Detail label="Estimasi total" value={formatRupiah(pr.est_total)} />
           </div>
+          {pr.is_auto_generated && (
+            <div role="note" className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+              <p className="font-semibold">Dibuat otomatis oleh pemantauan stok</p>
+              <p className="mt-1">Jumlah barang mengikuti pengaturan isi ulang tiap produk. Draft ini dikelola sistem; Kasir dapat mengajukannya ke Finance, tetapi tidak dapat mengubah atau membatalkannya.</p>
+            </div>
+          )}
           {pr.reason && <p className="rounded-md bg-slate-50 p-3 text-sm">{pr.reason}</p>}
 
           <section className="space-y-2">
@@ -511,9 +520,9 @@ export function PurchaseRequisitionDetailDialog({
           {!confirmAction && (
             <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
               {onPrint && isPrPrintable(pr.status) && <button type="button" onClick={() => onPrint(pr)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak PR</button>}
-              {canManagePr && active && <button type="button" onClick={onEdit} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Ubah Draft</button>}
+              {canManagePr && active && !pr.is_auto_generated && <button type="button" onClick={onEdit} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Ubah Draft</button>}
               {canManagePr && active && <button type="button" onClick={() => setConfirmAction('submit')} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Ajukan ke Finance</button>}
-              {canCancel && cancellable && <button type="button" onClick={() => setConfirmAction('cancel')} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700">Batalkan PR</button>}
+              {canCancel && cancellable && !pr.is_auto_generated && <button type="button" onClick={() => setConfirmAction('cancel')} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700">Batalkan PR</button>}
               {canFinanceCheck && pr.status === 'submitted' && <>
                 <button type="button" onClick={() => { setNote(''); setConfirmAction('finance-return'); }} className="rounded-md border border-amber-400 px-3 py-2 text-sm text-amber-800">Kembalikan</button>
                 <button type="button" onClick={() => setConfirmAction('finance-pass')} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Lolos Finance</button>

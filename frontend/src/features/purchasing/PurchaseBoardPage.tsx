@@ -52,6 +52,7 @@ export function PurchasingEntryPage() {
 export function PurchaseBoardPage() {
   const { can, me } = useAuth();
   const canCreatePr = can('purchase_requisition.create');
+  const canCreateManualPr = can('settings.manage') || can('purchase_order.create');
   const canFinanceCheck = can('purchase_requisition.finance_check');
   const canApprove = can('purchase_requisition.approve');
   const canCreatePo = can('purchase_order.create');
@@ -211,7 +212,7 @@ export function PurchaseBoardPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            {canCreatePr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat PR</button>}
+            {canCreateManualPr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat PR</button>}
           </div>
         </header>
 
@@ -399,8 +400,11 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onCreatePo
         <tbody className="divide-y divide-slate-100">
           {rows.map((pr) => (
             <tr key={pr.id} className={highlightId === pr.id ? 'bg-amber-50' : undefined}>
-              <td className="px-3 py-2 font-mono font-medium">{pr.doc_number}</td>
-              <td className="px-3 py-2">{pr.requester_name}</td>
+              <td className="px-3 py-2 font-mono font-medium">
+                {pr.doc_number}
+                {pr.is_auto_generated && <span className="mt-1 block font-sans text-xs font-medium text-blue-700">Otomatis · pemantauan stok</span>}
+              </td>
+              <td className="px-3 py-2">{pr.is_auto_generated ? 'Sistem pemantauan stok' : pr.requester_name}</td>
               <td className="max-w-xs truncate px-3 py-2">{pr.reason || '—'}</td>
               <td className="px-3 py-2 text-right tabular-nums">{pr.items_count}</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(pr.est_total)}</td>

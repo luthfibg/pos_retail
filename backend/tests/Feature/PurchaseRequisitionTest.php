@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\PermissionResolver;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\BuildsPurchasing;
@@ -14,11 +15,14 @@ class PurchaseRequisitionTest extends SeededTestCase
 
     private User $cashier;
 
+    private User $purchaser;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->cashier = $this->makeUser('Kasir', 'kasir-beli');
+        $this->purchaser = $this->makeUser('Purchasing', 'purchasing-beli');
         Sanctum::actingAs($this->cashier, ['*']);
     }
 
@@ -30,17 +34,19 @@ class PurchaseRequisitionTest extends SeededTestCase
 
     private function createSubmitted(int $productId): int
     {
+        Sanctum::actingAs($this->purchaser, ['*']);
         $id = $this->postJson('/api/purchase-requisitions', $this->payload($productId))->assertCreated()->json('data.id');
         $this->postJson("/api/purchase-requisitions/{$id}/submit")->assertOk();
 
         return $id;
     }
 
-    public function test_cashier_creates_draft_with_computed_total_number_and_audit(): void
+    public function test_purchasing_creates_manual_draft_with_computed_total_number_and_audit(): void
     {
         $p1 = $this->product();
         $p2 = $this->product();
 
+        Sanctum::actingAs($this->purchaser, ['*']);
         $response = $this->postJson('/api/purchase-requisitions', ['reason' => 'Stok menipis', 'items' => [
             ['product_id' => $p1, 'qty' => '10', 'est_price' => '2500'],
             ['product_id' => $p2, 'qty' => '2.5', 'est_price' => '1000.50', 'note' => 'merk bebas'],
@@ -49,16 +55,26 @@ class PurchaseRequisitionTest extends SeededTestCase
             ->assertJsonPath('data.est_total', '27501.25')   // 10 x 2500 + 2,5 x 1000,50
             ->assertJsonPath('data.items.0.qty', '10.000')
             ->assertJsonPath('data.items.0.qty_remaining', '10.000')
-            ->assertJsonPath('data.requester_name', $this->cashier->name);
+            ->assertJsonPath('data.requester_name', $this->purchaser->name)
+            ->assertJsonPath('data.is_auto_generated', false);
 
         $this->assertMatchesRegularExpression('/^PR-\d{6}-000001$/', $response->json('data.doc_number'));
-        $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_requisition.create', 'actor_id' => $this->cashier->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_requisition.create', 'actor_id' => $this->purchaser->id]);
+    }
+
+    public function test_cashier_cannot_create_manual_requisition(): void
+    {
+        $this->postJson('/api/purchase-requisitions', $this->payload($this->product()))
+            ->assertForbidden();
+
+        $this->assertSame(0, DB::table('purchase_requisitions')->count());
     }
 
     public function test_item_validation(): void
     {
         $good = $this->product();
         $inactive = $this->product(['status' => 'inactive']);
+        Sanctum::actingAs($this->purchaser, ['*']);
 
         $this->postJson('/api/purchase-requisitions', ['items' => [['product_id' => $inactive, 'qty' => '1']]])
             ->assertUnprocessable()->assertJsonValidationErrors(['items.0.product_id']);
@@ -80,6 +96,7 @@ class PurchaseRequisitionTest extends SeededTestCase
         $id = $this->createSubmitted($this->product());
 
         $this->assertSame(1, $this->notificationCount('pr.submitted', $this->seededAdmin()->id));
+        Sanctum::actingAs($this->purchaser, ['*']);
         $this->patchJson("/api/purchase-requisitions/{$id}", ['reason' => 'ubah'])
             ->assertUnprocessable()->assertJsonValidationErrors(['status']);
     }
@@ -99,7 +116,7 @@ class PurchaseRequisitionTest extends SeededTestCase
             ->assertJsonPath('data.approvals.1.is_self_approval', false);
 
         $this->assertNotNull(DB::table('pr_approvals')->where('pr_id', $id)->where('step', 'owner_auth')->value('reauth_at'));
-        $this->assertSame(1, $this->notificationCount('pr.approved', $this->cashier->id));
+        $this->assertSame(1, $this->notificationCount('pr.approved', $this->purchaser->id));
         $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_requisition.approve', 'actor_id' => $admin->id, 'is_self_approval' => 0]);
     }
 
@@ -112,9 +129,9 @@ class PurchaseRequisitionTest extends SeededTestCase
             ->assertUnprocessable()->assertJsonValidationErrors(['note']);
         $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'return', 'note' => 'Jumlah terlalu besar'])
             ->assertOk()->assertJsonPath('data.status', 'returned');
-        $this->assertSame(1, $this->notificationCount('pr.returned', $this->cashier->id));
+        $this->assertSame(1, $this->notificationCount('pr.returned', $this->purchaser->id));
 
-        Sanctum::actingAs($this->cashier, ['*']);
+        Sanctum::actingAs($this->purchaser, ['*']);
         $this->patchJson("/api/purchase-requisitions/{$id}", ['reason' => 'Sudah dikurangi'])->assertOk();
         $this->postJson("/api/purchase-requisitions/{$id}/submit")->assertOk()->assertJsonPath('data.status', 'submitted');
     }
@@ -149,7 +166,7 @@ class PurchaseRequisitionTest extends SeededTestCase
         $this->postJson("/api/purchase-requisitions/{$id}/approve", $this->adminCreds() + ['decision' => 'reject', 'note' => 'Tidak perlu'])
             ->assertOk()->assertJsonPath('data.status', 'rejected');
 
-        $this->assertSame(1, $this->notificationCount('pr.rejected', $this->cashier->id));
+        $this->assertSame(1, $this->notificationCount('pr.rejected', $this->purchaser->id));
     }
 
     public function test_self_approval_is_flagged_and_can_be_blocked_by_setting(): void
@@ -189,17 +206,19 @@ class PurchaseRequisitionTest extends SeededTestCase
     public function test_cancel_rules(): void
     {
         $p = $this->product();
+        Sanctum::actingAs($this->purchaser, ['*']);
         $draft = $this->postJson('/api/purchase-requisitions', $this->payload($p))->assertCreated()->json('data.id');
 
         $other = $this->makeUser('Kasir', 'kasir-lain');
         Sanctum::actingAs($other, ['*']);
         $this->postJson("/api/purchase-requisitions/{$draft}/cancel")->assertForbidden();
 
-        Sanctum::actingAs($this->cashier, ['*']);
+        Sanctum::actingAs($this->purchaser, ['*']);
         $this->postJson("/api/purchase-requisitions/{$draft}/cancel", ['reason' => 'salah input'])
             ->assertOk()->assertJsonPath('data.status', 'cancelled');
 
         $approved = $this->pr($this->cashier->id, [$p => ['5', '1000']], 'approved');
+        $this->actAsAdmin();
         $this->postJson("/api/purchase-requisitions/{$approved}/cancel")
             ->assertUnprocessable()->assertJsonValidationErrors(['status']);
     }
@@ -236,7 +255,7 @@ class PurchaseRequisitionTest extends SeededTestCase
             'role_id' => $roleId,
             'permission_id' => $permissionIds['purchase_requisition.finance_check'],
         ]);
-        app(\App\Services\PermissionResolver::class)->flush();
+        app(PermissionResolver::class)->flush();
 
         $this->getJson('/api/purchase-requisitions')
             ->assertOk()

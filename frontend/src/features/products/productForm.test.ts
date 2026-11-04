@@ -10,7 +10,7 @@ const kasir = { canSetPrice: false, canActivate: false };
 const product: Product = {
   id: 1, sku: 'P-000001', barcode: '2000000000015', name: 'Teh Botol', category_id: 3,
   category_name: 'Minuman', unit_name: 'pcs', track_expiry: false, sell_price: '3500.00',
-  avg_cost: '2000.00', min_stock: '10.000', critical_stock: '3.000', status: 'active',
+  avg_cost: '2000.00', min_stock: '10.000', critical_stock: '3.000', restock_quantity: '24.000', status: 'active',
   stock_sellable: '12.000', stock_status: 'aman',
 };
 
@@ -21,6 +21,12 @@ describe('validateProduct', () => {
   it('kritis tidak boleh melebihi minimum', () => {
     const v = { ...emptyValues(), name: 'X', minStock: '5', criticalStock: '6' };
     expect(validateProduct(v, 'create', admin).critical_stock).toBeTruthy();
+  });
+  it('jumlah isi ulang dibatasi 99.999 unit dan tiga desimal', () => {
+    const valid = { ...emptyValues(), name: 'X', restockQuantity: '99999' };
+    const tooLarge = { ...emptyValues(), name: 'X', restockQuantity: '99999,001' };
+    expect(validateProduct(valid, 'create', admin).restock_quantity).toBeUndefined();
+    expect(validateProduct(tooLarge, 'create', admin).restock_quantity).toBeTruthy();
   });
   it('menerima koma desimal pada harga', () => {
     const v = { ...emptyValues(), name: 'X', sellPrice: '1500,50' };
@@ -38,6 +44,7 @@ describe('buildCreatePayload', () => {
     const v = { ...emptyValues(), name: ' Roti ', sellPrice: '5000' };
     const p = buildCreatePayload(v, kasir);
     expect(p.sell_price).toBeUndefined();
+    expect(p.restock_quantity).toBe('0');
     expect(p.name).toBe('Roti');
   });
   it('Admin mengirim harga ternormalisasi; sku/barcode kosong dilewati', () => {
@@ -52,6 +59,10 @@ describe('buildCreatePayload', () => {
 describe('buildUpdatePayload', () => {
   it('tanpa perubahan menghasilkan objek kosong', () => {
     expect(buildUpdatePayload(valuesFromProduct(product), product, admin)).toEqual({});
+  });
+  it('mengirimkan perubahan jumlah isi ulang saja', () => {
+    const v = { ...valuesFromProduct(product), restockQuantity: '30' };
+    expect(buildUpdatePayload(v, product, admin)).toEqual({ restock_quantity: '30' });
   });
   it('harga sama secara numerik tidak dianggap berubah', () => {
     const v = { ...valuesFromProduct(product), sellPrice: '3500' };

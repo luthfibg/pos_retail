@@ -312,6 +312,7 @@ export interface Product {
   avg_cost: Decimal | null;
   min_stock: Decimal;
   critical_stock: Decimal;
+  restock_quantity: Decimal;
   status: ProductStatus;
   stock_sellable: Decimal;
   stock_status: StockStatus;
@@ -327,6 +328,11 @@ export interface ProductInput {
   sell_price?: Decimal | null;
   min_stock?: Decimal;
   critical_stock?: Decimal;
+  restock_quantity?: Decimal;
+}
+
+export interface StockMonitoringSetting {
+  low_stock_threshold: Decimal;
 }
 
 export interface Category {
@@ -939,6 +945,7 @@ export interface PurchaseRequisitionSummary {
   items_count: number;
   requested_by: number;
   requester_name: string;
+  is_auto_generated: boolean;
   submitted_at: string | null;
   created_at: string;
 }

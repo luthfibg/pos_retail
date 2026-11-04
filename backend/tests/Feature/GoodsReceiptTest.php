@@ -404,7 +404,8 @@ class GoodsReceiptTest extends SeededTestCase
         $p = $this->product();
         $supplier = $this->supplier();
 
-        // Kasir mengajukan PR
+        // Purchasing membuat PR manual
+        $this->actAsAdmin();
         $pr = $this->postJson('/api/purchase-requisitions', ['reason' => 'Stok habis', 'items' => [['product_id' => $p, 'qty' => '12', 'est_price' => '2500']]])
             ->assertCreated()->json('data.id');
         $this->postJson("/api/purchase-requisitions/{$pr}/submit")->assertOk();
@@ -441,6 +442,7 @@ class GoodsReceiptTest extends SeededTestCase
         $this->assertSame(12.0, $this->stock($p));
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
         $this->assertSame('converted', DB::table('purchase_requisitions')->where('id', $pr)->value('status'));
+        $this->actAsAdmin();
         $this->getJson("/api/purchase-requisitions/{$pr}")->assertOk()->assertJsonPath('data.purchase_orders.0.status', 'received');
     }
 }

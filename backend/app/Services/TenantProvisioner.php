@@ -67,6 +67,7 @@ class TenantProvisioner
             'credit_blocked_without_limit' => true,
             'float_rounding_unit' => 1000,
             'purchase_fund_percent' => 15,
+            'inventory_low_stock_threshold' => 3,
         ] as $key => $value) {
             DB::table('settings')->insertOrIgnore([
                 'store_id' => $storeId,

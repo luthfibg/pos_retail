@@ -33,7 +33,17 @@ class InventoryService
         'damaged' => 'qty_damaged',
     ];
 
-    public function __construct(private AuditLogger $audit, private NumberSequence $sequences) {}
+    public function __construct(
+        private AuditLogger $audit,
+        private NumberSequence $sequences,
+        private PurchaseRequisitionService $requisitions,
+    ) {}
+
+    /** @param list<int>|null $productIds */
+    public function synchronizeAutomaticPurchaseRequisitions(User $actor, int $storeId, ?array $productIds = null): ?array
+    {
+        return $this->requisitions->synchronizeAutomatic($actor, $storeId, $productIds);
+    }
 
     // ------------------------------------------------------------------ lokasi
 
@@ -143,6 +153,8 @@ class InventoryService
                 storeId: $storeId,
                 actorId: $actor->id,
             );
+
+            $this->synchronizeAutomaticPurchaseRequisitions($actor, $storeId, $ids);
 
             return ['document_no' => $documentNo, 'items' => $lines];
         });

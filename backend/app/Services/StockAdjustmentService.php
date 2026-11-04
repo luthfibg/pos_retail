@@ -4,8 +4,8 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Support\Decimal;
-use App\Support\StockAuthorityPolicy;
 use App\Support\DocumentNumber;
+use App\Support\StockAuthorityPolicy;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -261,7 +261,7 @@ class StockAdjustmentService
             $approver = $actor;
         }
 
-        DB::transaction(function () use ($approver, $storeId, $id, $approve, $note, $needsReauth) {
+        DB::transaction(function () use ($actor, $approver, $storeId, $id, $approve, $note, $needsReauth) {
             $adjustment = $this->lock($storeId, $id);
             if ($adjustment->status !== 'requested') {
                 throw ValidationException::withMessages(['status' => ['Hanya adjustment yang diajukan dapat disetujui atau ditolak.']]);
@@ -315,6 +315,11 @@ class StockAdjustmentService
                 ])->all();
             $this->validateLocations($storeId, $items, true);
             $this->inventory->adjust($storeId, $id, $adjustment->reason, $items, $approver->id);
+            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+                $actor,
+                $storeId,
+                array_values(array_unique(array_map('intval', array_column($items, 'product_id')))),
+            );
 
             DB::table('stock_adjustments')->where('id', $id)->update(['status' => 'posted']);
             $this->audit->log(

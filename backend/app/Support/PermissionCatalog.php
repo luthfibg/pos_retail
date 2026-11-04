@@ -34,7 +34,7 @@ final class PermissionCatalog
             'customer.update' => 'Mengubah data karyawan',
             'customer.set_limit' => 'Menetapkan batas kredit karyawan',
             'customer.select' => 'Memilih karyawan di POS',
-            'purchase_requisition.create' => 'Membuat Purchase Requisition',
+            'purchase_requisition.create' => 'Meneruskan PR stok otomatis',
             'purchase_requisition.finance_check' => 'Memeriksa PR (saldo/kelayakan)',
             'purchase_requisition.approve' => 'Menyetujui PR (autentikasi ulang Owner)',
             'purchase_order.create' => 'Membuat Purchase Order',
