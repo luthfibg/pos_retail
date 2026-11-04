@@ -14,9 +14,7 @@ use Illuminate\Validation\Rule;
 
 class PurchaseRequisitionController extends Controller
 {
-    public function __construct(private PurchaseRequisitionService $requisitions, private StoreContext $stores)
-    {
-    }
+    public function __construct(private PurchaseRequisitionService $requisitions, private StoreContext $stores) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -43,6 +41,17 @@ class PurchaseRequisitionController extends Controller
         abort_if($found === null, 404, 'PR tidak ditemukan.');
 
         return response()->json(['data' => $found]);
+    }
+
+    public function purchaseOrderItems(Request $request, int $pr): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json(['data' => $this->requisitions->availableForPurchaseOrder(
+            $user,
+            $this->stores->requireIdFor($user),
+            $pr,
+        )]);
     }
 
     public function store(StorePurchaseRequisitionRequest $request): JsonResponse

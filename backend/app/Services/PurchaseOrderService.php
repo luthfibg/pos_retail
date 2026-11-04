@@ -11,15 +11,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Purchase Order (PO). Alur (dokumen kebutuhan 6.2), Paket 1 tanpa reservasi Saldo Pembelian:
- *   draft -> pending_confirmation -> approved -> sent -> partially_received -> received
- *   draft..sent -> cancelled (belum ada penerimaan); sent/partially_received -> received lewat close (alasan wajib)
+ * Purchase Order (PO): approved -> sent -> partially_received -> received.
+ * PO baru dibuat approved setelah autentikasi Owner dan alokasi dana dalam satu transaksi.
  *
  * Aturan:
- *  - PO WAJIB dari PR berstatus approved; satu PR boleh dipecah ke beberapa PO (per supplier)
- *  - [ASUMSI Q-13] qty per produk, kumulatif di semua PO aktif dari PR yang sama, tidak boleh melebihi qty PR
- *  - [ASUMSI Q-13] submit: otomatis approved bila total PO aktif kumulatif <= total estimasi PR (dan estimasi > 0);
- *    selain itu menunggu konfirmasi Owner (re-auth)
+ *  - Pembuatan PO menggabungkan pemilihan rekening dan satu persetujuan Owner dalam satu transaksi;
+ *    draft hanya dipakai sementara di dalam transaksi untuk mencatat reservasi dana.
+ *  - PO berasal dari PR yang lolos Finance; satu PR boleh dipecah ke beberapa PO (per supplier)
+ *  - qty per produk, kumulatif di semua PO aktif dari PR yang sama, tidak boleh melebihi qty PR
  *  - status penerimaan (receipt_status) dan pembayaran (payment_status) terpisah dari status dokumen;
  *    payment_status = unpaid sampai Paket 2
  *  - Kasir (hanya goods_receipt.create) melihat PO yang bisa diterima tanpa harga
@@ -28,7 +27,7 @@ class PurchaseOrderService
 {
     use PurchasingSupport;
 
-    public const RECEIVABLE = ['approved', 'sent', 'partially_received'];
+    public const RECEIVABLE = ['sent', 'partially_received'];
 
     public function __construct(
         private AuditLogger $audit,
@@ -38,8 +37,7 @@ class PurchaseOrderService
         private NotificationService $notifications,
         private PurchaseRequisitionService $requisitions,
         private PurchaseFundService $purchaseFunds,
-    ) {
-    }
+    ) {}
 
     // ------------------------------------------------------------------ baca
 
@@ -130,19 +128,57 @@ class PurchaseOrderService
     // ------------------------------------------------------------------ tulis
 
     /**
-     * @param  array<string, mixed>  $data  pr_id, supplier_id, payment_terms?, order_date?, expected_date?, items[] (product_id, qty_ordered, unit_price)
+     * @param  array<string, mixed>  $data  pr_id, supplier_id, bank_account_id, approver credentials, payment_terms?, order_date?, expected_date?, items[]
      * @return array<string, mixed>
      */
     public function create(User $actor, int $storeId, array $data): array
     {
-        $id = DB::transaction(function () use ($actor, $storeId, $data) {
+        abort_unless(
+            $this->permissions->allows($actor, 'purchase_order.create', $storeId)
+                && $this->permissions->allows($actor, 'purchase_fund.allocate', $storeId),
+            403,
+            'Pembuatan PO memerlukan izin membuat PO dan mengalokasikan Kas Pembelian.',
+        );
+
+        $reauth = (bool) $this->setting($storeId, 'approval_reauth_required', true);
+        if ($reauth) {
+            $this->reauth->assertProvided($data, $actor);
+            $approver = $this->reauth->confirm(
+                (string) $data['approver_username'],
+                (string) ($data['approver_password'] ?? ''),
+                'purchase_requisition.approve',
+                $actor,
+                $data['approver_key'] ?? null,
+            );
+        } else {
+            abort_unless(
+                $this->permissions->allows($actor, 'purchase_requisition.approve', $storeId),
+                403,
+                'Persetujuan Owner diperlukan untuk membuat PO.',
+            );
+            $approver = $actor;
+        }
+
+        $id = DB::transaction(function () use ($actor, $approver, $storeId, $data) {
             $pr = DB::table('purchase_requisitions')
                 ->where('store_id', $storeId)->where('id', (int) $data['pr_id'])->lockForUpdate()->first();
 
-            if ($pr === null || $pr->status !== 'approved') {
+            if ($pr === null || ! in_array($pr->status, ['approved', 'finance_checked'], true)) {
                 throw ValidationException::withMessages([
-                    'pr_id' => ['PO hanya dapat dibuat dari PR berstatus Disetujui yang masih memiliki sisa item.'],
+                    'pr_id' => ['PO hanya dapat dibuat dari PR yang lolos pemeriksaan Finance dan masih memiliki sisa item.'],
                 ]);
+            }
+
+            if ((int) $pr->requested_by === $approver->id) {
+                $isOwner = $this->permissions->allows($approver, 'settings.manage', $storeId);
+                $rule = $isOwner
+                    ? $this->setting($storeId, 'sod_owner_self_approve', 'allow_with_flag')
+                    : $this->setting($storeId, 'sod_pr_creator_approver', 'block');
+                if (! in_array($rule, ['allow_with_flag', 'allow'], true)) {
+                    throw ValidationException::withMessages([
+                        'approver_username' => ['Pembuat PR tidak boleh menyetujui PO dari PR sendiri.'],
+                    ]);
+                }
             }
 
             $supplier = DB::table('suppliers')->where('store_id', $storeId)->where('id', (int) $data['supplier_id'])->first();
@@ -169,13 +205,25 @@ class PurchaseOrderService
             ]);
 
             $this->insertItems($id, $items);
+            $allocation = $this->purchaseFunds->allocate($actor, $storeId, $id, (int) $data['bank_account_id']);
+            DB::table('purchase_orders')->where('id', $id)->update(['status' => 'approved']);
             $this->syncConversion((int) $pr->id, $actor, $storeId);
 
             $this->audit->log(
                 'purchase_order.create',
                 'purchase_order',
                 $id,
-                after: ['pr_id' => (int) $pr->id, 'supplier_id' => (int) $supplier->id, 'items' => count($items), 'total' => Decimal::moneyString($total)],
+                after: [
+                    'pr_id' => (int) $pr->id,
+                    'supplier_id' => (int) $supplier->id,
+                    'items' => count($items),
+                    'total' => Decimal::moneyString($total),
+                    'status' => 'approved',
+                    'allocation_id' => $allocation['id'],
+                    'bank_account_id' => (int) $data['bank_account_id'],
+                    'approved_by' => $approver->id,
+                ],
+                selfApproval: (int) $pr->requested_by === $approver->id,
                 actorId: $actor->id,
                 storeId: $storeId,
             );
@@ -558,11 +606,13 @@ class PurchaseOrderService
 
             if (! $prItems->has($productId)) {
                 $errors["items.{$i}.product_id"] = ['Produk ini tidak ada di PR.'];
+
                 continue;
             }
 
             if (isset($seen[$productId])) {
                 $errors["items.{$i}.product_id"] = ['Produk sudah ada di daftar PO ini; gabungkan jumlahnya.'];
+
                 continue;
             }
             $seen[$productId] = true;
@@ -572,6 +622,7 @@ class PurchaseOrderService
 
             if ($qty > $remaining) {
                 $errors["items.{$i}.qty_ordered"] = ['Melebihi sisa qty PR (sisa '.Decimal::qtyString(max(0, $remaining)).').'];
+
                 continue;
             }
 
@@ -621,7 +672,7 @@ class PurchaseOrderService
     {
         $pr = DB::table('purchase_requisitions')->where('id', $prId)->lockForUpdate()->first();
 
-        if ($pr === null || ! in_array($pr->status, ['approved', 'converted'], true)) {
+        if ($pr === null || ! in_array($pr->status, ['approved', 'finance_checked', 'converted'], true)) {
             return;
         }
 
@@ -634,7 +685,7 @@ class PurchaseOrderService
             }
         }
 
-        $new = $covered ? 'converted' : 'approved';
+        $new = $covered ? 'converted' : ($pr->status === 'finance_checked' ? 'finance_checked' : 'approved');
 
         if ($new === $pr->status) {
             return;

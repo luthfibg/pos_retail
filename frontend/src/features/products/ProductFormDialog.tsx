@@ -188,10 +188,10 @@ export function ProductFormDialog({ product, onClose }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Batas minimum" error={err('min_stock')} hint="Status “Hampir habis” bila stok ≤ batas ini.">
-              <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.minStock} onChange={(e) => set('minStock', e.target.value)} />
+              <LocalDecimalInput className={`${inputCls} tabular-nums`} kind="quantity" value={values.minStock} onChange={(value) => set('minStock', value)} />
             </Field>
             <Field label="Batas kritis" error={err('critical_stock')} hint="Status “Kritis” bila stok di bawah batas ini.">
-              <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.criticalStock} onChange={(e) => set('criticalStock', e.target.value)} />
+              <LocalDecimalInput className={`${inputCls} tabular-nums`} kind="quantity" value={values.criticalStock} onChange={(value) => set('criticalStock', value)} />
             </Field>
           </div>
 

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProductPicker } from '@/features/products/ProductPicker';
@@ -269,7 +270,7 @@ function TransferCreateDialog({ onClose, onCreated }: { onClose: () => void; onC
                       </select>
                     </Field>
                     <Field label="Qty transfer" hint={selectedBalance ? `Tersedia ${formatQty(selectedBalance.qty_sellable)} ${product.unit_name}` : undefined}>
-                      <input className={inputCls} inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} placeholder="Contoh: 5.000" />
+                      <LocalDecimalInput className={inputCls} kind="quantity" value={qty} onChange={setQty} placeholder="Contoh: 5 atau 1,5" />
                     </Field>
                     <Field label="ID posisi tujuan (opsional)" hint="Isi ID posisi rak aktif bila sudah diketahui. Tanpa ID, stok dipindah ke lokasi tujuan tanpa posisi rak.">
                       <input className={inputCls} inputMode="numeric" value={toPositionId} onChange={(event) => setToPositionId(event.target.value)} placeholder="Contoh: 12" />

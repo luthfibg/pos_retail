@@ -18,6 +18,10 @@ class StorePurchaseOrderRequest extends FormRequest
         return [
             'pr_id' => ['required', 'integer', 'min:1'],
             'supplier_id' => ['required', 'integer', 'min:1'],
+            'bank_account_id' => ['required', 'integer', 'min:1'],
+            'approver_username' => ['nullable', 'string', 'max:60'],
+            'approver_password' => ['nullable', 'string', 'max:200'],
+            'approver_key' => ['nullable', 'string', 'max:200'],
             'payment_terms' => ['nullable', Rule::in(['prepaid', 'credit', 'cod'])],
             'order_date' => ['nullable', 'date_format:Y-m-d'],
             'expected_date' => ['nullable', 'date_format:Y-m-d'],

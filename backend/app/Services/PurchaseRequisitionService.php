@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Purchase Requisition (PR). Alur (dokumen kebutuhan 6.1):
- *   draft -> submitted -> finance_checked -> approved | rejected   (returned = dikembalikan Finance, boleh diedit lalu diajukan lagi)
+ *   draft -> submitted -> approved (lolos Finance) | returned (dikembalikan Finance)
  *   draft/returned/submitted -> cancelled
  *   approved -> converted (otomatis oleh PurchaseOrderService bila seluruh item sudah masuk PO)
  *
@@ -20,9 +20,7 @@ use Illuminate\Validation\ValidationException;
  *  - Kasir dapat meneruskan PR stok otomatis; PR manual hanya dibuat Admin/Purchasing.
  *    PR otomatis terlihat oleh seluruh pemegang purchase_requisition.create.
  *  - Pemeriksaan Finance Paket 1 tanpa Saldo Pembelian: Finance menilai kelayakan secara manual (cek saldo = Paket 2).
- *  - Persetujuan Owner wajib autentikasi ulang (setting approval_reauth_required). Pembuat PR menyetujui sendiri hanya bila
- *    setting SoD mengizinkan (mode minimalis) dan ditandai is_self_approval di pr_approvals + audit.
- *  - [ASUMSI] "Owner" = pemegang permission settings.manage; setting sod_owner_self_approve berlaku untuknya, sod_pr_creator_approver untuk yang lain.
+ *  - Persetujuan Owner dilakukan satu kali saat PO dibuat, setelah supplier, item, dan rekening dana dipilih.
  */
 class PurchaseRequisitionService
 {
@@ -103,6 +101,52 @@ class PurchaseRequisitionService
         }
 
         return $detail;
+    }
+
+    /**
+     * Items that can still be allocated to a PO. Kept separate from PR detail so its item shape only describes demand.
+     *
+     * @return array{pr_id: int, items: list<array<string, mixed>>}
+     */
+    public function availableForPurchaseOrder(User $user, int $storeId, int $id): array
+    {
+        abort_unless(
+            $this->permissions->allows($user, 'purchase_order.create', $storeId),
+            403,
+            'Anda tidak berwenang membuat PO.',
+        );
+
+        $pr = DB::table('purchase_requisitions')
+            ->where('store_id', $storeId)
+            ->where('id', $id)
+            ->first(['id', 'status']);
+
+        abort_if($pr === null, 404, 'PR tidak ditemukan.');
+        abort_unless(in_array($pr->status, ['approved', 'finance_checked'], true), 422, 'PO hanya dapat dibuat dari PR yang lolos pemeriksaan Finance.');
+
+        $ordered = $this->orderedByProduct($id);
+        $items = DB::table('purchase_requisition_items as i')
+            ->join('products as p', 'p.id', '=', 'i.product_id')
+            ->where('i.pr_id', $id)
+            ->orderBy('i.id')
+            ->get(['i.product_id', 'i.qty', 'i.est_price', 'p.sku', 'p.name', 'p.unit_name'])
+            ->map(function ($row) use ($ordered) {
+                $available = max(0, Decimal::qty($row->qty) - ($ordered[(int) $row->product_id] ?? 0));
+
+                return [
+                    'product_id' => (int) $row->product_id,
+                    'sku' => $row->sku,
+                    'name' => $row->name,
+                    'unit_name' => $row->unit_name,
+                    'qty_available' => Decimal::qtyString($available),
+                    'est_price' => $row->est_price,
+                ];
+            })
+            ->filter(fn ($row) => $row['qty_available'] !== '0.000')
+            ->values()
+            ->all();
+
+        return ['pr_id' => (int) $pr->id, 'items' => $items];
     }
 
     /**
@@ -467,7 +511,7 @@ class PurchaseRequisitionService
     }
 
     /**
-     * Pemeriksaan Finance: 'pass' (diteruskan ke Owner) atau 'return' (dikembalikan, catatan wajib).
+     * Pemeriksaan Finance: 'pass' (siap dibuat PO; Owner mengesahkan saat PO dibuat) atau 'return'.
      *
      * @return array<string, mixed>
      */
@@ -484,7 +528,7 @@ class PurchaseRequisitionService
             $this->assertStatus($pr, ['submitted'], 'Hanya PR berstatus diajukan yang dapat diperiksa Finance.');
 
             $passed = $decision === 'pass';
-            $newStatus = $passed ? 'finance_checked' : 'returned';
+            $newStatus = $passed ? 'approved' : 'returned';
 
             DB::table('pr_approvals')->insert([
                 'pr_id' => $id,
@@ -515,9 +559,9 @@ class PurchaseRequisitionService
         if ($decision === 'pass') {
             $this->notifications->notifyPermission(
                 $storeId,
-                'purchase_requisition.approve',
+                'purchase_order.create',
                 'pr.finance_checked',
-                "PR {$pr->doc_number} lolos pemeriksaan Finance dan menunggu persetujuan Owner.",
+                "PR {$pr->doc_number} lolos pemeriksaan Finance dan siap disiapkan menjadi PO.",
                 'purchase_requisition',
                 $id,
                 $actor->id,
@@ -868,28 +912,20 @@ class PurchaseRequisitionService
             return null;
         }
 
-        $ordered = $this->orderedByProduct($id);
-
         $items = DB::table('purchase_requisition_items as i')
             ->join('products as p', 'p.id', '=', 'i.product_id')
             ->where('i.pr_id', $id)->orderBy('i.id')
             ->get(['i.id', 'i.product_id', 'i.qty', 'i.est_price', 'i.note', 'p.sku', 'p.name', 'p.unit_name'])
-            ->map(function ($row) use ($ordered) {
-                $done = $ordered[(int) $row->product_id] ?? 0;
-
-                return [
-                    'id' => (int) $row->id,
-                    'product_id' => (int) $row->product_id,
-                    'sku' => $row->sku,
-                    'name' => $row->name,
-                    'unit_name' => $row->unit_name,
-                    'qty' => $row->qty,
-                    'est_price' => $row->est_price,
-                    'note' => $row->note,
-                    'qty_ordered' => Decimal::qtyString($done),
-                    'qty_remaining' => Decimal::qtyString(max(0, Decimal::qty($row->qty) - $done)),
-                ];
-            })->all();
+            ->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'product_id' => (int) $row->product_id,
+                'sku' => $row->sku,
+                'name' => $row->name,
+                'unit_name' => $row->unit_name,
+                'qty' => $row->qty,
+                'est_price' => $row->est_price,
+                'note' => $row->note,
+            ])->all();
 
         $approvals = DB::table('pr_approvals as a')
             ->join('users as u', 'u.id', '=', 'a.decided_by')

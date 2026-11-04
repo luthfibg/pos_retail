@@ -20,6 +20,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('purchase-requisitions', [PurchaseRequisitionController::class, 'index']);
     Route::post('purchase-requisitions', [PurchaseRequisitionController::class, 'store'])->middleware('can:purchase_requisition.create');
     Route::get('purchase-requisitions/{pr}', [PurchaseRequisitionController::class, 'show'])->whereNumber('pr');
+    Route::get('purchase-requisitions/{pr}/purchase-order-items', [PurchaseRequisitionController::class, 'purchaseOrderItems'])
+        ->whereNumber('pr')->middleware('can:purchase_order.create');
     Route::patch('purchase-requisitions/{pr}', [PurchaseRequisitionController::class, 'update'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
     Route::post('purchase-requisitions/{pr}/submit', [PurchaseRequisitionController::class, 'submit'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
     Route::post('purchase-requisitions/{pr}/cancel', [PurchaseRequisitionController::class, 'cancel'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
@@ -29,7 +31,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Purchase Order. Daftar/detail juga untuk Kasir penerima barang (PO yang dapat diterima, tanpa harga): izin dicek di service.
     Route::get('purchase-orders', [PurchaseOrderController::class, 'index']);
     Route::get('purchase-orders/{po}', [PurchaseOrderController::class, 'show'])->whereNumber('po');
-    Route::post('purchase-orders', [PurchaseOrderController::class, 'store'])->middleware('can:purchase_order.create');
+    Route::post('purchase-orders', [PurchaseOrderController::class, 'store'])
+        ->middleware(['can:purchase_order.create', 'can:purchase_fund.allocate']);
     Route::patch('purchase-orders/{po}', [PurchaseOrderController::class, 'update'])->whereNumber('po')->middleware('can:purchase_order.create');
     Route::post('purchase-orders/{po}/fund-allocation', [PurchaseOrderController::class, 'allocateFunds'])
         ->whereNumber('po')->middleware('can:purchase_fund.allocate');

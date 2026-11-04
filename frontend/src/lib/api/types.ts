@@ -960,8 +960,15 @@ export interface PurchaseRequisitionItem {
   qty: Decimal;
   est_price: Decimal | null;
   note: string | null;
-  qty_ordered: Decimal;
-  qty_remaining: Decimal;
+}
+
+export interface PurchaseOrderRequisitionItem {
+  product_id: number;
+  sku: string;
+  name: string;
+  unit_name: string;
+  qty_available: Decimal;
+  est_price: Decimal | null;
 }
 
 export interface PurchaseRequisition extends PurchaseRequisitionSummary {
@@ -1075,6 +1082,10 @@ export interface PurchaseOrder extends PurchaseOrderSummary {
 export interface PurchaseOrderInput {
   pr_id: number;
   supplier_id: number;
+  bank_account_id: number;
+  approver_username: string;
+  approver_password?: string;
+  approver_key?: string;
   payment_terms?: 'prepaid' | 'credit' | 'cod';
   order_date?: string;
   expected_date?: string;

@@ -54,7 +54,8 @@ class PurchaseRequisitionTest extends SeededTestCase
             ->assertJsonPath('data.status', 'draft')
             ->assertJsonPath('data.est_total', '27501.25')   // 10 x 2500 + 2,5 x 1000,50
             ->assertJsonPath('data.items.0.qty', '10.000')
-            ->assertJsonPath('data.items.0.qty_remaining', '10.000')
+            ->assertJsonMissingPath('data.items.0.qty_ordered')
+            ->assertJsonMissingPath('data.items.0.qty_remaining')
             ->assertJsonPath('data.requester_name', $this->purchaser->name)
             ->assertJsonPath('data.is_auto_generated', false);
 
@@ -101,23 +102,20 @@ class PurchaseRequisitionTest extends SeededTestCase
             ->assertUnprocessable()->assertJsonValidationErrors(['status']);
     }
 
-    public function test_full_approval_flow_records_both_decisions(): void
+    public function test_finance_pass_makes_pr_ready_for_po_without_separate_owner_approval(): void
     {
         $id = $this->createSubmitted($this->product());
 
         $admin = $this->actAsAdmin();
         $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'pass'])
-            ->assertOk()->assertJsonPath('data.status', 'finance_checked');
-        $this->postJson("/api/purchase-requisitions/{$id}/approve", $this->adminCreds())
             ->assertOk()->assertJsonPath('data.status', 'approved')
-            ->assertJsonCount(2, 'data.approvals')
+            ->assertJsonCount(1, 'data.approvals')
             ->assertJsonPath('data.approvals.0.step', 'finance_check')
-            ->assertJsonPath('data.approvals.1.step', 'owner_auth')
-            ->assertJsonPath('data.approvals.1.is_self_approval', false);
+            ->assertJsonMissingPath('data.approvals.1');
 
-        $this->assertNotNull(DB::table('pr_approvals')->where('pr_id', $id)->where('step', 'owner_auth')->value('reauth_at'));
-        $this->assertSame(1, $this->notificationCount('pr.approved', $this->purchaser->id));
-        $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_requisition.approve', 'actor_id' => $admin->id, 'is_self_approval' => 0]);
+        $this->assertSame('approved', DB::table('purchase_requisitions')->where('id', $id)->value('status'));
+        $this->assertSame(1, $this->notificationCount('pr.finance_checked', $this->purchaser->id));
+        $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_requisition.finance_check', 'actor_id' => $admin->id]);
     }
 
     public function test_finance_return_needs_note_and_allows_edit_and_resubmit(): void
@@ -136,71 +134,60 @@ class PurchaseRequisitionTest extends SeededTestCase
         $this->postJson("/api/purchase-requisitions/{$id}/submit")->assertOk()->assertJsonPath('data.status', 'submitted');
     }
 
-    public function test_approval_requires_valid_reauth_and_permission(): void
+    public function test_finance_check_requires_permission_and_owner_approval_is_not_a_pr_step(): void
     {
         $id = $this->createSubmitted($this->product());
 
-        // Kasir tidak punya purchase_requisition.approve / finance_check
         $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'pass'])->assertForbidden();
         $this->postJson("/api/purchase-requisitions/{$id}/approve", $this->adminCreds())->assertForbidden();
 
         $this->actAsAdmin();
-        $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'pass'])->assertOk();
-
-        $this->postJson("/api/purchase-requisitions/{$id}/approve")
-            ->assertUnprocessable()->assertJsonValidationErrors(['approver_password']);
-        $this->postJson("/api/purchase-requisitions/{$id}/approve", ['approver_username' => 'admin', 'approver_password' => 'salah-sekali'])
-            ->assertUnprocessable()->assertJsonValidationErrors(['approver_password']);
-
-        $this->assertSame('finance_checked', DB::table('purchase_requisitions')->where('id', $id)->value('status'));
+        $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'pass'])->assertOk()
+            ->assertJsonPath('data.status', 'approved');
+        $this->postJson("/api/purchase-requisitions/{$id}/approve", $this->adminCreds())
+            ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+        $this->assertSame('approved', DB::table('purchase_requisitions')->where('id', $id)->value('status'));
     }
 
-    public function test_reject_requires_note(): void
+    public function test_finance_return_requires_note(): void
     {
         $id = $this->createSubmitted($this->product());
 
         $this->actAsAdmin();
-        $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'pass'])->assertOk();
-        $this->postJson("/api/purchase-requisitions/{$id}/approve", $this->adminCreds() + ['decision' => 'reject'])
+        $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'return'])
             ->assertUnprocessable()->assertJsonValidationErrors(['note']);
-        $this->postJson("/api/purchase-requisitions/{$id}/approve", $this->adminCreds() + ['decision' => 'reject', 'note' => 'Tidak perlu'])
-            ->assertOk()->assertJsonPath('data.status', 'rejected');
+        $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'return', 'note' => 'Jumlah terlalu besar'])
+            ->assertOk()->assertJsonPath('data.status', 'returned');
 
-        $this->assertSame(1, $this->notificationCount('pr.rejected', $this->purchaser->id));
+        $this->assertSame(1, $this->notificationCount('pr.returned', $this->purchaser->id));
     }
 
-    public function test_self_approval_is_flagged_and_can_be_blocked_by_setting(): void
+    public function test_finance_can_approve_pr_even_when_requester_is_an_admin(): void
     {
         $p = $this->product();
-        $admin = $this->actAsAdmin();
+        $this->actAsAdmin();
 
         $first = $this->postJson('/api/purchase-requisitions', $this->payload($p))->assertCreated()->json('data.id');
         $this->postJson("/api/purchase-requisitions/{$first}/submit")->assertOk();
         $this->postJson("/api/purchase-requisitions/{$first}/finance-check", ['decision' => 'pass'])->assertOk();
-        $this->postJson("/api/purchase-requisitions/{$first}/approve", $this->adminCreds())
-            ->assertOk()->assertJsonPath('data.approvals.1.is_self_approval', true);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_requisition.approve', 'entity_id' => $first, 'is_self_approval' => 1, 'actor_id' => $admin->id]);
-
         $this->setSetting('sod_owner_self_approve', 'block');
 
         $second = $this->postJson('/api/purchase-requisitions', $this->payload($p))->assertCreated()->json('data.id');
         $this->postJson("/api/purchase-requisitions/{$second}/submit")->assertOk();
-        $this->postJson("/api/purchase-requisitions/{$second}/finance-check", ['decision' => 'pass'])->assertOk();
-        $this->postJson("/api/purchase-requisitions/{$second}/approve", $this->adminCreds())
-            ->assertUnprocessable()->assertJsonValidationErrors(['approver_username']);
-        $this->assertSame('finance_checked', DB::table('purchase_requisitions')->where('id', $second)->value('status'));
+        $this->postJson("/api/purchase-requisitions/{$second}/finance-check", ['decision' => 'pass'])->assertOk()
+            ->assertJsonPath('data.status', 'approved');
+        $this->assertSame('approved', DB::table('purchase_requisitions')->where('id', $second)->value('status'));
     }
 
-    public function test_reauth_can_be_switched_off_by_setting(): void
+    public function test_finance_pass_is_independent_of_owner_reauthentication_setting(): void
     {
         $id = $this->createSubmitted($this->product());
         $this->setSetting('approval_reauth_required', false);
 
         $this->actAsAdmin();
-        $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'pass'])->assertOk();
-        $this->postJson("/api/purchase-requisitions/{$id}/approve")->assertOk()->assertJsonPath('data.status', 'approved');
-
-        $this->assertNull(DB::table('pr_approvals')->where('pr_id', $id)->where('step', 'owner_auth')->value('reauth_at'));
+        $this->postJson("/api/purchase-requisitions/{$id}/finance-check", ['decision' => 'pass'])
+            ->assertOk()->assertJsonPath('data.status', 'approved');
+        $this->assertSame(1, DB::table('pr_approvals')->where('pr_id', $id)->count());
     }
 
     public function test_cancel_rules(): void

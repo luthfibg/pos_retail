@@ -6,6 +6,7 @@ import type { OpeningBalanceResult } from '@/lib/api/types';
 import { Modal } from '@/components/ui/Modal';
 import { inputCls } from '@/components/ui/Field';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { ProductPicker } from '@/features/products/ProductPicker';
 import {
   buildOpeningPayload, isBlank, mapServerErrors, newRow, validateOpening,
@@ -127,13 +128,13 @@ export function OpeningBalancePage() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1">
-                      <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={r.qty} onChange={(ev) => update(r.key, { qty: ev.target.value })} />
+                      <LocalDecimalInput className={`${inputCls} tabular-nums`} kind="quantity" value={r.qty} onChange={(value) => update(r.key, { qty: value })} />
                     </div>
                     {r.product && <span className="text-xs text-slate-400">{r.product.unit_name}</span>}
                     {e.qty && <p role="alert" className="mt-1 text-xs text-red-700">{e.qty}</p>}
                   </td>
                   <td className="px-3 py-2">
-                    <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={r.unitCost} onChange={(ev) => update(r.key, { unitCost: ev.target.value })} />
+                    <LocalDecimalInput className={`${inputCls} tabular-nums`} kind="cost" value={r.unitCost} onChange={(value) => update(r.key, { unitCost: value })} />
                     {e.unit_cost && <p role="alert" className="mt-1 text-xs text-red-700">{e.unit_cost}</p>}
                   </td>
                   <td className="px-3 py-2">

@@ -5,7 +5,7 @@ import type {
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
   GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
-  PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
+  PurchaseOrderRequisitionItem, PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, ProfitReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
@@ -173,6 +173,8 @@ export const purchaseRequisitionApi = {
       query: { ...f, mine: f.mine ? 1 : undefined },
     }),
   get: (id: number) => api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}`).then((r) => r.data),
+  purchaseOrderItems: (id: number) =>
+    api<{ data: { pr_id: number; items: PurchaseOrderRequisitionItem[] } }>(`/purchase-requisitions/${id}/purchase-order-items`).then((r) => r.data),
   create: (input: PurchaseRequisitionInput) =>
     api<{ data: PurchaseRequisition }>('/purchase-requisitions', { method: 'POST', body: input }).then((r) => r.data),
   update: (id: number, input: PurchaseRequisitionInput) =>
@@ -213,7 +215,8 @@ export const purchaseOrderApi = {
     api<{ data: PurchaseOrder }>(`/purchase-orders/${id}/submit`, { method: 'POST' }).then((r) => r.data),
   confirm: (id: number, input: {
     approver_username: string;
-    approver_password: string;
+    approver_password?: string;
+    approver_key?: string;
   }) => api<{ data: PurchaseOrder }>(`/purchase-orders/${id}/confirm`, {
     method: 'POST',
     body: input,

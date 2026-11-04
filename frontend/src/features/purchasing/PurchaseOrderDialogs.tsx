@@ -1,13 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
-import { purchaseFundApi, purchaseOrderApi, supplierApi } from '@/lib/api/endpoints';
-import type { PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition } from '@/lib/api/types';
+import { purchaseFundApi, purchaseOrderApi, purchaseRequisitionApi, supplierApi } from '@/lib/api/endpoints';
+import type { ApprovalAuthMode, PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
-import { compareMoney } from '@/lib/money';
+import { centsToMoney, compareMoney, lineCents, moneyToCents, qtyToMilli } from '@/lib/money';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { PurchaseStageTracker } from './PurchaseStageTracker';
 import { isPoPrintable, poStage } from './purchaseFlow';
@@ -23,7 +23,7 @@ export const ORDER_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
 };
 
 type OrderLine = { selected: boolean; qty: string; price: string };
-type Credentials = { approver_username: string; approver_password: string };
+type Credentials = { approver_username: string; approver_password: string; approver_key: string };
 
 function today(): string {
   const date = new Date();
@@ -40,27 +40,64 @@ export function PurchaseOrderCreateDialog({
   onClose: () => void;
   onCreated: (po: PurchaseOrder) => void;
 }) {
+  const { can, me } = useAuth();
+  const approvalMode: ApprovalAuthMode = me?.approval_auth_mode ?? 'password';
   const suppliers = useQuery({
     queryKey: ['suppliers', 'active-for-purchase-order'],
     queryFn: () => supplierApi.list({ active_only: true, per_page: 100 }),
   });
-  const rowsWithRemaining = pr.items.filter((item) => Number(item.qty_remaining) > 0);
+  const fund = useQuery({
+    queryKey: ['purchase-fund'],
+    queryFn: purchaseFundApi.summary,
+    enabled: can('purchase_fund.allocate'),
+  });
+  const availability = useQuery({
+    queryKey: ['purchase-requisition', pr.id, 'purchase-order-items'],
+    queryFn: () => purchaseRequisitionApi.purchaseOrderItems(pr.id),
+  });
+  const rowsWithRemaining = availability.data?.items ?? [];
   const [supplierId, setSupplierId] = useState('');
+  const [bankAccountId, setBankAccountId] = useState('');
   const [terms, setTerms] = useState<'prepaid' | 'credit' | 'cod'>('cod');
   const [orderDate, setOrderDate] = useState(today);
   const [expectedDate, setExpectedDate] = useState('');
-  const [lines, setLines] = useState<Record<number, OrderLine>>(() => Object.fromEntries(
-    rowsWithRemaining.map((item) => [item.product_id, {
+  const [lines, setLines] = useState<Record<number, OrderLine>>({});
+  const [credentials, setCredentials] = useState<Credentials>({ approver_username: '', approver_password: '', approver_key: '' });
+  const initializedAvailability = useRef(false);
+  useEffect(() => {
+    if (!availability.data || initializedAvailability.current) return;
+    setLines(Object.fromEntries(availability.data.items.map((item) => [item.product_id, {
       selected: true,
-      qty: String(item.qty_remaining),
+      qty: String(item.qty_available),
       price: item.est_price === null ? '' : String(item.est_price),
-    }]),
-  ));
+    }])));
+    initializedAvailability.current = true;
+  }, [availability.data]);
   const selectedLineCount = rowsWithRemaining.filter((item) => lines[item.product_id]?.selected).length;
+  const totalCents = rowsWithRemaining.reduce((total, item) => {
+    const line = lines[item.product_id];
+    if (!line?.selected) return total;
+    const quantity = qtyToMilli(line.qty);
+    const price = moneyToCents(line.price);
+    return quantity === null || price === null ? total : total + lineCents(quantity, price);
+  }, 0n);
+  const hasInvalidSelectedLine = rowsWithRemaining.some((item) => {
+    const line = lines[item.product_id];
+    if (!line?.selected) return false;
+    return qtyToMilli(line.qty) === null || moneyToCents(line.price) === null;
+  });
+  const orderTotal = centsToMoney(totalCents);
+  const bankAccounts = fund.data?.bank_accounts.filter((account) => account.is_active) ?? [];
+  const selectedBank = bankAccounts.find((account) => String(account.id) === bankAccountId);
+  const selectedBankCanCover = selectedBank !== undefined && compareMoney(selectedBank.available_balance, orderTotal) !== -1;
   const create = useMutation({
     mutationFn: () => purchaseOrderApi.create({
       pr_id: pr.id,
       supplier_id: Number(supplierId),
+      bank_account_id: Number(bankAccountId),
+      approver_username: credentials.approver_username.trim(),
+      ...(approvalMode !== 'key' ? { approver_password: credentials.approver_password } : {}),
+      ...(approvalMode !== 'password' ? { approver_key: credentials.approver_key } : {}),
       payment_terms: terms,
       order_date: orderDate,
       expected_date: expectedDate || undefined,
@@ -97,8 +134,10 @@ export function PurchaseOrderCreateDialog({
   return (
     <Modal title={`Buat PO dari ${pr.doc_number}`} onClose={() => !create.isPending && onClose()}>
       <form className="space-y-4 p-5" onSubmit={submit}>
-        <p className="text-sm text-slate-600">Buat PO per supplier. Kuantitas tidak boleh melebihi sisa permintaan pada PR.</p>
+        <p className="text-sm text-slate-600">Pilih barang, sumber dana, lalu otorisasi Owner. PO langsung dibuat dan disetujui tanpa draft atau tahap persetujuan Owner terpisah.</p>
         <ErrorNotice error={suppliers.error} />
+        <ErrorNotice error={availability.error} />
+        <ErrorNotice error={fund.error} />
         <ErrorNotice error={create.error} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Supplier">
@@ -124,7 +163,9 @@ export function PurchaseOrderCreateDialog({
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">Item PO</h3>
-          {rowsWithRemaining.length === 0 ? (
+          {availability.isLoading ? (
+            <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Memuat jumlah barang yang dapat dipesan…</p>
+          ) : availability.error ? null : rowsWithRemaining.length === 0 ? (
             <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Semua jumlah PR sudah dialokasikan ke PO.</p>
           ) : (
             <div className="max-h-72 space-y-2 overflow-auto">
@@ -135,7 +176,7 @@ export function PurchaseOrderCreateDialog({
                     <input type="checkbox" aria-label={`Pilih ${item.name}`} checked={line.selected} onChange={(event) => updateLine(item.product_id, { selected: event.target.checked })} />
                     <div className="min-w-0 text-sm">
                       <div className="truncate font-medium">{item.name}</div>
-                      <div className="text-xs text-slate-500">Sisa {formatQty(item.qty_remaining)} {item.unit_name}</div>
+                      <div className="text-xs text-slate-500">Maks. dapat dipesan: {formatQty(item.qty_available)} {item.unit_name}</div>
                     </div>
                     <label className="text-xs text-slate-500">Jumlah
                       <LocalDecimalInput className={`${inputCls} mt-1 px-2`} kind="quantity" required={line.selected} disabled={!line.selected} value={line.qty} onChange={(value) => updateLine(item.product_id, { qty: value })} aria-label={`Jumlah ${item.name}`} />
@@ -150,10 +191,53 @@ export function PurchaseOrderCreateDialog({
           )}
         </section>
 
+        <section className="space-y-3 rounded-md border border-blue-200 bg-blue-50 p-3">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <h3 className="font-semibold">Rekening sumber dana</h3>
+            <span className="font-medium tabular-nums">Total PO: {formatRupiah(orderTotal)}</span>
+          </div>
+          <p className="text-xs text-slate-600">Seluruh total PO dicadangkan dari rekening terpilih setelah Owner mengesahkan. Pencadangan ini bukan transfer bank.</p>
+          <Field label="Pilih rekening dengan saldo tersedia yang cukup">
+            <select className={inputCls} required value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)} disabled={fund.isLoading || fund.isError}>
+              <option value="">{fund.isLoading ? 'Memuat rekening…' : 'Pilih rekening'}</option>
+              {bankAccounts.map((account) => {
+                const enough = compareMoney(account.available_balance, orderTotal) !== -1;
+                return (
+                  <option key={account.id} value={account.id} disabled={!enough}>
+                    {account.bank_name} · {account.account_name} ({account.account_number_masked}) · tersedia {formatRupiah(account.available_balance)}{enough ? '' : ' · tidak cukup'}
+                  </option>
+                );
+              })}
+            </select>
+          </Field>
+          {fund.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif. Tambahkan rekening sebelum membuat PO.</p>}
+          {fund.data && bankAccounts.length > 0 && !bankAccounts.some((account) => compareMoney(account.available_balance, orderTotal) !== -1) && (
+            <p className="text-xs text-amber-800">Saldo tersedia semua rekening aktif belum mencukupi total PO.</p>
+          )}
+        </section>
+
+        <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+          <div>
+            <h3 className="text-sm font-semibold">Persetujuan Owner</h3>
+            <p className="mt-1 text-xs text-slate-600">Otorisasi ini sekaligus mengesahkan supplier, jumlah, harga, dan rekening sumber dana.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Username Owner">
+              <input className={inputCls} autoComplete="username" required value={credentials.approver_username} onChange={(event) => setCredentials({ ...credentials, approver_username: event.target.value })} />
+            </Field>
+            {approvalMode !== 'key' && <Field label="Password Owner">
+              <input className={inputCls} type="password" autoComplete="current-password" required value={credentials.approver_password} onChange={(event) => setCredentials({ ...credentials, approver_password: event.target.value })} />
+            </Field>}
+            {approvalMode !== 'password' && <Field label="Kunci otorisasi Owner">
+              <input className={inputCls} type="password" autoComplete="off" required value={credentials.approver_key} onChange={(event) => setCredentials({ ...credentials, approver_key: event.target.value })} />
+            </Field>}
+          </div>
+        </section>
+
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
           <button type="button" disabled={create.isPending} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-          <button type="submit" disabled={create.isPending || selectedLineCount === 0} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-            {create.isPending ? 'Menyimpan…' : 'Simpan PO Draft'}
+          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || fund.isLoading || fund.isError || selectedLineCount === 0 || hasInvalidSelectedLine || !selectedBankCanCover} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {create.isPending ? 'Membuat PO…' : 'Setujui & buat PO'}
           </button>
         </div>
       </form>
@@ -163,18 +247,21 @@ export function PurchaseOrderCreateDialog({
 
 export function PurchaseOrderManageDialog({
   poId,
+  hasPrinted = false,
   onClose,
   onChanged,
   onPrint,
 }: {
   poId: number;
+  hasPrinted?: boolean;
   onClose: () => void;
   onChanged: () => void;
   onPrint?: (po: PurchaseOrder) => void;
 }) {
   const qc = useQueryClient();
-  const { can } = useAuth();
-  const [credentials, setCredentials] = useState<Credentials>({ approver_username: '', approver_password: '' });
+  const { can, me } = useAuth();
+  const approvalMode: ApprovalAuthMode = me?.approval_auth_mode ?? 'password';
+  const [credentials, setCredentials] = useState<Credentials>({ approver_username: '', approver_password: '', approver_key: '' });
   const order = useQuery({ queryKey: ['purchase-order', poId], queryFn: () => purchaseOrderApi.get(poId) });
   const fund = useQuery({
     queryKey: ['purchase-fund'],
@@ -193,8 +280,12 @@ export function PurchaseOrderManageDialog({
   const submit = useMutation({ mutationFn: () => purchaseOrderApi.submit(poId), onSuccess: refresh });
   const allocate = useMutation({ mutationFn: () => purchaseFundApi.allocate(poId, Number(bankAccountId)), onSuccess: refresh });
   const confirm = useMutation({
-    mutationFn: () => purchaseOrderApi.confirm(poId, credentials),
-    onSuccess: () => { setCredentials({ approver_username: '', approver_password: '' }); return refresh(); },
+    mutationFn: () => purchaseOrderApi.confirm(poId, {
+      approver_username: credentials.approver_username.trim(),
+      ...(approvalMode !== 'key' ? { approver_password: credentials.approver_password } : {}),
+      ...(approvalMode !== 'password' ? { approver_key: credentials.approver_key } : {}),
+    }),
+    onSuccess: () => { setCredentials({ approver_username: '', approver_password: '', approver_key: '' }); return refresh(); },
   });
   const send = useMutation({ mutationFn: () => purchaseOrderApi.send(poId), onSuccess: refresh });
   const po = order.data;
@@ -272,7 +363,8 @@ export function PurchaseOrderManageDialog({
               <p className="text-sm">PO memerlukan konfirmasi Owner. Masukkan kredensial pemberi persetujuan untuk autentikasi ulang.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Username Owner"><input className={inputCls} autoComplete="username" required value={credentials.approver_username} onChange={(event) => setCredentials({ ...credentials, approver_username: event.target.value })} /></Field>
-                <Field label="Password Owner"><input className={inputCls} type="password" autoComplete="current-password" required value={credentials.approver_password} onChange={(event) => setCredentials({ ...credentials, approver_password: event.target.value })} /></Field>
+                {approvalMode !== 'key' && <Field label="Password Owner"><input className={inputCls} type="password" autoComplete="current-password" required value={credentials.approver_password} onChange={(event) => setCredentials({ ...credentials, approver_password: event.target.value })} /></Field>}
+                {approvalMode !== 'password' && <Field label="Kunci otorisasi Owner"><input className={inputCls} type="password" autoComplete="off" required value={credentials.approver_key} onChange={(event) => setCredentials({ ...credentials, approver_key: event.target.value })} /></Field>}
               </div>
             </section>
           )}
@@ -282,19 +374,22 @@ export function PurchaseOrderManageDialog({
             </button>
           )}
           {po.status === 'pending_confirmation' && can('purchase_requisition.approve') && (
-            <button type="button" disabled={busy || !credentials.approver_username || !credentials.approver_password} onClick={() => confirm.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+            <button type="button" disabled={busy || !credentials.approver_username || (approvalMode !== 'key' && !credentials.approver_password) || (approvalMode !== 'password' && !credentials.approver_key)} onClick={() => confirm.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
               {confirm.isPending ? 'Mengonfirmasi…' : 'Konfirmasi Owner'}
             </button>
           )}
           {po.status === 'approved' && can('purchase_order.send') && (
-            <button type="button" disabled={busy} onClick={() => send.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-              {send.isPending ? 'Mengirim…' : 'Tandai dikirim ke supplier'}
-            </button>
+            <div className="space-y-2">
+              {!hasPrinted && <p className="text-sm text-amber-800">Cetak PO terlebih dahulu. Tombol pengiriman aktif setelah dialog cetak ditutup.</p>}
+              <button type="button" disabled={busy || !hasPrinted} onClick={() => send.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+                {send.isPending ? 'Menyimpan…' : 'Konfirmasi sudah dikirim ke supplier'}
+              </button>
+            </div>
           )}
           {po.status === 'sent' && <p className="text-sm text-slate-600">PO telah dikirim ke supplier.</p>}
           {onPrint && isPoPrintable(po.status) && (
             <div className="flex justify-end border-t border-slate-100 pt-3">
-              <button type="button" onClick={() => onPrint(po)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak PO</button>
+              <button type="button" onClick={() => onPrint(po)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">{po.status === 'approved' && hasPrinted ? 'Cetak ulang PO' : 'Cetak PO'}</button>
             </div>
           )}
         </div>

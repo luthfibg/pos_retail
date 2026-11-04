@@ -11,6 +11,7 @@ import { CREDIT_HINT, canUseCredit } from '@/features/customers/creditState';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { formatQty, formatRupiah } from '@/lib/format';
 import { milliToQty, moneyToCents, qtyToMilli, subtractMoney } from '@/lib/money';
 import {
@@ -290,13 +291,13 @@ export function PosPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <input
+                      <LocalDecimalInput
                         className={`${inputCls} tabular-nums ${e.qty ? 'border-red-400' : ''}`}
-                        inputMode="decimal"
+                        kind="quantity"
                         aria-label={`Qty ${l.product.name}`}
                         value={l.qty}
                         disabled={locked}
-                        onChange={(ev) => { setLines((ls) => setQty(ls, l.key, ev.target.value)); setErrors(NO_ERRORS); }}
+                        onChange={(value) => { setLines((ls) => setQty(ls, l.key, value)); setErrors(NO_ERRORS); }}
                       />
                       <span className="text-xs text-slate-400">{l.product.unit_name}</span>
                       {e.qty && <p role="alert" className="text-xs text-red-700">{e.qty}</p>}

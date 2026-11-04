@@ -408,7 +408,7 @@ Pengecualian berhasil → `over_limit: true` pada struk (label "melebihi batas" 
 
 ## 6. Pembelian: PR → PO → Penerimaan barang ✅
 
-Alur bisnis: **Kasir** mengajukan PR → **Finance** memeriksa → **Owner** menyetujui (autentikasi ulang) → **Admin** membuat PO per supplier → PO disetujui → dikirim ke supplier → **Kasir** menerima barang (surat jalan) → **posting** menambah stok → Admin memverifikasi surat jalan/faktur. Paket 1: **tanpa Saldo Pembelian** (pengecekan saldo = Paket 2).
+Alur bisnis terbaru: **Kasir** mengajukan PR → **Finance** memeriksa → **Admin/Purchasing** memilih supplier, item, dan rekening serta mengautentikasi **Owner satu kali** saat membuat PO langsung berstatus disetujui → PO dicetak lalu dikonfirmasi terkirim ke supplier → **Kasir** menerima barang (surat jalan) → **posting** menambah stok → Admin memverifikasi surat jalan/faktur. PO baru tidak lagi memiliki tahap draft/alokasi/persetujuan Owner terpisah. Paket 1: saldo rekening dicatat manual; alokasi mencadangkan saldo ke Kas Pembelian.
 
 > Status: ✅ lulus test (24 Okt 2026). Uang/qty tetap string desimal. Waktu UTC. Format sukses `{ "data": ... }`.
 
@@ -419,13 +419,14 @@ Alur bisnis: **Kasir** mengajukan PR → **Finance** memeriksa → **Owner** men
 | GET | `/api/purchase-requisitions` | Salah satu: `purchase_requisition.create`, `purchase_requisition.finance_check`, `purchase_requisition.approve`, `purchase_order.create`, `purchase_order.send` | Daftar. Pemohon melihat PR sendiri; pemegang permission alur melihat antrean seluruh toko. Query: `status`, `q` (awalan nomor), `mine=1`, `per_page` |
 | POST | `/api/purchase-requisitions` | `purchase_requisition.create` | Buat PR **draft** |
 | GET | `/api/purchase-requisitions/{pr}` | Sama dengan izin daftar | Detail + item + riwayat keputusan + PO turunan |
+| GET | `/api/purchase-requisitions/{pr}/purchase-order-items` | `purchase_order.create` | Item PR yang lolos pemeriksaan Finance (`approved`, atau `finance_checked` untuk kompatibilitas data lama) dan masih dapat dialokasikan ke PO (`qty_available`, `est_price`) |
 | PATCH | `/api/purchase-requisitions/{pr}` | `purchase_requisition.create` | Ubah saat `draft`/`returned` (pembuat atau Admin). `items` menggantikan seluruh item |
 | POST | `/api/purchase-requisitions/{pr}/submit` | `purchase_requisition.create` | `draft`/`returned` → `submitted` (notifikasi ke Finance) |
 | POST | `/api/purchase-requisitions/{pr}/finance-check` | `purchase_requisition.finance_check` | `{ "decision": "pass" \| "return", "note": "..." }` — `note` wajib bila `return` |
-| POST | `/api/purchase-requisitions/{pr}/approve` | `purchase_requisition.approve` | Persetujuan Owner: `{ "decision": "approve" \| "reject", "note", "approver_username", "approver_password" }` |
+| POST | `/api/purchase-requisitions/{pr}/approve` | `purchase_requisition.approve` | Tahap persetujuan PR lama; UI alur baru tidak memanggil endpoint ini. Otorisasi Owner dilakukan saat PO dibuat |
 | POST | `/api/purchase-requisitions/{pr}/cancel` | `purchase_requisition.create` | `{ "reason"? }` — saat `draft`/`returned`/`submitted` (pembuat atau Admin) |
 
-Status PR: `draft` → `submitted` → `finance_checked` → `approved` → `converted` (otomatis saat seluruh item sudah masuk PO) · cabang: `returned` (dikembalikan Finance, **boleh diedit lalu diajukan lagi**), `rejected`, `cancelled`.
+Status PR baru: `draft` → `submitted` → `approved` (Finance meloloskan PR) → `converted` (otomatis saat seluruh item sudah masuk PO) · cabang: `returned` (dikembalikan Finance, **boleh diedit lalu diajukan lagi**), `cancelled`. `finance_checked` dan persetujuan Owner terpisah tetap dikenali untuk kompatibilitas PR lama.
 
 Permintaan buat/ubah:
 ```json
@@ -434,9 +435,11 @@ Permintaan buat/ubah:
 ```
 `items` 1–100 baris; `qty` > 0 (maks 99999, 3 desimal); `est_price` opsional (maks 2 desimal); produk nonaktif/ganda ditolak. Produk `pending_price` boleh diajukan.
 
-Detail PR (`data`): `id, doc_number ("PR-202610-000001"), status, reason, est_total, requested_by, requester_name, submitted_at, created_at`, `items[]` (`id, product_id, sku, name, unit_name, qty, est_price, note, qty_ordered, qty_remaining` — dua terakhir = berapa sudah/ belum dipesan lewat PO), `approvals[]` (`step: finance_check|owner_auth, decision: approved|returned|rejected, decided_by_name, note, is_self_approval, decided_at`), `purchase_orders[]` (`id, doc_number, status, total`).
+Detail PR (`data`): `id, doc_number ("PR-202610-000001"), status, reason, est_total, requested_by, requester_name, submitted_at, created_at`, `items[]` (`id, product_id, sku, name, unit_name, qty, est_price, note`), `approvals[]` (`step: finance_check|owner_auth, decision: approved|returned|rejected, decided_by_name, note, is_self_approval, decided_at`), `purchase_orders[]` (`id, doc_number, status, total`). `qty` adalah satu-satunya kuantitas permintaan; informasi sisa alokasi PO disediakan terpisah di endpoint item PO.
 
-Autentikasi ulang Owner (bila toko memakai mode kunci, lihat bagian 14: kirim juga/atau `approver_key`): kirim `approver_username` + `approver_password` (diketik pemberi persetujuan sendiri; salah → 422 `errors.approver_password`). Wajib selama setting `approval_reauth_required` aktif (default aktif). Bila pembuat PR = pemberi persetujuan (mode minimalis), diizinkan hanya jika setting `sod_owner_self_approve = allow_with_flag` (default) dan **ditandai** `is_self_approval: true` — tampilkan lencana "disetujui sendiri". Bila diblokir → 422 `errors.approver_username`.
+Daftar item PO yang tersedia (`GET /api/purchase-requisitions/{pr}/purchase-order-items`, hanya PR `approved`): `{ "pr_id": 5, "items": [{ "product_id": 12, "sku": "…", "name": "…", "unit_name": "pcs", "qty_available": "4.000", "est_price": "2500.00" }] }`. `qty_available` menghitung jumlah PR dikurangi kuantitas PO aktif; PO dibatalkan tidak mengurangi jumlah tersedia.
+
+Untuk PO baru, autentikasi ulang Owner dikirim bersama create PO (bila toko memakai mode kunci, lihat bagian 14: kirim juga/atau `approver_key`): `approver_username` + `approver_password` (diketik pemberi persetujuan sendiri; salah → 422 `errors.approver_password`). Wajib selama setting `approval_reauth_required` aktif (default aktif). Bila pembuat PR = pemberi otorisasi, aturan `sod_owner_self_approve` (Owner) atau `sod_pr_creator_approver` (non-Owner) tetap diberlakukan; penandaan swa-persetujuan dicatat pada audit PO. Autentikasi dan persetujuan PR terpisah tetap berlaku untuk PR lama.
 
 ### 6.2 Purchase Order (PO)
 
@@ -446,23 +449,24 @@ Daftar supplier dapat dibaca oleh pemegang `supplier.manage` atau `purchase_orde
 |---|---|---|---|
 | GET | `/api/purchase-orders` | Salah satu: `purchase_order.create`, `purchase_order.send`, `purchase_requisition.approve`, `purchase_fund.view`, `purchase_fund.allocate`, `goods_receipt.create` | Daftar. Pengelola PO: semua; **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
 | GET | `/api/purchase-orders/{po}` | Sama dengan izin daftar | Detail + item + daftar penerimaan dan alokasi aktif; pembatasan status untuk Kasir tetap berlaku |
-| POST | `/api/purchase-orders` | `purchase_order.create` | Buat PO **draft** dari PR `approved` |
-| PATCH | `/api/purchase-orders/{po}` | `purchase_order.create` | Ubah saat `draft` (`pr_id` tidak dapat diubah) |
-| POST | `/api/purchase-orders/{po}/fund-allocation` | `purchase_fund.allocate` | `{ "bank_account_id": 1 }`; mencadangkan **seluruh total PO** dari saldo rekening yang tersedia ke Kas Pembelian. Tidak mengirim transfer bank |
-| POST | `/api/purchase-orders/{po}/submit` | Salah satu: `purchase_order.create`, `purchase_fund.allocate` | Hanya bisa setelah alokasi penuh; selalu `draft` → `pending_confirmation` |
-| POST | `/api/purchase-orders/{po}/confirm` | `purchase_requisition.approve` | Konfirmasi Owner untuk `pending_confirmation` (`approver_username`, `approver_password`, `note?`) |
+| POST | `/api/purchase-orders` | `purchase_order.create` + `purchase_fund.allocate` | Buat PO langsung `approved` secara atomik dari PR lolos Finance; request mewajibkan `bank_account_id`, item, dan autentikasi Owner (`approver_username` + `approver_password` atau `approver_key` sesuai mode). Alokasi mencadangkan total PO dari rekening ke Kas Pembelian |
+| PATCH | `/api/purchase-orders/{po}` | `purchase_order.create` | Ubah hanya PO `draft` lama (`pr_id` tidak dapat diubah); PO baru tidak memiliki tahap draft |
+| POST | `/api/purchase-orders/{po}/fund-allocation` | `purchase_fund.allocate` | Endpoint kompatibilitas untuk PO draft lama; `{ "bank_account_id": 1 }` mencadangkan seluruh total PO, tidak mengirim transfer bank |
+| POST | `/api/purchase-orders/{po}/submit` | Salah satu: `purchase_order.create`, `purchase_fund.allocate` | Endpoint kompatibilitas untuk PO draft lama; setelah alokasi penuh status menjadi `pending_confirmation` |
+| POST | `/api/purchase-orders/{po}/confirm` | `purchase_requisition.approve` | Endpoint kompatibilitas untuk PO lama berstatus `pending_confirmation`; PO baru sudah disetujui saat dibuat |
 | POST | `/api/purchase-orders/{po}/send` | `purchase_order.send` | `approved` → `sent`; alokasi harus tetap aktif |
 | POST | `/api/purchase-orders/{po}/cancel` | `purchase_order.create` | `{ "reason" }` wajib; sebelum ada penerimaan |
 | POST | `/api/purchase-orders/{po}/close` | `purchase_order.create` | `{ "reason" }` wajib; tutup manual PO yang sebagian diterima |
 
 Permintaan buat:
 ```json
-{ "pr_id": 5, "supplier_id": 2, "payment_terms": "credit", "order_date": "2026-10-24", "expected_date": "2026-10-30",
+{ "pr_id": 5, "supplier_id": 2, "bank_account_id": 1, "approver_username": "owner", "approver_password": "…",
+  "payment_terms": "credit", "order_date": "2026-10-24", "expected_date": "2026-10-30",
   "items": [ { "product_id": 12, "qty_ordered": "10", "unit_price": "2400" } ] }
 ```
 `payment_terms` (`prepaid|credit|cod`) default dari supplier. `order_date` default hari ini (WIB).
 
-Status PO: `draft` → `pending_confirmation` → `approved` → `sent` → `partially_received` → `received`; cabang `cancelled`. Semua PO wajib menunggu konfirmasi Owner, tanpa auto-approval berdasarkan estimasi PR. Status penerimaan terpisah: `receipt_status` = `none|partial|complete`; `payment_status` = `unpaid` (pembayaran = Paket 2).
+Status PO baru: `approved` → `sent` → `partially_received` → `received`; cabang `cancelled`. PO lama dapat tetap berstatus `draft` atau `pending_confirmation` dan memakai endpoint kompatibilitas. Semua PO baru memerlukan autentikasi Owner saat dibuat, tanpa auto-approval berdasarkan estimasi PR. Status penerimaan terpisah: `receipt_status` = `none|partial|complete`; `payment_status` = `unpaid` (pembayaran = Paket 2).
 
 Aturan: PO **wajib dari PR `approved`**; satu PR boleh dipecah ke beberapa PO (per supplier); qty per produk **kumulatif** tidak boleh melebihi qty PR (422 `errors["items.N.qty_ordered"]` memuat sisa); PR otomatis menjadi `converted` bila semua item sudah tercakup dan kembali `approved` bila PO dibatalkan.
 
@@ -528,7 +532,7 @@ Permintaan buat:
 | `approver_username` | Pembuat tidak boleh menyetujui sendiri (setting SoD) | Minta Owner lain |
 | `note` / `reason` | Alasan wajib (kembalikan, tolak, batal, tutup) | Fokus ke kolom alasan |
 | `pr_id` | PR belum `approved` / sudah seluruhnya jadi PO | Muat ulang PR |
-| `items.N.qty_ordered` | Melebihi sisa qty PR | Tampilkan sisa dari pesan; sisa juga ada di `items[].qty_remaining` PR |
+| `items.N.qty_ordered` | Melebihi jumlah PR yang masih tersedia | Muat ulang daftar item PO dari endpoint ketersediaan |
 | `po_id` | PO belum/tidak lagi bisa menerima barang | Tampilkan pesan |
 | `receiving_location_id` | Lokasi tidak aktif/tidak dimiliki toko, atau gudang tidak diizinkan oleh `warehouse_enabled` | Pilih lokasi toko aktif atau aktifkan konfigurasi gudang |
 | `items.N.qty_received` | Melebihi sisa pesanan / kedua jumlah kosong | Tampilkan sisa dari pesan |
@@ -537,19 +541,15 @@ Permintaan buat:
 | `delivery_note_no`, `invoice_no`, `document_status` | Verifikasi dokumen belum lengkap / sudah terverifikasi | Tampilkan pesan |
 
 ### 6.5 Notifikasi baru (`type`)
-`pr.submitted` (ke Finance), `pr.finance_checked` (ke Owner), `pr.returned` / `pr.approved` / `pr.rejected` (ke pembuat), `pr.ready_for_po` (ke pembuat PO), `po.needs_confirmation` (ke Owner), `po.confirmed`, `goods_receipt.damaged`. Semua memakai `entity_type` (`purchase_requisition|purchase_order|goods_receipt`) + `entity_id` untuk tautan ke dokumen.
+`pr.submitted` (ke Finance), `pr.finance_checked` (ke pemegang `purchase_order.create`, untuk menyiapkan PO), `pr.returned` (ke pembuat), `pr.approved` / `pr.rejected` / `pr.ready_for_po` (alur PR lama), `po.needs_confirmation` / `po.confirmed` (alur PO lama), `goods_receipt.damaged`. Semua memakai `entity_type` (`purchase_requisition|purchase_order|goods_receipt`) + `entity_id` untuk tautan ke dokumen.
 
-### 6.6 Layar yang sudah bisa dibuatkan UI-nya (urutan saran)
-1. **Penerimaan barang (Kasir)** — pilih PO (`GET /api/purchase-orders?receivable=1`) → isi qty/kedaluwarsa/rusak → posting. Ini yang paling berdampak: stok bisa masuk lewat jalur resmi.
-2. **Daftar & form PR (Kasir)** — buat, ubah, ajukan; lencana status; pesan Finance saat `returned`.
-3. **Antrean Finance/Owner (Admin)** — PR `submitted` → periksa; `finance_checked` → dialog persetujuan dengan input username+password.
-4. **PO (Admin)** — buat dari PR yang disetujui (tampilkan `qty_remaining`), ajukan, konfirmasi Owner bila diminta, kirim, tutup/batal.
-5. Verifikasi dokumen penerimaan (Admin).
+### 6.6 UI purchasing
+UI PR/PO tersedia dalam tiga tahap: Finance memeriksa PR; Admin/Purchasing memilih supplier, item, dan rekening serta mengautentikasi Owner satu kali untuk membuat PO langsung berstatus `approved`; PO dicetak sebelum dikonfirmasi terkirim. Endpoint draft dan persetujuan terpisah tetap tersedia untuk PO lama. Penerimaan barang (Kasir) memakai PO `sent` → isi qty/kedaluwarsa/rusak → posting; Admin dapat memverifikasi dokumen penerimaan.
 
 ### 6.7 ASUMSI dan batasan (perlu konfirmasi klien/pengguna)
-- **Q-13:** PO otomatis disetujui bila total PO aktif kumulatif ≤ total estimasi PR (dan estimasi > 0); selain itu perlu konfirmasi Owner. PR tanpa estimasi harga selalu perlu konfirmasi.
+- **Alur PO baru:** setiap PO memerlukan autentikasi Owner saat dibuat, terlepas dari estimasi PR. Pengaturan pemisahan tugas (`sod_owner_self_approve` dan `sod_pr_creator_approver`) tetap berlaku bila pemohon PR menjadi pemberi otorisasi.
 - "Owner" = pemegang `settings.manage`; aturan swa-persetujuan memakai `sod_owner_self_approve` untuk Owner dan `sod_pr_creator_approver` untuk lainnya.
-- Penerimaan dari PO berstatus `approved` (belum diklik "kirim") tetap diizinkan agar operasional tidak tertahan langkah administratif.
+- Penerimaan barang hanya tersedia setelah PO dikonfirmasi terkirim (`sent`/`partially_received`).
 - Tanpa toleransi kelebihan kiriman; barang yang sudah kedaluwarsa tidak diterima sebagai layak jual.
 - **Selesai tahap 4.4:** penerimaan dapat diarahkan ke gudang aktif saat `warehouse_enabled=true`; posisi rak bisa ditentukan per item atau stok dipindahkan kemudian melalui transfer stok.
 - **Belum ada:** retur supplier/klaim barang rusak (Paket 3), pembayaran supplier dan Saldo Pembelian (Paket 2), dokumen koreksi penerimaan terposting.
@@ -979,6 +979,7 @@ Sinkronisasi dipanggil atomik dari stok awal, penjualan/void, penerimaan barang,
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-11-04** — Alur PR/PO disederhanakan menjadi Finance pass → create PO atomik (pilih rekening, reservasi dana, satu otorisasi Owner) → cetak lalu konfirmasi kirim. Tes `PurchaseOrderTest` + `PurchaseRequisitionTest`: 31 lulus; Pint lulus.
 - **2026-11-04** — Pemantauan stok per toko dengan ambang default 3.000, field `restock_quantity` di master produk, dan satu PR otomatis dinamis yang menghitung estimasi HPP/total; sinkronisasi atomik pada perubahan stok/master/setting, sementara Kasir hanya dapat meneruskan PR otomatis. Migration 000065. Validasi terarah 122 test (1.158 assertions) dan Pint lulus.
 - **2026-11-04** — Field HPP master disederhanakan menjadi `unit_cost` tunggal (`DECIMAL(18,4)`), diisi wajib saat produk dibuat, dapat dikoreksi Admin melalui edit, dan diganti dengan biaya terbaru saat penerimaan/stok masuk memiliki biaya. `last_cost` dihapus; snapshot biaya transaksi tetap disimpan. Label UI untuk nilai produk adalah **Harga Modal**; form stok awal diberi nama **Stok Eksisting Toko**. Migration 000066. Tes backend terarah 113/113 (1.051 assertions) dan Pint lulus.
 - **2026-11-03** — Alokasi Kas Pembelian untuk PO: ledger rekening bank manual, saldo awal/penyesuaian ber-audit, alokasi penuh berdasarkan nilai PO, saldo tersedia dikurangi pencadangan tanpa mengklaim transfer bank, dan pelepasan alokasi saat PO dibatalkan atau nilainya berubah. Setiap PO kini menunggu konfirmasi Owner setelah dana dicadangkan. Rekening dimasking di endpoint; Finance diberi permission kelola/alokasi, Owner melihat, Admin mewarisi semua. `PurchaseOrderTest` (17) dan `GoodsReceiptTest` (16) lulus; suite penuh 294/297 dengan tiga kegagalan di test lama yang tidak terkait. Pint file baru lulus. Migrasi 000060 dan PermissionSeeder perlu dijalankan pada database existing.

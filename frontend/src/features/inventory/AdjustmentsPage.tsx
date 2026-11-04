@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
+import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProductPicker } from '@/features/products/ProductPicker';
@@ -281,7 +282,7 @@ function AdjustmentCreateDialog({
                     </div>
                     <div className="text-xs text-slate-500">Saldo {formatQty(row.qtyBefore)} {row.product.unit_name}</div>
                     <label className="text-xs text-slate-500">Hasil hitung
-                      <input className={`${inputCls} mt-1 tabular-nums`} inputMode="decimal" value={row.qtyCounted} onChange={(event) => setRows((current) => current.map((item, i) => i === index ? { ...item, qtyCounted: event.target.value } : item))} />
+                      <LocalDecimalInput className={`${inputCls} mt-1 tabular-nums`} kind="quantity" value={row.qtyCounted} onChange={(value) => setRows((current) => current.map((item, i) => i === index ? { ...item, qtyCounted: value } : item))} />
                       {error && <span role="alert" className="mt-1 block text-red-700">{error}</span>}
                     </label>
                     <button type="button" aria-label={`Hapus ${row.product.name}`} onClick={() => setRows((current) => current.filter((_, i) => i !== index))} className="rounded border border-slate-300 px-2 py-1 text-xs">Hapus</button>
