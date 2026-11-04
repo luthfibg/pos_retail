@@ -18,10 +18,10 @@ export interface NavGroup {
  * Satu sumber menu, disusun mengikuti alur operasional toko:
  *
  *  1. Dashboard      beranda: ringkasan penjualan, kas, dan stok
- *  2. Penjualan      buka kasir jaga -> jual di kasir -> koreksi/cetak ulang struk
- *  3. Keuangan       periksa kasir jaga -> terima setoran -> tagih HRD
- *  4. Pembelian      PR -> pemeriksaan Finance -> persetujuan Owner -> PO -> terima barang/retur supplier
- *  5. Inventory      stok awal -> transfer/putaway -> adjustment & opname -> riwayat stok
+ *  2. Pembelian      PR -> pemeriksaan Finance -> persetujuan Owner -> PO -> terima barang/retur supplier
+ *  3. Inventory      stok awal -> transfer/putaway -> adjustment & opname -> riwayat stok
+ *  4. Penjualan      buka kasir jaga -> jual di kasir -> koreksi/cetak ulang struk
+ *  5. Keuangan       periksa kasir jaga -> terima setoran -> tagih HRD
  *  6. Data Master    kategori -> produk -> supplier -> karyawan (pembeli kredit)
  *  7. Pengaturan     satu layar untuk semua konfigurasi
  *
@@ -32,22 +32,6 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Dashboard',
     items: [{ to: '/dashboard', label: 'Dashboard', permission: 'reports.view' }],
-  },
-  {
-    label: 'Penjualan',
-    items: [
-      { to: '/shift', label: 'Kasir Jaga Saya', permission: 'shift.open', cashierOnly: true },
-      { to: '/pos', label: 'Kasir', permission: 'sales.create', cashierOnly: true },
-      { to: '/sales', label: 'Riwayat Penjualan', permission: 'sales.create' },
-    ],
-  },
-  {
-    label: 'Keuangan',
-    items: [
-      { to: '/shifts', label: 'Laporan Kasir Jaga', permission: 'shift.review' },
-      { to: '/cash-deposits', label: 'Setoran Masuk', permission: 'cash_deposit.receive' },
-      { to: '/billing', label: 'Tagihan HRD', permission: ['billing_period.manage', 'invoice.generate'] },
-    ],
   },
   {
     label: 'Pembelian',
@@ -74,6 +58,22 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/inventory/transfers', label: 'Transfer Stok', permission: 'stock_transfer.create' },
       { to: '/inventory/adjustments', label: 'Adjustment & Opname', permission: ['inventory.adjust.request', 'inventory.adjust.approve'] },
       { to: '/inventory/movements', label: 'Riwayat Stok', permission: 'inventory.view' },
+    ],
+  },
+  {
+    label: 'Penjualan',
+    items: [
+      { to: '/shift', label: 'Kasir Jaga Saya', permission: 'shift.open', cashierOnly: true },
+      { to: '/pos', label: 'Kasir', permission: 'sales.create', cashierOnly: true },
+      { to: '/sales', label: 'Penjualan', permission: 'sales.create' },
+    ],
+  },
+  {
+    label: 'Keuangan',
+    items: [
+      { to: '/shifts', label: 'Laporan Kasir Jaga', permission: 'shift.review' },
+      { to: '/cash-deposits', label: 'Setoran Masuk', permission: 'cash_deposit.receive' },
+      { to: '/billing', label: 'Laporan Piutang', permission: ['billing_period.manage', 'invoice.generate'] },
     ],
   },
   {

@@ -153,20 +153,20 @@ export function BillingPage() {
     <>
       <div className="billing-screen no-print space-y-6 p-4 sm:p-6">
         <header>
-          <h1 className="text-2xl font-semibold">Tagihan HRD</h1>
-          <p className="mt-1 text-sm text-slate-600">Kelola periode kredit karyawan, terbitkan invoice, dan catat pembayaran HRD.</p>
+          <h1 className="text-2xl font-semibold">Laporan Piutang</h1>
+          <p className="mt-1 text-sm text-slate-600">Laporan piutang, penerbitan invoice, dan penerimaan pembayaran.</p>
         </header>
 
         {(canViewPeriods || canGenerateInvoice) && (
-          <div role="tablist" aria-label="Bagian tagihan HRD" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div role="tablist" aria-label="Bagian laporan piutang" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
             {canViewPeriods && (
               <button type="button" role="tab" aria-selected={visibleTab === 'periods'} onClick={() => setActiveTab('periods')} className={`flex-1 border-b-2 px-4 py-3 text-sm ${visibleTab === 'periods' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}>
-                Periode tagihan
+                Tagihan Bulan Berjalan
               </button>
             )}
             {canGenerateInvoice && (
               <button type="button" role="tab" aria-selected={visibleTab === 'invoices'} onClick={() => setActiveTab('invoices')} className={`flex-1 border-b-2 px-4 py-3 text-sm ${visibleTab === 'invoices' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}>
-                Invoice HRD
+                Rekap Data Piutang
               </button>
             )}
           </div>
@@ -203,11 +203,7 @@ export function BillingPage() {
 
             <section className="order-1 min-w-0 space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="font-semibold">Periode tagihan</h2>
-                <p className="text-sm text-slate-500">Penutupan mengikat struk kredit ke periode ini dan otomatis membuka periode berikutnya.</p>
-              </div>
-              {currentPeriod.data && <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800">Periode aktif</span>}
+              {currentPeriod.data && <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800">Bulan ini</span>}
             </div>
             <ErrorNotice error={currentPeriod.error} />
             {currentPeriod.isLoading ? (
@@ -255,7 +251,7 @@ export function BillingPage() {
             <ErrorNotice error={periods.error} />
             {canManagePeriod && (
               <div>
-                <h3 className="mb-2 text-sm font-semibold">Daftar periode</h3>
+                <h3 className="mb-2 text-sm font-semibold">Realisasi bulan berjalan</h3>
                 {periods.isLoading ? <p className="text-sm text-slate-500">Memuat riwayat…</p> : periods.error && !periods.data ? null : periods.data?.data.length ? (
                   <>
                     <div className="divide-y divide-slate-100">
@@ -307,7 +303,7 @@ export function BillingPage() {
 
             <section className="order-1 min-w-0 space-y-3 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <div><h2 className="font-semibold">Invoice HRD</h2><p className="text-sm text-slate-500">Daftar invoice dan status pelunasan.</p></div>
+              <div><h2 className="font-semibold">Rekap Data Piutang & Status Invoice</h2></div>
               <Field label="Status">
                 <select className={inputCls} value={invoiceStatus} onChange={(event) => { setInvoiceStatus(event.target.value as InvoiceStatus | ''); setInvoicePage(1); }}>
                   <option value="">Semua status</option>
@@ -376,7 +372,7 @@ function PeriodDetail({
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
-        <div><h2 className="font-semibold">Rincian periode</h2><p className="text-sm text-slate-500">Daftar struk kredit yang terikat ke periode ini.</p></div>
+        <div><h2 className="font-semibold">Rincian transaksi</h2></div>
         <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Tutup rincian</button>
       </div>
       <ErrorNotice error={error} />
@@ -411,7 +407,7 @@ function PeriodDetail({
           {period.customers?.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Karyawan</th><th className="py-2 pr-3">Departemen</th><th className="py-2 pr-3">Transaksi</th><th className="py-2 text-right">Jumlah</th></tr></thead>
+                <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Nama Karyawan & NIK</th><th className="py-2 pr-3">Divisi/Bagian</th><th className="py-2 pr-3">Transaksi</th><th className="py-2 text-right">Jumlah</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {period.customers.map((customer) => (
                     <tr key={customer.customer_id}><td className="py-2 pr-3"><span className="block font-medium">{customer.name}</span><span className="text-xs text-slate-500">{customer.customer_no}</span></td><td className="py-2 pr-3">{customer.department ?? '—'}</td><td className="py-2 pr-3">{customer.sales_count}</td><td className="py-2 text-right font-medium">{formatRupiah(customer.total)}</td></tr>
@@ -491,7 +487,7 @@ function InvoiceDetail({
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h2 className="font-semibold">Rincian invoice</h2><p className="text-sm text-slate-500">Rincian berdasarkan struk dan karyawan.</p></div>
+        <div><h2 className="font-semibold">Rekapitulasi Transaksi</h2><p className="text-sm text-slate-500">Rekap berdasarkan struk dan karyawan.</p></div>
         <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Tutup rincian</button>
       </div>
       <ErrorNotice error={error} />
@@ -549,7 +545,7 @@ function InvoiceDetail({
           </div>
           {canPay && ['issued', 'handed_to_hr', 'partially_paid'].includes(invoice.status) && (
             <form onSubmit={(event) => onPaymentSubmit(event, invoice)} className="no-print space-y-3 rounded-md bg-slate-50 p-4">
-              <div><h3 className="font-semibold">Catat pembayaran HRD</h3><p className="text-sm text-slate-600">Sisa tagihan: {formatRupiah(invoice.amount_remaining)}</p></div>
+              <div><h3 className="font-semibold">Input pembayaran piutang</h3><p className="text-sm text-slate-600">Sisa tagihan: {formatRupiah(invoice.amount_remaining)}</p></div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Jumlah pembayaran" error={paymentError ?? undefined}>
                   <input className={inputCls} inputMode="decimal" value={paymentValues.amount} onChange={(event) => setPaymentValues({ ...paymentValues, amount: event.target.value })} placeholder="0.00" />

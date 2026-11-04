@@ -61,7 +61,7 @@ describe('menu per role (model standar retail)', () => {
     ]);
   });
 
-  it('Accounting melihat tagihan HRD dan laporan kasir jaga', () => {
+  it('Accounting melihat laporan piutang dan laporan kasir jaga', () => {
     // Catatan: verifikasi surat jalan/faktur (`goods_receipt.verify_documents`) belum punya menu; lihat catatan di FRONTEND_PROGRESS.
     expect(menuFor('Accounting')).toEqual(['/billing', '/dashboard', '/inventory/movements', '/products', '/shifts']);
   });
@@ -96,13 +96,13 @@ function sidebarFor(permissions: string[] | 'all', isAdmin?: boolean): string[] 
   });
 }
 
-describe('susunan sidebar mengikuti alur kerja', () => {
-  it('Kasir jaga -> kasir -> riwayat, lalu pembelian, inventory, dan data master', () => {
+describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
+  it('Kasir melihat Dashboard, Pembelian, Inventory, Penjualan, dan Data Master', () => {
     expect(sidebarFor(PERMISSIONS.Kasir ?? [])).toEqual([
       'Dashboard',
-      'Penjualan > Kasir Jaga Saya, Kasir, Riwayat Penjualan',
       'Pembelian > Permintaan Pembelian, Penerimaan Barang, Retur Supplier',
       'Inventory > Transfer Stok, Adjustment & Opname, Riwayat Stok',
+      'Penjualan > Kasir Jaga Saya, Kasir, Penjualan',
       'Data Master > Produk, Karyawan',
     ]);
   });
@@ -110,9 +110,9 @@ describe('susunan sidebar mengikuti alur kerja', () => {
   it('Finance: grup bermenu tunggal menjadi tautan langsung', () => {
     expect(sidebarFor(PERMISSIONS.Finance ?? [])).toEqual([
       'Dashboard',
-      'Keuangan > Laporan Kasir Jaga, Setoran Masuk',
       'Permintaan Pembelian',
       'Riwayat Stok',
+      'Keuangan > Laporan Kasir Jaga, Setoran Masuk',
       'Data Master > Produk, Karyawan',
     ]);
   });
@@ -129,8 +129,8 @@ describe('susunan sidebar mengikuti alur kerja', () => {
   it('Accounting', () => {
     expect(sidebarFor(PERMISSIONS.Accounting ?? [])).toEqual([
       'Dashboard',
-      'Keuangan > Laporan Kasir Jaga, Tagihan HRD',
       'Riwayat Stok',
+      'Keuangan > Laporan Kasir Jaga, Laporan Piutang',
       'Produk',
     ]);
   });
@@ -138,9 +138,9 @@ describe('susunan sidebar mengikuti alur kerja', () => {
   it('Owner', () => {
     expect(sidebarFor(PERMISSIONS.Owner ?? [])).toEqual([
       'Dashboard',
-      'Laporan Kasir Jaga',
       'Pembelian > Permintaan Pembelian, Retur Supplier',
       'Inventory > Stok Awal, Adjustment & Opname, Riwayat Stok',
+      'Laporan Kasir Jaga',
       'Data Master > Produk, Karyawan',
       'Pengaturan',
     ]);
@@ -149,10 +149,10 @@ describe('susunan sidebar mengikuti alur kerja', () => {
   it('Admin (model simple) memegang semua izin dan tidak melihat menu khusus kasir', () => {
     expect(sidebarFor('all', true)).toEqual([
       'Dashboard',
-      'Riwayat Penjualan',
-      'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Tagihan HRD',
       'Pembelian > Permintaan Pembelian, Penerimaan Barang, Retur Supplier',
       'Inventory > Stok Awal, Transfer Stok, Adjustment & Opname, Riwayat Stok',
+      'Penjualan',
+      'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
       'Data Master > Kategori, Produk, Supplier, Karyawan',
       'Pengaturan',
     ]);

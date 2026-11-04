@@ -110,7 +110,7 @@ export function DashboardMenuSummaries({
     return { value: countLabel(total, 'setoran'), detail: 'Perlu diproses atau dikoreksi.' };
   });
 
-  add('/billing', 'Tagihan HRD', ['dashboard-menu', 'billing', can('billing_period.manage')], async () => {
+  add('/billing', 'Laporan Piutang', ['dashboard-menu', 'billing', can('billing_period.manage')], async () => {
     if (can('billing_period.manage')) {
       const period = await billingApi.currentPeriod();
       return period
