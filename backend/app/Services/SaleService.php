@@ -8,6 +8,7 @@ use App\Support\DocumentNumber;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -36,12 +37,11 @@ class SaleService
         private NumberSequence $sequences,
         private AuditLogger $audit,
         private ReauthService $reauth,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{0: array<string, mixed>, 1: bool}  [struk, baru dibuat?]
+     * @return array{0: array<string, mixed>, 1: bool} [struk, baru dibuat?]
      */
     public function post(User $actor, int $storeId, array $data): array
     {
@@ -317,6 +317,10 @@ class SaleService
         $isCredit = $data['payment_mode'] === 'payroll_credit';
         $now = $this->now();
 
+        if ($isCredit) {
+            DB::table('stores')->where('id', $storeId)->lockForUpdate()->first();
+        }
+
         // 1. shift aktif milik kasir
         $shift = DB::table('cash_shifts')->where('store_id', $storeId)->where('cashier_id', $actor->id)
             ->whereIn('status', ['open', 'counting'])->lockForUpdate()->first();
@@ -466,7 +470,7 @@ class SaleService
     /**
      * Gabungan baris, produk, diskon, dan pajak yang dipakai posting dan pratinjau.
      *
-     * @param array<int, array<string, mixed>> $items
+     * @param  array<int, array<string, mixed>>  $items
      * @return array<string, mixed>
      */
     private function calculateLines(int $storeId, string $paymentMode, array $items, bool $lockProducts = false): array
@@ -641,7 +645,7 @@ class SaleService
         return [$tax, $rate->rate, $net + $tax];
     }
 
-    /** @return \Illuminate\Support\Collection<int, object> */
+    /** @return Collection<int, object> */
     private function activeDiscounts(int $storeId, $products)
     {
         $now = $this->now();

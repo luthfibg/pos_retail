@@ -23,9 +23,7 @@ class BillingService
 {
     private const PAYABLE = ['issued', 'handed_to_hr', 'partially_paid'];
 
-    public function __construct(private AuditLogger $audit, private NumberSequence $sequences)
-    {
-    }
+    public function __construct(private AuditLogger $audit, private NumberSequence $sequences) {}
 
     // ------------------------------------------------------------------ periode
 
@@ -55,7 +53,7 @@ class BillingService
     }
 
     /**
-     * @param  array<string, mixed>  $data  label?, scheduled_close_date?
+     * @param  array<string, mixed>  $data  label?, period_month?, scheduled_close_date?
      * @return array<string, mixed>
      */
     public function openPeriod(User $actor, int $storeId, array $data): array
@@ -65,7 +63,13 @@ class BillingService
                 throw ValidationException::withMessages(['status' => ['Masih ada periode tagihan yang terbuka. Tutup dulu sebelum membuka yang baru.']]);
             }
 
-            $id = $this->insertOpenPeriod($storeId, $this->now(), $data['label'] ?? null, $data['scheduled_close_date'] ?? null);
+            $id = $this->insertOpenPeriod(
+                $storeId,
+                $this->now(),
+                $data['label'] ?? null,
+                $data['scheduled_close_date'] ?? null,
+                $this->defaultPeriodMonth($storeId),
+            );
 
             $this->audit->log('billing_period.open', 'billing_period', $id,
                 after: ['label' => $data['label'] ?? null, 'scheduled_close_date' => $data['scheduled_close_date'] ?? null],
@@ -78,7 +82,7 @@ class BillingService
     }
 
     /**
-     * Ubah label / tanggal gaji terjadwal (tanggal gaji dari HRD dapat berubah tiap bulan). Hanya periode terbuka.
+     * Ubah label / bulan periode / tanggal gaji terjadwal. Hanya periode terbuka.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
@@ -94,10 +98,15 @@ class BillingService
             }
 
             $changes = [];
-            foreach (['label', 'scheduled_close_date'] as $f) {
+            foreach (['label', 'period_month', 'scheduled_close_date'] as $f) {
                 if (array_key_exists($f, $data) && $data[$f] !== $p->{$f}) {
                     $changes[$f] = $data[$f];
                 }
+            }
+            if (isset($changes['period_month'])
+                && $p->label === $this->periodLabel(Carbon::parse($p->period_month, 'Asia/Jakarta'))
+                && (! array_key_exists('label', $data) || $data['label'] === $p->label)) {
+                $changes['label'] = $this->periodLabel(Carbon::parse($changes['period_month'], 'Asia/Jakarta'));
             }
             if ($changes === []) {
                 return;
@@ -136,11 +145,63 @@ class BillingService
 
             DB::table('billing_periods')->where('id', $id)->update(['status' => 'closed', 'closed_at' => $now, 'closed_by' => $actor->id]);
 
-            $nextId = $this->insertOpenPeriod($storeId, $now, null, null);
+            $nextMonth = Carbon::parse($p->period_month, 'Asia/Jakarta')->startOfMonth()->addMonthNoOverflow();
+            $nextId = $this->insertOpenPeriod($storeId, $now, null, null, $nextMonth);
 
             $this->audit->log('billing_period.close', 'billing_period', $id,
                 before: ['status' => 'open'], after: ['status' => 'closed', 'sales_bound' => $bound, 'next_period_id' => $nextId],
                 storeId: $storeId, actorId: $actor->id);
+        });
+
+        return $this->findPeriod($storeId, $id);
+    }
+
+    public function cancelPeriod(User $actor, int $storeId, int $id, string $reason): array
+    {
+        DB::transaction(function () use ($actor, $storeId, $id, $reason) {
+            DB::table('stores')->where('id', $storeId)->lockForUpdate()->first();
+            $period = DB::table('billing_periods')
+                ->where('store_id', $storeId)
+                ->where('id', $id)
+                ->lockForUpdate()
+                ->first();
+            abort_if($period === null, 404, 'Periode tagihan tidak ditemukan.');
+
+            if (! in_array($period->status, ['open', 'closed'], true)) {
+                throw ValidationException::withMessages(['status' => ['Hanya periode terbuka atau ditutup yang dapat dibatalkan.']]);
+            }
+
+            $hasInvoice = DB::table('receivable_invoices')->where('billing_period_id', $id)->exists();
+            $hasBoundSales = DB::table('sales')
+                ->where('store_id', $storeId)
+                ->where('billing_period_id', $id)
+                ->where('payment_mode', 'payroll_credit')
+                ->where('status', 'posted')
+                ->exists();
+            $hasUnboundSales = $period->status === 'open' && DB::table('sales')
+                ->where('store_id', $storeId)
+                ->whereNull('billing_period_id')
+                ->where('payment_mode', 'payroll_credit')
+                ->where('status', 'posted')
+                ->exists();
+
+            if ($hasInvoice || $hasBoundSales || $hasUnboundSales) {
+                throw ValidationException::withMessages([
+                    'status' => ['Periode hanya dapat dibatalkan jika belum memiliki invoice atau struk kredit terposting.'],
+                ]);
+            }
+
+            DB::table('billing_periods')->where('id', $id)->update(['status' => 'cancelled']);
+            $this->audit->log(
+                'billing_period.cancel',
+                'billing_period',
+                $id,
+                before: ['status' => $period->status, 'label' => $period->label],
+                after: ['status' => 'cancelled'],
+                reason: $reason,
+                storeId: $storeId,
+                actorId: $actor->id,
+            );
         });
 
         return $this->findPeriod($storeId, $id);
@@ -160,6 +221,9 @@ class BillingService
             $p = DB::table('billing_periods')->where('store_id', $storeId)->where('id', $periodId)->lockForUpdate()->first();
             abort_if($p === null, 404, 'Periode tagihan tidak ditemukan.');
 
+            if ($p->status === 'cancelled') {
+                throw ValidationException::withMessages(['status' => ['Periode ini telah dibatalkan dan tidak dapat dibuatkan invoice.']]);
+            }
             if ($p->status === 'open') {
                 throw ValidationException::withMessages(['status' => ['Tutup periode dulu sebelum membuat invoice.']]);
             }
@@ -382,15 +446,67 @@ class BillingService
         return $this->findInvoice($storeId, $id);
     }
 
-    private function insertOpenPeriod(int $storeId, string $startsAt, ?string $label, ?string $scheduledClose): int
-    {
+    private function insertOpenPeriod(
+        int $storeId,
+        string $startsAt,
+        ?string $label,
+        ?string $scheduledClose,
+        ?Carbon $periodMonth = null,
+    ): int {
+        $periodMonth ??= Carbon::now('Asia/Jakarta')->startOfMonth();
+        $periodMonth = $periodMonth->copy()->startOfMonth();
+
         return (int) DB::table('billing_periods')->insertGetId([
             'store_id' => $storeId,
-            'label' => $label ?? 'Periode '.Carbon::now('Asia/Jakarta')->format('Y-m-d'),
+            'period_month' => $periodMonth->toDateString(),
+            'label' => $label ?? $this->periodLabel($periodMonth),
             'scheduled_close_date' => $scheduledClose,
             'starts_at' => $startsAt,
             'status' => 'open',
         ]);
+    }
+
+    private function defaultPeriodMonth(int $storeId): Carbon
+    {
+        $currentMonth = Carbon::now('Asia/Jakarta')->startOfMonth();
+        $previous = DB::table('billing_periods')
+            ->where('store_id', $storeId)
+            ->orderByDesc('id')
+            ->first(['period_month', 'status']);
+
+        if ($previous === null) {
+            return $currentMonth;
+        }
+
+        $month = Carbon::parse($previous->period_month, 'Asia/Jakarta')->startOfMonth();
+        if ($previous->status !== 'cancelled') {
+            $month->addMonthNoOverflow();
+        }
+
+        return $month->greaterThan($currentMonth) ? $month : $currentMonth;
+    }
+
+    private function periodLabel(Carbon $periodMonth): string
+    {
+        return 'Periode '.$this->monthName($periodMonth->month);
+    }
+
+    private function monthName(int $month): string
+    {
+        return [
+            1 => 'Januari',
+            2 => 'Februari',
+            3 => 'Maret',
+            4 => 'April',
+            5 => 'Mei',
+            6 => 'Juni',
+            7 => 'Juli',
+            8 => 'Agustus',
+            9 => 'September',
+            10 => 'Oktober',
+            11 => 'November',
+            12 => 'Desember',
+        ][$month];
     }
 
     /** @return array{0: int, 1: string|null, 2: int} [pajak, tarif, total] */
@@ -427,8 +543,8 @@ class BillingService
             ->where('p.store_id', $storeId)
             ->selectRaw(
                 'p.*, '.
-                "(select count(*) from sales s where s.billing_period_id = p.id and s.payment_mode = 'payroll_credit' and s.status = 'posted') as sales_count, ".
-                "(select coalesce(sum(s.total), 0) from sales s where s.billing_period_id = p.id and s.payment_mode = 'payroll_credit' and s.status = 'posted') as sales_total, ".
+                "(select count(*) from sales s where s.store_id = p.store_id and s.payment_mode = 'payroll_credit' and s.status = 'posted' and (s.billing_period_id = p.id or (p.status = 'open' and s.billing_period_id is null))) as sales_count, ".
+                "(select coalesce(sum(s.total), 0) from sales s where s.store_id = p.store_id and s.payment_mode = 'payroll_credit' and s.status = 'posted' and (s.billing_period_id = p.id or (p.status = 'open' and s.billing_period_id is null))) as sales_total, ".
                 '(select i.id from receivable_invoices i where i.billing_period_id = p.id limit 1) as invoice_id'
             );
     }
@@ -436,9 +552,21 @@ class BillingService
     /** @return list<array<string, mixed>> */
     private function customerSummary(int $periodId): array
     {
-        return DB::table('sales as s')
+        $period = DB::table('billing_periods')->where('id', $periodId)->first(['store_id', 'status']);
+        if ($period === null) {
+            return [];
+        }
+
+        $sales = DB::table('sales as s')
             ->join('customers as c', 'c.id', '=', 's.customer_id')
-            ->where('s.billing_period_id', $periodId)->where('s.payment_mode', 'payroll_credit')->where('s.status', 'posted')
+            ->where('s.store_id', $period->store_id)->where('s.payment_mode', 'payroll_credit')->where('s.status', 'posted');
+        if ($period->status === 'open') {
+            $sales->whereNull('s.billing_period_id');
+        } else {
+            $sales->where('s.billing_period_id', $periodId);
+        }
+
+        return $sales
             ->groupBy('c.id', 'c.customer_no', 'c.name', 'c.department')->orderBy('c.name')
             ->selectRaw('c.id, c.customer_no, c.name, c.department, count(*) as sales_count, sum(s.total) as total')
             ->get()
@@ -453,6 +581,7 @@ class BillingService
         return [
             'id' => (int) $r->id,
             'label' => $r->label,
+            'period_month' => $r->period_month,
             'status' => $r->status,
             'scheduled_close_date' => $r->scheduled_close_date,
             'starts_at' => $r->starts_at,

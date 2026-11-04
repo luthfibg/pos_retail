@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, formatLocalDecimal, formatQty, formatRupiah, parseApiTime, parseLocalDecimal, toWibDate } from './format';
+import { formatDate, formatDateTime, formatLocalDecimal, formatMonthYear, formatQty, formatRupiah, parseApiTime, parseLocalDecimal, toWibDate } from './format';
 
 describe('format', () => {
   it('menampilkan rupiah tanpa desimal bila bulat', () => {
@@ -34,6 +34,11 @@ describe('format', () => {
     expect(formatDate('2027-03-01')).toContain('2027');
     expect(formatDate('2027-03-01')).toMatch(/\b1\b/);
     expect(formatDate(null)).toBe('—');
+  });
+  it('menampilkan bulan dan tahun periode tanpa menggeser tanggal', () => {
+    expect(formatMonthYear('2026-10-01')).toBe('Oktober 2026');
+    expect(formatMonthYear('2026-13-01')).toBe('—');
+    expect(formatMonthYear(null)).toBe('—');
   });
 });
 

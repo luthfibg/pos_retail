@@ -70,10 +70,12 @@ export const billingApi = {
   period: (id: number) => api<{ data: BillingPeriod }>(`/billing-periods/${id}`).then((r) => r.data),
   openPeriod: (input: { label?: string; scheduled_close_date?: string }) =>
     api<{ data: BillingPeriod }>('/billing-periods', { method: 'POST', body: input }).then((r) => r.data),
-  updatePeriod: (id: number, input: { label?: string; scheduled_close_date?: string | null }) =>
+  updatePeriod: (id: number, input: { label?: string; period_month?: string; scheduled_close_date?: string | null }) =>
     api<{ data: BillingPeriod }>(`/billing-periods/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
   closePeriod: (id: number) =>
     api<{ data: BillingPeriod }>(`/billing-periods/${id}/close`, { method: 'POST' }).then((r) => r.data),
+  cancelPeriod: (id: number, reason: string) =>
+    api<{ data: BillingPeriod }>(`/billing-periods/${id}/cancel`, { method: 'POST', body: { reason } }).then((r) => r.data),
   generateInvoice: (periodId: number, input: { bill_to?: string }) =>
     api<{ data: Invoice }>(`/billing-periods/${periodId}/invoice`, { method: 'POST', body: input }).then((r) => r.data),
   invoices: (status: InvoiceStatus | '', page = 1) =>

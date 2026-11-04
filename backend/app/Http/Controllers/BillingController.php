@@ -13,9 +13,7 @@ use Illuminate\Validation\Rule;
 
 class BillingController extends Controller
 {
-    public function __construct(private BillingService $billing, private StoreContext $stores)
-    {
-    }
+    public function __construct(private BillingService $billing, private StoreContext $stores) {}
 
     private function store(Request $request): int
     {
@@ -52,6 +50,18 @@ class BillingController extends Controller
     public function closePeriod(Request $request, int $period): JsonResponse
     {
         return response()->json(['data' => $this->billing->closePeriod($request->user(), $this->store($request), $period)]);
+    }
+
+    public function cancelPeriod(Request $request, int $period): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:255']]);
+
+        return response()->json(['data' => $this->billing->cancelPeriod(
+            $request->user(),
+            $this->store($request),
+            $period,
+            $data['reason'],
+        )]);
     }
 
     public function generateInvoice(GenerateInvoiceRequest $request, int $period): JsonResponse

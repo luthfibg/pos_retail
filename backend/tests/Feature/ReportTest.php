@@ -252,7 +252,7 @@ class ReportTest extends SeededTestCase
         ]);
 
         $periodId = DB::table('billing_periods')->insertGetId([
-            'store_id' => $this->storeId(), 'label' => 'Oktober', 'starts_at' => '2026-10-01 00:00:00',
+            'store_id' => $this->storeId(), 'period_month' => '2026-10-01', 'label' => 'Oktober', 'starts_at' => '2026-10-01 00:00:00',
             'closed_at' => '2026-10-28 00:00:00', 'status' => 'invoiced', 'closed_by' => $admin->id,
         ]);
         $invoiceId = DB::table('receivable_invoices')->insertGetId([

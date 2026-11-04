@@ -228,7 +228,7 @@ export interface ManagedRole {
   is_system: boolean;
 }
 
-export type BillingPeriodStatus = 'open' | 'closed' | 'invoiced';
+export type BillingPeriodStatus = 'open' | 'closed' | 'invoiced' | 'cancelled';
 
 export interface BillingPeriodCustomer {
   customer_id: number;
@@ -242,6 +242,7 @@ export interface BillingPeriodCustomer {
 export interface BillingPeriod {
   id: number;
   label: string;
+  period_month: string;
   status: BillingPeriodStatus;
   scheduled_close_date: string | null;
   starts_at: string;

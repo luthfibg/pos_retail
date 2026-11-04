@@ -11,6 +11,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('billing-periods/{period}', [BillingController::class, 'showPeriod'])->whereNumber('period')->middleware('can:billing_period.manage');
     Route::patch('billing-periods/{period}', [BillingController::class, 'updatePeriod'])->whereNumber('period')->middleware('can:billing_period.manage');
     Route::post('billing-periods/{period}/close', [BillingController::class, 'closePeriod'])->whereNumber('period')->middleware('can:billing_period.close');
+    Route::post('billing-periods/{period}/cancel', [BillingController::class, 'cancelPeriod'])->whereNumber('period')->middleware('can:billing_period.manage');
     Route::post('billing-periods/{period}/invoice', [BillingController::class, 'generateInvoice'])->whereNumber('period')->middleware('can:invoice.generate');
 
     Route::get('invoices', [BillingController::class, 'invoices'])->middleware('can:invoice.generate');

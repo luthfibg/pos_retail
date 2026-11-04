@@ -725,11 +725,12 @@ CREATE TABLE float_proposals (
 CREATE TABLE billing_periods (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   store_id BIGINT UNSIGNED NOT NULL,
+  period_month DATE NOT NULL,                       -- bulan periode; tidak berubah saat label diedit
   label VARCHAR(40) NOT NULL,
   scheduled_close_date DATE NULL,                   -- tanggal gaji dari HRD (dapat berubah tiap bulan)
   starts_at DATETIME(3) NOT NULL,
   closed_at DATETIME(3) NULL,
-  status ENUM('open','closed','invoiced') NOT NULL DEFAULT 'open',
+  status ENUM('open','closed','invoiced','cancelled') NOT NULL DEFAULT 'open',
   closed_by BIGINT UNSIGNED NULL,
   open_store_key BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status = 'open' THEN store_id ELSE NULL END) STORED,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

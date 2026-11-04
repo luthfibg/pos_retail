@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
+import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { billingApi } from '@/lib/api/endpoints';
 import type { BillingPeriod, Invoice, InvoiceStatus } from '@/lib/api/types';
-import { formatDate, formatDateTime, formatRupiah } from '@/lib/format';
+import { formatDate, formatDateTime, formatMonthYear, formatRupiah } from '@/lib/format';
 import { buildPaymentInput, validatePayment, type PaymentValues } from './billingForm';
 
 const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
@@ -17,7 +18,7 @@ const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
   paid: 'Lunas',
   cancelled: 'Dibatalkan',
 };
-const PERIOD_STATUS_LABEL = { open: 'Terbuka', closed: 'Ditutup', invoiced: 'Sudah dibuatkan invoice' } as const;
+const PERIOD_STATUS_LABEL = { open: 'Terbuka', closed: 'Ditutup', invoiced: 'Sudah dibuatkan invoice', cancelled: 'Dibatalkan' } as const;
 const INITIAL_PAYMENT: PaymentValues = { amount: '', receivedOn: '', reference: '', note: '' };
 
 export function BillingPage() {
@@ -88,15 +89,20 @@ export function BillingPage() {
     },
   });
   const updatePeriod = useMutation({
-    mutationFn: (input: { id: number; label: string; date: string }) =>
+    mutationFn: (input: { id: number; label: string; month: string; date: string }) =>
       billingApi.updatePeriod(input.id, {
         label: input.label.trim(),
+        period_month: `${input.month}-01`,
         scheduled_close_date: input.date || null,
       }),
     onSuccess: refreshBilling,
   });
   const closePeriod = useMutation({
     mutationFn: (id: number) => billingApi.closePeriod(id),
+    onSuccess: refreshBilling,
+  });
+  const cancelPeriod = useMutation({
+    mutationFn: (input: { id: number; reason: string }) => billingApi.cancelPeriod(input.id, input.reason),
     onSuccess: refreshBilling,
   });
   const generateInvoice = useMutation({
@@ -184,6 +190,9 @@ export function BillingPage() {
                   updatePeriod={updatePeriod.mutate}
                   updating={updatePeriod.isPending}
                   updateError={updatePeriod.error}
+                  onCancelPeriod={(input) => cancelPeriod.mutate(input)}
+                  cancelling={cancelPeriod.isPending}
+                  cancelError={cancelPeriod.error}
                   onClose={() => setSelectedPeriodId(null)}
                   onOpenInvoice={(id) => { setSelectedInvoiceId(id); setActiveTab('invoices'); }}
                 />
@@ -230,7 +239,7 @@ export function BillingPage() {
               <form onSubmit={submitOpenPeriod} className="grid gap-3 rounded-md bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
                 <p className="text-sm text-slate-600 sm:col-span-2 lg:col-span-3">Belum ada periode terbuka. Buka periode untuk menampung transaksi kredit potong gaji.</p>
                 <Field label="Nama periode (opsional)">
-                  <input className={inputCls} maxLength={40} value={newPeriodLabel} onChange={(event) => setNewPeriodLabel(event.target.value)} placeholder="Contoh: Gaji Oktober" />
+                  <input className={inputCls} maxLength={40} value={newPeriodLabel} onChange={(event) => setNewPeriodLabel(event.target.value)} placeholder="Default: Periode [nama bulan]" />
                 </Field>
                 <Field label="Tanggal gaji HRD (opsional)">
                   <input className={inputCls} type="date" value={newPeriodDate} onChange={(event) => setNewPeriodDate(event.target.value)} />
@@ -240,9 +249,9 @@ export function BillingPage() {
                 </button>
               </form>
             ) : (
-              <p className="text-sm text-slate-500">Tidak ada periode terbuka.</p>
+              <p className="text-sm text-slate-500">Tidak ada periode terbuka. Buka periode baru untuk mulai menerima transaksi kredit.</p>
             )}
-            <ErrorNotice error={openPeriod.error ?? closePeriod.error} />
+            <ErrorNotice error={openPeriod.error ?? closePeriod.error ?? cancelPeriod.error} />
             <ErrorNotice error={periods.error} />
             {canManagePeriod && (
               <div>
@@ -252,7 +261,7 @@ export function BillingPage() {
                     <div className="divide-y divide-slate-100">
                       {periods.data.data.map((period) => (
                         <button key={period.id} type="button" aria-current={selectedPeriodId === period.id ? 'true' : undefined} onClick={() => setSelectedPeriodId(period.id)} className={`flex w-full flex-wrap items-center justify-between gap-3 py-3 text-left hover:bg-slate-50 ${selectedPeriodId === period.id ? 'bg-slate-50' : ''}`}>
-                          <span><span className="block font-medium">{period.label}</span><span className="text-xs text-slate-500">{PERIOD_STATUS_LABEL[period.status]} · {period.sales_count} struk · {formatDateTime(period.starts_at)}</span></span>
+                          <span><span className="block font-medium">{period.label}</span><span className="text-xs text-slate-500">{PERIOD_STATUS_LABEL[period.status]} · {period.sales_count} struk · {formatMonthYear(period.period_month)}</span></span>
                           <span className="text-right text-sm font-semibold">{formatRupiah(period.sales_total)}{period.invoice_id && <span className="block text-xs font-normal text-slate-500">Invoice #{period.invoice_id}</span>}</span>
                         </button>
                       ))}
@@ -331,7 +340,7 @@ export function BillingPage() {
 
 function PeriodDetail({
   period, loading, error, canEdit, canGenerateInvoice, billTo, onBillTo, onGenerate, generating,
-  generateError, updatePeriod, updating, updateError, onClose, onOpenInvoice,
+  generateError, updatePeriod, updating, updateError, onCancelPeriod, cancelling, cancelError, onClose, onOpenInvoice,
 }: {
   period: BillingPeriod | undefined;
   loading: boolean;
@@ -343,19 +352,26 @@ function PeriodDetail({
   onGenerate: (id: number) => void;
   generating: boolean;
   generateError: unknown;
-  updatePeriod: (input: { id: number; label: string; date: string }) => void;
+  updatePeriod: (input: { id: number; label: string; month: string; date: string }) => void;
   updating: boolean;
   updateError: unknown;
+  onCancelPeriod: (input: { id: number; reason: string }) => void;
+  cancelling: boolean;
+  cancelError: unknown;
   onClose: () => void;
   onOpenInvoice: (id: number) => void;
 }) {
   const [label, setLabel] = useState('');
+  const [month, setMonth] = useState('');
   const [date, setDate] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
+  const [showCancel, setShowCancel] = useState(false);
   useEffect(() => {
     if (!period) return;
     setLabel(period.label);
+    setMonth(period.period_month.slice(0, 7));
     setDate(period.scheduled_close_date ?? '');
-  }, [period?.id, period?.label, period?.scheduled_close_date]);
+  }, [period?.id, period?.label, period?.period_month, period?.scheduled_close_date]);
 
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
@@ -367,16 +383,30 @@ function PeriodDetail({
       {loading ? <p className="text-sm text-slate-500">Memuat rincian periode…</p> : period ? (
         <>
           <div className="flex flex-wrap justify-between gap-2 rounded-md bg-slate-50 p-3 text-sm">
-            <span className="font-medium">{period.label} · {PERIOD_STATUS_LABEL[period.status]}</span>
+            <span className="font-medium">{period.label} · {PERIOD_STATUS_LABEL[period.status]}<span className="block text-xs font-normal text-slate-500">Bulan periode: {formatMonthYear(period.period_month)}</span></span>
             <span>{period.sales_count} struk · {formatRupiah(period.sales_total)}</span>
           </div>
           {period.status === 'open' && canEdit && (
-            <form onSubmit={(event) => { event.preventDefault(); updatePeriod({ id: period.id, label, date }); }} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+              <form onSubmit={(event) => { event.preventDefault(); updatePeriod({ id: period.id, label, month, date }); }} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
               <Field label="Nama periode"><input className={inputCls} maxLength={40} value={label} onChange={(event) => setLabel(event.target.value)} /></Field>
-              <Field label="Tanggal gaji HRD"><input className={inputCls} type="date" value={date} onChange={(event) => setDate(event.target.value)} /></Field>
-              <button type="submit" disabled={updating} className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-60">{updating ? 'Menyimpan…' : 'Simpan perubahan'}</button>
-              <div className="sm:col-span-3"><ErrorNotice error={updateError} /></div>
-            </form>
+                <Field label="Bulan dan tahun periode"><input className={inputCls} type="month" required value={month} onChange={(event) => setMonth(event.target.value)} /></Field>
+                <Field label="Tanggal gaji HRD"><input className={inputCls} type="date" value={date} onChange={(event) => setDate(event.target.value)} /></Field>
+                <button type="submit" aria-label="Simpan perubahan" title={updating ? 'Menyimpan…' : 'Simpan perubahan'} disabled={updating || !month} className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-60">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                    <path d="M17 21v-8H7v8M7 3v5h8" />
+                  </svg>
+                </button>
+                <div className="sm:col-span-2 xl:col-span-4"><ErrorNotice error={updateError} /></div>
+              </form>
+            )}
+          {canEdit && ['open', 'closed'].includes(period.status) && period.sales_count === 0 && period.invoice_id === null && (
+            <div className="space-y-2">
+              <button type="button" onClick={() => setShowCancel(true)} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50">
+                Batalkan periode kosong
+              </button>
+              <ErrorNotice error={cancelError} />
+            </div>
           )}
           {period.customers?.length ? (
             <div className="overflow-x-auto">
@@ -394,7 +424,7 @@ function PeriodDetail({
             <button type="button" onClick={() => onOpenInvoice(period.invoice_id!)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Buka invoice #{period.invoice_id}</button>
           ) : period.invoice_id ? (
             <p className="text-sm text-slate-500">Invoice #{period.invoice_id} sudah dibuat.</p>
-          ) : period.status !== 'open' && canGenerateInvoice ? (
+          ) : period.status === 'closed' && canGenerateInvoice ? (
             <div className="grid gap-3 rounded-md border border-slate-200 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <Field label="Ditagihkan kepada">
                 <input className={inputCls} maxLength={150} value={billTo} onChange={(event) => onBillTo(event.target.value)} />
@@ -406,6 +436,32 @@ function PeriodDetail({
           ) : null}
         </>
       ) : null}
+      {showCancel && period && (
+        <Modal title={`Batalkan ${period.label}?`} onClose={() => !cancelling && setShowCancel(false)}>
+          <form
+            className="space-y-4 p-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (cancelReason.trim().length < 3 || cancelling) return;
+              onCancelPeriod({ id: period.id, reason: cancelReason.trim() });
+              setShowCancel(false);
+              setCancelReason('');
+            }}
+          >
+            <ErrorNotice error={cancelError} />
+            <p className="text-sm text-slate-600">Periode hanya dapat dibatalkan jika belum memiliki struk kredit terposting atau invoice. Jika ini periode aktif, transaksi kredit baru perlu menunggu sampai periode baru dibuka.</p>
+            <Field label="Alasan pembatalan">
+              <input className={inputCls} required minLength={3} maxLength={255} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} autoFocus />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={cancelling} onClick={() => setShowCancel(false)}>Kembali</button>
+              <button type="submit" className="rounded-md bg-red-700 px-3 py-2 text-sm text-white disabled:opacity-60" disabled={cancelling || cancelReason.trim().length < 3}>
+                {cancelling ? 'Membatalkan…' : 'Batalkan periode'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </section>
   );
 }

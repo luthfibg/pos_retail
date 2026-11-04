@@ -73,6 +73,17 @@ export function formatDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeZone: 'UTC' }).format(d);
 }
 
+/** Bulan kalender "YYYY-MM-DD" tanpa menggeser zona waktu. */
+export function formatMonthYear(value: string | null | undefined): string {
+  if (!value) return '—';
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(value);
+  if (!m) return '—';
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return '—';
+  const d = new Date(Date.UTC(Number(m[1]), month - 1, 1));
+  return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(d);
+}
+
 /** Tanggal kalender WIB ("YYYY-MM-DD") dari waktu API (UTC). Untuk mengisi <input type="date"> dari batas hari WIB. */
 export function toWibDate(value: string | null | undefined): string {
   if (!value) return '';

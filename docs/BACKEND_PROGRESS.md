@@ -630,16 +630,17 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 
 ## 8. Tagihan HRD ✅
 
-> Status: ✅ lulus `php artisan test` (25 Okt 2026; `BillingTest` 10, total suite 184). Seluruhnya **Admin** (Kasir 403). Tidak ada migration/permission baru.
+> Status: ✅ `BillingTest` 14 lulus setelah pembaruan format nama dan pembatalan periode; `SaleTest` 17 lulus. Operasi periode dilindungi permission pengelolaan tagihan (Admin dan role lain yang diberi izin tersebut).
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
 | GET | `/api/billing-periods` | `billing_period.manage` | Daftar periode (terbaru dulu, paginasi) |
 | GET | `/api/billing-periods/current` | `billing_period.manage` | Periode terbuka; `data` = null bila belum ada |
-| POST | `/api/billing-periods` | `billing_period.manage` | Buka periode: `label?`, `scheduled_close_date?` (`YYYY-MM-DD`). 422 `status` bila masih ada yang terbuka |
-| GET | `/api/billing-periods/{id}` | `billing_period.manage` | Detail + `customers[]` (ringkasan tagihan per karyawan) |
-| PATCH | `/api/billing-periods/{id}` | `billing_period.manage` | Ubah `label` / `scheduled_close_date` (tanggal gaji HRD); hanya periode terbuka |
+| POST | `/api/billing-periods` | `billing_period.manage` | Buka periode: `label?`, `scheduled_close_date?` (`YYYY-MM-DD`). Nama default `Periode [Nama Bulan]`, bulan berjalan. 422 `status` bila masih ada yang terbuka |
+| GET | `/api/billing-periods/{id}` | `billing_period.manage` | Detail + `period_month` (`YYYY-MM-01`) + `customers[]` (ringkasan tagihan per karyawan) |
+| PATCH | `/api/billing-periods/{id}` | `billing_period.manage` | Ubah `label`, `period_month` (`YYYY-MM-01`), dan/atau `scheduled_close_date`; hanya periode terbuka |
 | POST | `/api/billing-periods/{id}/close` | `billing_period.close` | **Tutup periode** pada hari gaji |
+| POST | `/api/billing-periods/{id}/cancel` | `billing_period.manage` | Batalkan periode dengan `{ "reason": "..." }`; hanya open/closed tanpa struk kredit terposting dan tanpa invoice |
 | POST | `/api/billing-periods/{id}/invoice` | `invoice.generate` | Buat invoice (draft); `bill_to?` (default "HRD") |
 | GET | `/api/invoices?status=&per_page=` | `invoice.generate` | Daftar invoice |
 | GET | `/api/invoices/{id}` | `invoice.generate` | Detail: `customers[]` (per karyawan, berisi `sales[]`) dan `payments[]` |
@@ -649,6 +650,8 @@ Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan da
 
 ### Perilaku
 - **Tutup periode** mengikat semua struk kredit terposting yang belum terikat ke periode itu, lalu **periode berikutnya otomatis dibuka**; struk kredit baru masuk ke sana. Karena struk terikat tidak lagi dihitung sebagai pemakaian, **sisa batas kredit karyawan pulih** setelah tutup periode. Struk tunai dan struk batal tidak ikut.
+- Nama default periode menggunakan `Periode [Nama Bulan]` dalam bahasa Indonesia. Periode pertama/manual memakai bulan berjalan; setelah periode ditutup, periode otomatis berikutnya memakai bulan kalender setelah `period_month` periode yang ditutup (misalnya Oktober → November). Admin dapat mengubah bulan/tahun periode (`period_month`) saat masih terbuka; bila label masih memakai nama default, label mengikuti perubahan bulan. Label khusus tetap dapat diedit terpisah. Periode tertutup tidak dapat diubah agar riwayat struk tidak bergeser. Jika periode kosong dibatalkan lalu dibuka lagi, bulan periode terakhir yang dibatalkan dipakai kembali (tidak melompat bulan).
+- Periode kosong dapat dibatalkan dengan alasan, baik masih terbuka maupun sudah ditutup, selama tidak memiliki invoice. Periode aktif yang dibatalkan tidak otomatis diganti; Admin harus membuka periode yang benar sebelum transaksi kredit dilanjutkan. Periode berisi struk kredit atau yang sudah memiliki invoice tidak dapat dibatalkan. Keterikatan transaksi dijaga agar pembatalan tidak balapan dengan posting kredit.
 - **Invoice**: satu per periode tertutup, satu baris per struk. Subtotal = jumlah struk. PPN dihitung di invoice hanya bila `vat_enabled` aktif dan tarif lengkap (R-04); bila PPN aktif tapi konfigurasi belum lengkap → 422 `status` dan tidak ada yang berubah. Struk ditandai `billing_status: "invoiced"` dan **tidak dapat di-void lagi** (422 `status`, perlu credit note).
 - **Status invoice**: `draft` → `issued` → `handed_to_hr` → `partially_paid` → `paid`. Pembayaran hanya untuk `issued`/`handed_to_hr`/`partially_paid`; jumlah > 0 dan ≤ `amount_remaining` (422 `amount`). Saat lunas, semua struk menjadi `billing_status: "paid"`.
 - Finance mencatat pembayaran HRD sebagai konfirmasi penerimaan dana. Transaksi pembayaran dan ledger `invoice_payment_in` pada akun kas besar toko dibuat atomik; referensi ledger menunjuk baris `invoice_payments`. Permission `invoice.record_payment` tersedia untuk Finance dan Admin (serta role lain yang secara eksplisit diberi izin).

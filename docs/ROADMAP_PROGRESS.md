@@ -43,7 +43,7 @@
 - **Pembelian:** PR → pemeriksaan Finance → persetujuan Owner → PO → kirim → penerimaan barang ke toko atau gudang (posisi rak opsional), HPP rata-rata, verifikasi surat jalan/faktur. ✅
 - **Lampiran penerimaan:** Kasir/Admin dapat mengunggah foto surat jalan atau dokumen pendukung pada GR yang belum diverifikasi; berkas disimpan privat dan aksesnya dibatasi ke pemilik GR atau pemegang izin verifikasi. ✅
 
-- **Tagihan HRD:** Admin membuka/menutup periode tagihan pada hari gaji (struk kredit terikat, periode berikutnya terbuka otomatis), membuat satu invoice gabungan per periode dengan rincian per karyawan (PPN kredit bila dikonfigurasi), menerbitkan, menandai diserahkan ke HRD, dan mencatat pembayaran HRD (boleh sebagian). ✅
+- **Tagihan HRD:** Admin membuka/menutup periode tagihan pada hari gaji (struk kredit terikat, periode berikutnya otomatis bernama `Periode [Nama Bulan]`), mengubah nama, dan membatalkan periode kosong dengan alasan; membuat satu invoice gabungan per periode dengan rincian per karyawan, menerbitkan, menandai diserahkan ke HRD, dan mencatat pembayaran HRD (boleh sebagian). ✅
 
 - **Model administrasi toko (🟡):** toko memilih model simple (Admin + Kasir) atau standar retail (Kasir, Finance, Purchasing, Accounting, Owner); peralihan divalidasi (tiap role wajib punya akun aktif) dan mengonversi Admin↔Owner; menu per role mengikuti permission.
 - **Kewenangan stok (🟡):** per toko, Admin/Owner menentukan role yang boleh stok awal, penerimaan, transfer, dan ajuan/persetujuan adjustment, terpisah untuk lokasi toko dan gudang, di toko dengan atau tanpa gudang dan di model administrasi mana pun.

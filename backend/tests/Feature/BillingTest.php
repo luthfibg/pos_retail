@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\PermissionResolver;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -88,7 +89,96 @@ class BillingTest extends SeededTestCase
 
         $this->patchJson("/api/billing-periods/{$id}", ['scheduled_close_date' => '30-10-2026'])->assertUnprocessable();
         $this->getJson('/api/billing-periods/99999')->assertNotFound();
-        $this->getJson('/api/billing-periods')->assertOk()->assertJsonPath('total', 1);
+    }
+
+    public function test_default_period_label_uses_month_and_automatically_advances_to_next_month(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-15 09:00:00', 'Asia/Jakarta'));
+
+        try {
+            $period = $this->postJson('/api/billing-periods', [])->assertCreated()
+                ->assertJsonPath('data.label', 'Periode Oktober')
+                ->assertJsonPath('data.period_month', '2026-10-01')
+                ->json('data.id');
+
+            $this->patchJson("/api/billing-periods/{$period}", ['period_month' => '2026-11-01'])
+                ->assertOk()
+                ->assertJsonPath('data.label', 'Periode November')
+                ->assertJsonPath('data.period_month', '2026-11-01');
+            $this->patchJson("/api/billing-periods/{$period}", ['period_month' => '2026-11-15'])
+                ->assertUnprocessable()->assertJsonValidationErrors(['period_month']);
+
+            $this->postJson("/api/billing-periods/{$period}/close")->assertOk()
+                ->assertJsonPath('data.label', 'Periode November');
+
+            $this->getJson('/api/billing-periods/current')->assertOk()
+                ->assertJsonPath('data.label', 'Periode Desember')
+                ->assertJsonPath('data.period_month', '2026-12-01')
+                ->assertJsonPath('data.sales_count', 0);
+
+            $next = (int) $this->getJson('/api/billing-periods/current')->json('data.id');
+            $this->patchJson("/api/billing-periods/{$period}", ['period_month' => '2026-12-01'])
+                ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+            $this->postJson("/api/billing-periods/{$next}/cancel", ['reason' => 'Belum waktunya'])
+                ->assertOk()->assertJsonPath('data.status', 'cancelled');
+            $this->postJson('/api/billing-periods', [])->assertCreated()
+                ->assertJsonPath('data.label', 'Periode Desember')
+                ->assertJsonPath('data.period_month', '2026-12-01')
+                ->assertJsonPath('data.sales_count', 0);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_empty_open_or_closed_period_can_be_cancelled_with_reason(): void
+    {
+        $open = $this->openPeriod();
+        $this->postJson("/api/billing-periods/{$open}/cancel", ['reason' => 'Dibuat tidak sengaja'])
+            ->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'billing_period.cancel',
+            'entity_id' => $open,
+            'actor_id' => $this->admin->id,
+            'reason' => 'Dibuat tidak sengaja',
+        ]);
+        $this->getJson('/api/billing-periods/current')->assertOk()->assertJsonPath('data', null);
+        $this->postJson("/api/billing-periods/{$open}/invoice")
+            ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+
+        $closed = $this->openPeriod();
+        $this->postJson("/api/billing-periods/{$closed}/close")->assertOk();
+        $this->postJson("/api/billing-periods/{$closed}/cancel", ['reason' => 'Periode kosong tidak diperlukan'])
+            ->assertOk()->assertJsonPath('data.status', 'cancelled');
+
+        $this->postJson("/api/billing-periods/{$open}/cancel", ['reason' => 'Dibatalkan lagi'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+        $next = (int) $this->getJson('/api/billing-periods/current')->json('data.id');
+        $this->postJson("/api/billing-periods/{$next}/cancel")
+            ->assertUnprocessable()->assertJsonValidationErrors(['reason']);
+    }
+
+    public function test_period_with_credit_sales_cannot_be_cancelled_and_open_detail_counts_unbound_sales(): void
+    {
+        $employee = $this->employee('NIK-CANCEL', 'Karyawan Uji');
+        $period = $this->openPeriod();
+        $this->sale($employee, '25000.00');
+
+        $this->getJson('/api/billing-periods/current')->assertOk()
+            ->assertJsonPath('data.sales_count', 1)
+            ->assertJsonPath('data.sales_total', '25000.00');
+        $this->getJson("/api/billing-periods/{$period}")->assertOk()
+            ->assertJsonPath('data.customers.0.name', 'Karyawan Uji');
+        $this->postJson("/api/billing-periods/{$period}/cancel", ['reason' => 'Periode salah'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+
+        $this->postJson("/api/billing-periods/{$period}/close")->assertOk();
+        $this->postJson("/api/billing-periods/{$period}/cancel", ['reason' => 'Periode salah'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+
+        $next = (int) $this->getJson('/api/billing-periods/current')->json('data.id');
+        Sanctum::actingAs($this->cashier, ['*']);
+        $this->postJson("/api/billing-periods/{$next}/cancel", ['reason' => 'Tidak berwenang'])->assertForbidden();
+        $this->getJson('/api/billing-periods')->assertForbidden();
     }
 
     public function test_close_binds_only_posted_credit_sales_and_opens_next_period(): void
