@@ -10,7 +10,7 @@ export type PrintJob =
 const TERMS_LABEL = { prepaid: 'Prabayar', credit: 'Kredit', cod: 'Bayar saat terima (COD)' } as const;
 
 /**
- * Lembar cetak A4 untuk PR dan PO. Tampil hanya saat mencetak (kelas `print-only`);
+ * Lembar cetak A4 untuk Permintaan dan PO. Tampil hanya saat mencetak (kelas `print-only`);
  * seluruh layar lain memakai `no-print`. Semua angka berasal dari server.
  * Memicu `window.print()` begitu lembar terpasang, lalu memanggil `onDone` setelah dialog cetak selesai.
  */
@@ -108,7 +108,7 @@ function PoSheet({ po, supplier, storeName }: { po: PurchaseOrder; supplier: Sup
         storeName={storeName}
         title="PURCHASE ORDER"
         docNumber={po.doc_number}
-        rows={[['Tanggal PO', formatDate(po.order_date)], ['Perkiraan tiba', formatDate(po.expected_date)], ['Ref. PR', po.pr_doc_number]]}
+        rows={[['Tanggal PO', formatDate(po.order_date)], ['Perkiraan tiba', formatDate(po.expected_date)], ['Ref. Permintaan', po.pr_doc_number]]}
       />
       <section className="mb-3 grid grid-cols-2 gap-6 text-xs leading-5">
         <div>

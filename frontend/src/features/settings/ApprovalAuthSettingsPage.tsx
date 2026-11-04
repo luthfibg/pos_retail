@@ -397,7 +397,7 @@ function ModeSection({
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
       <div>
         <h2 className="font-semibold">Metode autentikasi persetujuan</h2>
-        <p className="mt-1 text-sm text-slate-600">Berlaku untuk persetujuan PR/PO, adjustment stok loss/expired, dan pengecualian kredit.</p>
+        <p className="mt-1 text-sm text-slate-600">Berlaku untuk persetujuan Permintaan/PO, adjustment stok loss/expired, dan pengecualian kredit.</p>
       </div>
       <ErrorNotice error={error} />
       {loading ? <p className="text-sm text-slate-500">Memuat mode…</p> : setting && (

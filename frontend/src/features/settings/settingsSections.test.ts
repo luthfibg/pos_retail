@@ -24,7 +24,7 @@ describe('settingsSections', () => {
     expect(visibleSections(all, 'nama toko').map((section) => section.id)).toEqual(['store-name']);
     expect(visibleSections(all, 'SANDI').map((section) => section.id)).toEqual(['users']);
     expect(visibleSections(all, 'opname').map((section) => section.id)).toEqual(['stock-authority']);
-    expect(visibleSections(all, 'PR otomatis').map((section) => section.id)).toEqual(['stock-monitoring']);
+    expect(visibleSections(all, 'Permintaan otomatis').map((section) => section.id)).toEqual(['stock-monitoring']);
     expect(visibleSections(all, 'endapan').map((section) => section.id)).toEqual(['float-policy']);
     expect(visibleSections(all, 'kunci').map((section) => section.id)).toEqual(['approval-auth']);
     expect(visibleSections(all, 'tidak-ada')).toEqual([]);

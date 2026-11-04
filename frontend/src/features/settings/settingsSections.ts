@@ -41,8 +41,8 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
   },
   {
     id: 'stock-monitoring', group: 'store', title: 'Pemantauan stok', permission: 'settings.manage', defaultOpen: true,
-    description: 'Atur ambang stok menipis untuk pembuatan PR otomatis oleh sistem.',
-    keywords: ['inventory', 'stok', 'minimum', 'menipis', 'pembelian', 'restock', 'isi ulang', 'pr otomatis'],
+    description: 'Atur ambang stok menipis untuk pembuatan Permintaan otomatis oleh sistem.',
+    keywords: ['inventory', 'stok', 'minimum', 'menipis', 'pembelian', 'restock', 'isi ulang', 'permintaan otomatis'],
   },
   {
     id: 'stock-authority', group: 'store', title: 'Kewenangan stok', permission: 'settings.manage', defaultOpen: false,

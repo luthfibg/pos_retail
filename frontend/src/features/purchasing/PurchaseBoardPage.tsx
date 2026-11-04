@@ -37,7 +37,7 @@ const RECEIPT_LABEL = { none: 'Belum diterima', partial: 'Sebagian', complete: '
 type Watch = { kind: 'pr' | 'po'; id: number; stage: FlowTab };
 type Notice = { doc: string; statusText: string; tab: FlowTab; kind: 'pr' | 'po'; id: number };
 
-/** Kasir (hanya membuat PR) tetap memakai daftar PR sendiri; peran pengelola memakai papan tahap. */
+/** Kasir (hanya membuat Permintaan) tetap memakai daftar sendiri; peran pengelola memakai papan tahap. */
 export function PurchasingEntryPage() {
   const { can } = useAuth();
   const manages = can('purchase_requisition.finance_check')
@@ -94,7 +94,7 @@ export function PurchaseBoardPage() {
     void pos.refetch();
   }, [prs, pos]);
 
-  // Tab PO hanya untuk peran yang boleh melihat PO (buat/kirim/setujui); Finance murni hanya memeriksa PR.
+  // Tab PO hanya untuk peran yang boleh melihat PO (buat/kirim/setujui); Finance murni hanya memeriksa Permintaan.
   const visibleStages = FLOW_STAGES.filter((stage) => canManagePo || stage.key === 'pr_review');
   const needle = search.trim().toLowerCase();
   const board = useMemo(
@@ -209,7 +209,7 @@ export function PurchaseBoardPage() {
           <div>
             <h1 className="text-xl font-semibold">Permintaan Pembelian</h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-600">
-              Proses pembelian dalam tiga tahap: periksa PR, siapkan dan setujui PO sekali, lalu cetak dan konfirmasi pengiriman.
+              Proses pembelian dalam tiga tahap: periksa Permintaan, siapkan dan setujui PO sekali, lalu cetak dan konfirmasi pengiriman.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -220,7 +220,7 @@ export function PurchaseBoardPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            {canCreateManualPr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat PR</button>}
+            {canCreateManualPr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat Permintaan</button>}
           </div>
         </header>
 
@@ -290,7 +290,7 @@ export function PurchaseBoardPage() {
           {tab === 'po_prepare' && (
             <div className="space-y-5">
               <div>
-                <h2 className="mb-2 text-sm font-semibold">PR siap dibuat PO</h2>
+                <h2 className="mb-2 text-sm font-semibold">Permintaan siap dibuat PO</h2>
                 <PrTable
                   rows={board.pr_ready}
                   stage="po_prepare"
@@ -333,7 +333,7 @@ export function PurchaseBoardPage() {
           {tab === 'archive' && (
             <div className="space-y-5">
               <div>
-                <h2 className="mb-2 text-sm font-semibold">PR ({board.archivePr.length})</h2>
+                <h2 className="mb-2 text-sm font-semibold">Permintaan ({board.archivePr.length})</h2>
                 <PrTable rows={board.archivePr} stage="archive" highlightId={highlight?.kind === 'pr' ? highlight.id : null} busyKey={busyKey} canAct={() => false} canCreatePo={false} onOpen={openPr} onCreatePo={() => undefined} onPrint={(pr) => void printPrById(pr.id)} />
               </div>
               {canManagePo && <div>
@@ -401,11 +401,11 @@ function Empty({ text }: { text: string }) {
   return <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">{text}</p>;
 }
 
-const PR_EMPTY: Record<FlowTab, string> = {
-  pr_review: 'Tidak ada PR baru yang menunggu pemeriksaan Finance.',
-  po_prepare: 'Tidak ada PR siap PO atau PO yang menunggu persiapan/persetujuan.',
+const REQUEST_EMPTY: Record<FlowTab, string> = {
+  pr_review: 'Tidak ada Permintaan baru yang menunggu pemeriksaan Finance.',
+  po_prepare: 'Tidak ada Permintaan siap PO atau PO yang menunggu persiapan/persetujuan.',
   po_send: 'Belum ada PO yang menunggu dicetak/dikirim atau sedang diterima.',
-  archive: 'Belum ada PR di riwayat.',
+  archive: 'Belum ada Permintaan di riwayat.',
 };
 
 function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpen, onCreatePo, onPrint }: {
@@ -419,13 +419,13 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
   onCreatePo: (pr: PurchaseRequisitionSummary) => void;
   onPrint: (pr: PurchaseRequisitionSummary) => void;
 }) {
-  if (rows.length === 0) return <Empty text={PR_EMPTY[stage]} />;
+  if (rows.length === 0) return <Empty text={REQUEST_EMPTY[stage]} />;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-left text-sm">
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
-            <th className="px-3 py-2">Nomor PR</th>
+            <th className="px-3 py-2">Nomor Permintaan</th>
             <th className="px-3 py-2">Pemohon</th>
             <th className="px-3 py-2">Alasan</th>
             <th className="px-3 py-2 text-right">Barang</th>
@@ -452,7 +452,7 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
                 <span className="inline-flex items-center gap-3">
                   {isPrPrintable(pr.status) && <button type="button" disabled={busyKey === `pr-${pr.id}`} onClick={() => onPrint(pr)} className="font-medium text-slate-700 hover:underline disabled:opacity-50">Cetak</button>}
                   <button type="button" onClick={() => onOpen(pr)} className="font-medium text-blue-700 hover:underline">Detail</button>
-                  {canAct(pr) && <button type="button" onClick={() => onOpen(pr)} className="rounded-md bg-slate-900 px-3 py-1.5 font-medium text-white">Periksa PR</button>}
+                  {canAct(pr) && <button type="button" onClick={() => onOpen(pr)} className="rounded-md bg-slate-900 px-3 py-1.5 font-medium text-white">Periksa Permintaan</button>}
                   {canCreatePo && stage === 'po_prepare' && <button type="button" disabled={busyKey === `pr-${pr.id}`} onClick={() => onCreatePo(pr)} className="rounded-md bg-blue-700 px-3 py-1.5 font-medium text-white disabled:opacity-60">{busyKey === `pr-${pr.id}` ? 'Memuat…' : 'Siapkan & buat PO'}</button>}
                 </span>
               </td>
@@ -482,7 +482,7 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
             <th className="px-3 py-2">Nomor PO</th>
-            <th className="px-3 py-2">Dari PR</th>
+            <th className="px-3 py-2">Dari Permintaan</th>
             <th className="px-3 py-2">Supplier</th>
             <th className="px-3 py-2">Tanggal PO</th>
             <th className="px-3 py-2">Perkiraan tiba</th>

@@ -18,7 +18,7 @@ export interface NavGroup {
  * Satu sumber menu, disusun mengikuti alur operasional toko:
  *
  *  1. Dashboard      beranda: ringkasan penjualan, kas, dan stok
- *  2. Pembelian      PR -> pemeriksaan Finance -> persetujuan Owner -> PO -> terima barang/retur supplier
+ *  2. Pembelian      Permintaan -> pemeriksaan Finance -> otorisasi Owner saat PO -> PO -> terima barang/retur supplier
  *  3. Inventory      stok eksisting toko -> transfer/putaway -> adjustment & opname -> riwayat stok
  *  4. Penjualan      buka kasir jaga -> jual di kasir -> koreksi/cetak ulang struk
  *  5. Keuangan       periksa kasir jaga -> terima setoran -> tagih HRD

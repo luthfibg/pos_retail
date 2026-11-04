@@ -79,7 +79,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Adjustment dan opname | 2.7 | 🟡 | `/inventory/adjustments`: buat Draft snapshot saldo sellable, ajukan, batalkan, antrean/detail, approve/reject, re-auth untuk loss/expired, dan posting atomik. Backend mengizinkan approver membaca antrean/detail tanpa permission request. Menunggu uji klik; belum ada sesi opname terpisah |
 | Riwayat penjualan | 5, 7.2 | ✅ | `/sales`: daftar + filter, detail, **cetak ulang SALINAN**, **void** Admin; pengguna mengonfirmasi uji klik berjalan lancar |
 | Penerimaan barang | 6.3 | 🟡 | `/goods-receipts`: pilih PO `receivable=1`, catat diterima/rusak, pecah batch, validasi kedaluwarsa, simpan Draft, posting, batalkan Draft, unggah/unduh lampiran privat, dan verifikasi surat jalan/faktur (Admin); menunggu uji klik |
-| PR/PO | 6.1, 6.2 | 🟡 | Tiga tahap: Finance memeriksa PR → Admin/Purchasing menyiapkan supplier/item/rekening dan membuat PO dengan satu autentikasi Owner → cetak lalu konfirmasi kirim; menunggu uji klik. |
+| Permintaan/PO | 6.1, 6.2 | 🟡 | Tiga tahap: Finance memeriksa Permintaan → Admin/Purchasing menyiapkan supplier/item/rekening dan membuat PO dengan satu autentikasi Owner → cetak lalu konfirmasi kirim; menunggu uji klik. |
 | Tagihan HRD | 8 | 🟡 | `/billing`: periode buka/ubah/tutup, invoice per periode, terbit/serah HRD, pembayaran sebagian dan cetak invoice; menunggu uji klik |
 | Manajemen pengguna | 10 | 🟡 | `/users`: daftar/cari/filter; tambah/ubah role; aktif/nonaktif; reset sandi Admin. Tombol “Ganti sandi” tersedia bagi semua pengguna; menunggu uji klik |
 | Denah rak | — | ⛔ | Backend belum ada |
@@ -131,7 +131,7 @@ Pada 28 Okt 2026, setelah tahap Manajemen Pengguna, `npm run typecheck`, `npm te
 ## 5. Tahap berikutnya (urut, usulan agent)
 
 1. ✅ **Riwayat penjualan** (bagian 5 dan 7.2): pengguna telah menguji daftar/filter, detail, cetak ulang SALINAN, dan void Admin; uji klik berjalan lancar pada 27 Okt 2026.
-2. ✅ **PR/PO** (bagian 6.1–6.2): Kasir membuat/mengajukan PR; Finance dapat meloloskan atau mengembalikan dengan catatan; Owner dapat menyetujui/menolak dengan autentikasi ulang; Purchasing membuat PO per supplier, mengajukan, mengonfirmasi jika butuh Owner, dan menandai PO dikirim. Mendukung role gabungan maupun role terpisah lewat permission. Implementasi dan test lulus; menunggu uji klik pengguna.
+2. ✅ **Permintaan/PO** (bagian 6.1–6.2): Kasir membuat/mengajukan Permintaan; Finance meloloskan atau mengembalikan dengan catatan; Admin/Purchasing memilih supplier, item, dan rekening lalu mengotorisasi PO bersama Owner satu kali. PO dicetak sebelum dikonfirmasi terkirim. Mendukung role gabungan maupun role terpisah lewat permission. Implementasi dan test lulus; menunggu uji klik pengguna.
 3. **Adjustment/opname** (bagian 1, backend 2.7 sudah selesai): draft snapshot, pengajuan, approval/rejection, re-auth untuk loss/expired, posting atomik.
 4. 🟡 **Tagihan HRD** (bagian 8): `/billing` mendukung periode buka/ubah/tutup, rincian kredit per karyawan, buat/cetak invoice dengan transaksi dan subtotal tiap karyawan serta total gabungan ke HRD, terbitkan, serahkan ke HRD, dan pembayaran bertahap. Pengguna mengonfirmasi uji klik berjalan lancar.
 5. 🟡 **Manajemen Pengguna** (bagian 10): `/users` mengelola akun toko dan tombol profil menyediakan ganti sandi sendiri; menunggu uji klik.

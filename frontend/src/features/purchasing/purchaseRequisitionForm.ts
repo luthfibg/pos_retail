@@ -41,7 +41,7 @@ export function validatePurchaseRequisition(
   const filled = rows.filter((row) => !isBlankPurchaseRequisitionRow(row));
 
   if (filled.length === 0) errors.general = 'Isi minimal satu barang.';
-  if (filled.length > 100) errors.general = 'Maksimal 100 barang per PR.';
+  if (filled.length > 100) errors.general = 'Maksimal 100 barang per Permintaan.';
   if (reason.trim().length > 500) errors.general = 'Alasan maksimal 500 karakter.';
 
   const productRows = new Map<number, number>();

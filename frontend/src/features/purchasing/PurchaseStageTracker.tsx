@@ -1,6 +1,6 @@
 import { FLOW_STAGES, type FlowTab } from './purchaseFlow';
 
-/** Pelacak posisi dokumen dalam alur pembelian (dipakai di dialog detail PR dan PO). */
+/** Pelacak posisi dokumen dalam alur pembelian (dipakai di dialog detail Permintaan dan PO). */
 export function PurchaseStageTracker({ current, archivedNote }: { current: FlowTab; archivedNote?: string }) {
   if (current === 'archive') {
     return <div className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">{archivedNote ?? 'Dokumen ini sudah keluar dari alur pembelian.'}</div>;

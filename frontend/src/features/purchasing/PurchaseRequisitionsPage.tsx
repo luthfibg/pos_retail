@@ -83,17 +83,17 @@ export function PurchaseRequisitionsPage() {
           <h1 className="text-xl font-semibold">Permintaan Pembelian</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             {canViewAll
-              ? 'Periksa PR toko, siapkan PO dengan satu otorisasi Owner, lalu pantau pengiriman hingga penerimaan.'
-              : 'Ajukan PR otomatis dari pemantauan stok ke Finance. PR manual dibuat oleh Admin atau Purchasing.'}
+              ? 'Periksa Permintaan toko, siapkan PO dengan satu otorisasi Owner, lalu pantau pengiriman hingga penerimaan.'
+              : 'Ajukan Permintaan otomatis dari pemantauan stok ke Finance. Permintaan manual dibuat oleh Admin atau Purchasing.'}
           </p>
         </div>
-        {canCreateManualPr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat PR</button>}
+        {canCreateManualPr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat Permintaan</button>}
       </header>
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <form onSubmit={applySearch} className="flex flex-wrap items-end gap-3">
-          <Field label="Nomor PR">
-            <input className={`${inputCls} w-56`} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="PR-…" />
+          <Field label="Nomor Permintaan">
+            <input className={`${inputCls} w-56`} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="Masukkan nomor…" />
           </Field>
           <Field label="Status">
             <select className={`${inputCls} w-56`} value={status} onChange={(event) => { setStatus(event.target.value as PurchaseRequisitionStatus | ''); setPage(1); }}>
@@ -118,11 +118,11 @@ export function PurchaseRequisitionsPage() {
         {list.isLoading ? <p className="text-sm text-slate-500">Memuat permintaan…</p> : null}
         {list.data?.data.length === 0 && (
           <div className="space-y-1 rounded-md bg-slate-50 p-3 text-sm text-slate-600">
-            <p>Belum ada PR yang cocok.</p>
+            <p>Belum ada Permintaan yang cocok.</p>
             {canCreatePr && (
               <p>
-                PR otomatis dibuat untuk produk berstatus Aktif saat stok jual ≤ ambang pemantauan dan jumlah isi ulang produk lebih dari 0.
-                Produk yang sudah tercakup PR atau PO aktif tidak diminta ulang. Daftar diperbarui otomatis setiap 30 detik.
+                Permintaan otomatis dibuat untuk produk berstatus Aktif saat stok jual ≤ ambang pemantauan dan jumlah isi ulang produk lebih dari 0.
+                Produk yang sudah tercakup Permintaan atau PO aktif tidak diminta ulang. Daftar diperbarui otomatis setiap 30 detik.
               </p>
             )}
           </div>
@@ -133,7 +133,7 @@ export function PurchaseRequisitionsPage() {
               <table className="w-full min-w-[680px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-3 py-2">Nomor PR</th>
+                    <th className="px-3 py-2">Nomor Permintaan</th>
                     {canViewAll && <th className="px-3 py-2">Pemohon</th>}
                     <th className="px-3 py-2">Alasan</th>
                     <th className="px-3 py-2 text-right">Barang</th>
@@ -271,8 +271,8 @@ export function PurchaseRequisitionForm({
   }
 
   const detailError = detail.error;
-  if (detail.isLoading) return <Modal title="Ubah PR" onClose={onClose}><p className="p-5 text-sm text-slate-500">Memuat PR…</p></Modal>;
-  if (detailError) return <Modal title="Ubah PR" onClose={onClose}><div className="space-y-3 p-5"><ErrorNotice error={detailError} /></div></Modal>;
+  if (detail.isLoading) return <Modal title="Ubah Permintaan" onClose={onClose}><p className="p-5 text-sm text-slate-500">Memuat Permintaan…</p></Modal>;
+  if (detailError) return <Modal title="Ubah Permintaan" onClose={onClose}><div className="space-y-3 p-5"><ErrorNotice error={detailError} /></div></Modal>;
 
   return (
     <Modal title={prId === undefined ? 'Buat permintaan pembelian' : 'Ubah permintaan pembelian'} onClose={() => !save.isPending && onClose()}>
@@ -316,7 +316,7 @@ export function PurchaseRequisitionForm({
         <ErrorNotice error={save.error instanceof ApiError && save.error.status === 422 ? null : save.error} />
         {confirming ? (
           <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
-            <p>{prId === undefined ? 'Simpan permintaan sebagai Draft?' : 'Simpan perubahan Draft PR?' } PR belum diajukan ke Finance.</p>
+            <p>{prId === undefined ? 'Simpan permintaan sebagai Draft?' : 'Simpan perubahan Draft Permintaan?' } Permintaan belum diajukan ke Finance.</p>
             <div className="flex justify-end gap-2">
               <button type="button" disabled={save.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2">Periksa lagi</button>
               <button type="button" disabled={save.isPending} onClick={() => save.mutate(buildPurchaseRequisitionInput(rows, reason))} className="rounded-md bg-slate-900 px-3 py-2 font-medium text-white disabled:opacity-60">{save.isPending ? 'Menyimpan…' : 'Simpan Draft'}</button>
@@ -390,14 +390,14 @@ export function PurchaseRequisitionDetailDialog({
 
   return (
     <Modal title="Detail permintaan pembelian" onClose={() => !saving && onClose()}>
-      {detail.isLoading ? <p className="p-5 text-sm text-slate-500">Memuat PR…</p> : detail.error ? (
+      {detail.isLoading ? <p className="p-5 text-sm text-slate-500">Memuat Permintaan…</p> : detail.error ? (
         <div className="space-y-3 p-5"><ErrorNotice error={detail.error} /></div>
       ) : pr ? (
         <div className="space-y-4 p-5">
           <ErrorNotice error={submit.error ?? cancel.error ?? financeCheck.error} />
-          <PurchaseStageTracker current={trackerStageForPr(pr)} archivedNote={`Status: ${STATUS_LABEL[pr.status]}. PR ini tidak lagi berjalan di alur pembelian.`} />
+          <PurchaseStageTracker current={trackerStageForPr(pr)} archivedNote={`Status: ${STATUS_LABEL[pr.status]}. Permintaan ini tidak lagi berjalan di alur pembelian.`} />
           <div className="grid gap-3 text-sm sm:grid-cols-2">
-            <Detail label="Nomor PR" value={pr.doc_number} />
+            <Detail label="Nomor Permintaan" value={pr.doc_number} />
             <Detail label="Status" value={STATUS_LABEL[pr.status]} />
             <Detail label={pr.is_auto_generated ? 'Sumber' : 'Pemohon'} value={pr.is_auto_generated ? 'Sistem pemantauan stok' : pr.requester_name} />
             <Detail label="Dibuat" value={formatDateTime(pr.created_at)} />
@@ -416,7 +416,7 @@ export function PurchaseRequisitionDetailDialog({
             <h3 className="text-sm font-semibold">Barang yang diminta</h3>
             <div className="overflow-x-auto rounded-md border border-slate-200">
               <table className="w-full min-w-[420px] text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2 text-right">Jumlah Barang</th><th className="px-3 py-2 text-right">Estimasi/unit</th></tr></thead>
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2 text-right">Jumlah Barang</th><th className="px-3 py-2 text-right">Harga satuan</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {pr.items.map((item) => (
                     <tr key={item.id}>
@@ -461,7 +461,7 @@ export function PurchaseRequisitionDetailDialog({
 
           {confirmAction === 'finance-return' ? (
             <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
-              <p className="text-sm">Kembalikan PR kepada pemohon untuk diperbaiki.</p>
+              <p className="text-sm">Kembalikan Permintaan kepada pemohon untuk diperbaiki.</p>
               <Field label="Catatan keputusan">
                 <textarea className={`${inputCls} min-h-20`} value={note} onChange={(event) => setNote(event.target.value)} maxLength={500} required />
               </Field>
@@ -473,7 +473,7 @@ export function PurchaseRequisitionDetailDialog({
                   onClick={() => financeCheck.mutate('return')}
                   className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
                 >
-                  {saving ? 'Mengembalikan…' : 'Kembalikan PR'}
+                  {saving ? 'Mengembalikan…' : 'Kembalikan Permintaan'}
                 </button>
               </div>
             </section>
@@ -481,7 +481,7 @@ export function PurchaseRequisitionDetailDialog({
 
           {confirmAction === 'cancel' && (
             <ConfirmBox
-              text="Batalkan PR ini? Tindakan ini tidak dapat dibatalkan."
+              text="Batalkan Permintaan ini? Tindakan ini tidak dapat dibatalkan."
               pending={cancel.isPending}
               onBack={() => setConfirmAction(null)}
               onConfirm={() => cancel.mutate()}
@@ -491,10 +491,10 @@ export function PurchaseRequisitionDetailDialog({
           )}
           {!confirmAction && (
             <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
-              {onPrint && isPrPrintable(pr.status) && <button type="button" onClick={() => onPrint(pr)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak PR</button>}
+              {onPrint && isPrPrintable(pr.status) && <button type="button" onClick={() => onPrint(pr)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak Permintaan</button>}
               {canManagePr && active && !pr.is_auto_generated && <button type="button" onClick={onEdit} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Ubah Draft</button>}
               {canManagePr && active && <button type="button" disabled={saving} onClick={() => submit.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{submit.isPending ? 'Mengajukan…' : 'Ajukan ke Finance'}</button>}
-              {canCancel && cancellable && !pr.is_auto_generated && <button type="button" onClick={() => setConfirmAction('cancel')} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700">Batalkan PR</button>}
+              {canCancel && cancellable && !pr.is_auto_generated && <button type="button" onClick={() => setConfirmAction('cancel')} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700">Batalkan Permintaan</button>}
               {canFinanceCheck && pr.status === 'submitted' && <>
                 <button type="button" onClick={() => { setNote(''); setConfirmAction('finance-return'); }} className="rounded-md border border-amber-400 px-3 py-2 text-sm text-amber-800">Kembalikan</button>
                 <button type="button" disabled={saving} onClick={() => financeCheck.mutate('pass')} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{financeCheck.isPending ? 'Memproses…' : 'Lolos Finance → Siap PO'}</button>

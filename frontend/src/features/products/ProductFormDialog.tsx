@@ -195,7 +195,7 @@ export function ProductFormDialog({ product, onClose }: Props) {
             </Field>
           </div>
 
-          <Field label="Jumlah isi ulang" error={err('restock_quantity')} hint="Jumlah unit yang diminta sistem saat stok mencapai ambang pemantauan. Isi 0 untuk tidak dibuatkan PR otomatis.">
+          <Field label="Jumlah isi ulang" error={err('restock_quantity')} hint="Jumlah unit yang diminta sistem saat stok mencapai ambang pemantauan. Isi 0 agar Permintaan otomatis tidak dibuat.">
             <LocalDecimalInput
               className={`${inputCls} tabular-nums`}
               kind="quantity"

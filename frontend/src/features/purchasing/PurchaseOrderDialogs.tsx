@@ -132,7 +132,7 @@ export function PurchaseOrderCreateDialog({
   }
 
   return (
-    <Modal title={`Buat PO dari ${pr.doc_number}`} onClose={() => !create.isPending && onClose()}>
+    <Modal title={`Buat PO dari Permintaan ${pr.doc_number}`} onClose={() => !create.isPending && onClose()}>
       <form className="space-y-4 p-5" onSubmit={submit}>
         <p className="text-sm text-slate-600">Pilih barang, sumber dana, lalu otorisasi Owner. PO langsung dibuat dan disetujui tanpa draft atau tahap persetujuan Owner terpisah.</p>
         <ErrorNotice error={suppliers.error} />
@@ -166,7 +166,7 @@ export function PurchaseOrderCreateDialog({
           {availability.isLoading ? (
             <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Memuat jumlah barang yang dapat dipesan…</p>
           ) : availability.error ? null : rowsWithRemaining.length === 0 ? (
-            <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Semua jumlah PR sudah dialokasikan ke PO.</p>
+            <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Semua jumlah Permintaan sudah dialokasikan ke PO.</p>
           ) : (
             <div className="max-h-72 space-y-2 overflow-auto">
               {rowsWithRemaining.map((item) => {

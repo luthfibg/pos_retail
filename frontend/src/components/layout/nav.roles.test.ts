@@ -49,7 +49,7 @@ describe('menu per role (model standar retail)', () => {
     ]);
   });
 
-  it('Finance melihat laporan kasir jaga, setoran masuk, dan pemeriksaan PR', () => {
+  it('Finance melihat laporan kasir jaga, setoran masuk, dan pemeriksaan Permintaan', () => {
     expect(menuFor('Finance')).toEqual([
       '/cash-deposits', '/customers', '/dashboard', '/inventory/movements', '/products', '/purchase-requisitions', '/shifts',
     ]);

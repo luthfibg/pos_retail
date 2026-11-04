@@ -8,22 +8,22 @@ import type {
 import { formatQty } from '@/lib/format';
 
 /**
- * Tahap kerja pembelian, dengan status PR dan PO yang berhubungan dikelompokkan bersama:
- * PR Masuk -> Siapkan & setujui PO -> Cetak & kirim PO.
+ * Tahap kerja pembelian, dengan status Permintaan dan PO yang berhubungan dikelompokkan bersama:
+ * Permintaan Masuk -> Siapkan & setujui PO -> Cetak & kirim PO.
  * Hanya logika murni (tanpa React) supaya mudah diuji.
  */
 export type FlowStage = 'pr_review' | 'po_prepare' | 'po_send';
 export type FlowTab = FlowStage | 'archive';
 
 export const FLOW_STAGES: ReadonlyArray<{ key: FlowStage; label: string; hint: string }> = [
-  { key: 'pr_review', label: 'PR Masuk', hint: 'Finance memeriksa PR. Setelah lolos, PR siap disiapkan menjadi PO.' },
+  { key: 'pr_review', label: 'Permintaan Masuk', hint: 'Finance memeriksa Permintaan. Setelah lolos, Permintaan siap disiapkan menjadi PO.' },
   { key: 'po_prepare', label: 'Siapkan & setujui PO', hint: 'Pilih supplier, jumlah, rekening, lalu otorisasi Owner satu kali untuk langsung membuat PO.' },
   { key: 'po_send', label: 'Cetak & kirim PO', hint: 'Cetak PO terlebih dahulu. Setelah dialog cetak ditutup, konfirmasikan pengiriman ke supplier. Penerimaan barang tetap dicatat setelah PO dikirim.' },
 ];
 
 export const ARCHIVE_TAB = {
   label: 'Riwayat',
-  hint: 'PR yang dikembalikan, ditolak, dibatalkan, masih Draft, atau sudah seluruhnya dipesan; serta PO yang dibatalkan.',
+  hint: 'Permintaan yang dikembalikan, ditolak, dibatalkan, masih Draft, atau sudah seluruhnya dipesan; serta PO yang dibatalkan.',
 } as const;
 
 const PR_STAGE: Partial<Record<PurchaseRequisitionStatus, FlowStage>> = {
@@ -54,7 +54,7 @@ export function tabLabel(tab: FlowTab): string {
   return FLOW_STAGES.find((stage) => stage.key === tab)?.label ?? tab;
 }
 
-/** PR yang sudah dipesan seluruhnya (`converted`) ditampilkan di posisi PO-nya, bukan di Riwayat, pada pelacak detail. */
+/** Permintaan yang sudah dipesan seluruhnya (`converted`) ditampilkan di posisi PO-nya, bukan di Riwayat, pada pelacak detail. */
 export function trackerStageForPr(pr: Pick<PurchaseRequisition, 'status' | 'purchase_orders'>): FlowTab {
   if (pr.status === 'converted') {
     return pr.purchase_orders.some((po) => poStage(po.status) === 'po_send') ? 'po_send' : 'po_prepare';
