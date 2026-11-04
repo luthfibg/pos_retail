@@ -106,7 +106,7 @@ class StockTransferTest extends SeededTestCase
             'qty_sellable' => '5.000',
         ]);
         $this->assertSame('8.000', DB::table('inventory_balances')->where('product_id', $fixture['product_id'])->sum('qty_sellable'));
-        $this->assertSame('2500.0000', DB::table('products')->where('id', $fixture['product_id'])->value('avg_cost'));
+        $this->assertSame('2500.0000', DB::table('products')->where('id', $fixture['product_id'])->value('unit_cost'));
 
         $movements = DB::table('inventory_movements')->where('ref_type', 'stock_transfer')
             ->where('ref_id', $transferId)->orderBy('id')->get();

@@ -27,6 +27,7 @@ class UpdateProductRequest extends FormRequest
             'unit_name' => ['sometimes', 'required', 'string', 'max:20'],
             'track_expiry' => ['sometimes', 'required', 'boolean'],
             'sell_price' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999999999'],
+            'unit_cost' => ['sometimes', 'required', 'numeric', 'min:0.0001', 'max:99999999999999', 'regex:/^\d+(?:\.\d{1,4})?$/'],
             'min_stock' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999999'],
             'critical_stock' => ['sometimes', 'required', 'numeric', 'min:0', 'max:999999999'],
             'restock_quantity' => ['sometimes', 'required', 'numeric', 'min:0', 'max:99999', 'regex:/^\d+(?:\.\d{1,3})?$/'],

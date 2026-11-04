@@ -309,7 +309,7 @@ export interface Product {
   unit_name: string;
   track_expiry: boolean;
   sell_price: Decimal | null;
-  avg_cost: Decimal | null;
+  unit_cost: Decimal;
   min_stock: Decimal;
   critical_stock: Decimal;
   restock_quantity: Decimal;
@@ -326,6 +326,7 @@ export interface ProductInput {
   unit_name?: string;
   track_expiry?: boolean;
   sell_price?: Decimal | null;
+  unit_cost?: Decimal;
   min_stock?: Decimal;
   critical_stock?: Decimal;
   restock_quantity?: Decimal;
@@ -400,7 +401,7 @@ export interface ProductStock {
   name: string;
   unit_name: string;
   track_expiry: boolean;
-  avg_cost: Decimal | null; // HPP: hanya tampilkan di layar Admin
+  unit_cost: Decimal; // HPP: hanya tampilkan di layar Admin
   totals: StockTotals;
   batches: StockBatch[];
 }

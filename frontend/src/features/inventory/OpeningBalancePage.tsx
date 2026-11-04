@@ -71,9 +71,9 @@ export function OpeningBalancePage() {
   if (result) {
     return (
       <div className="space-y-4 p-6">
-        <h1 className="text-xl font-semibold">Stok Awal</h1>
+        <h1 className="text-xl font-semibold">Stok Eksisting Toko</h1>
         <div className="max-w-xl space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-sm">
-          <p className="font-medium text-emerald-900">Stok awal tersimpan.</p>
+          <p className="font-medium text-emerald-900">Stok eksisting toko tersimpan.</p>
           <p>Nomor dokumen: <span className="font-mono font-medium">{result.document_no}</span></p>
           <p>{result.items.length} baris tercatat.</p>
           <button type="button" onClick={reset} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Input dokumen lain</button>
@@ -87,9 +87,9 @@ export function OpeningBalancePage() {
   return (
     <div className="space-y-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Stok Awal</h1>
+        <h1 className="text-xl font-semibold">Stok Eksisting Toko</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-600">
-          Catat saldo awal saat peralihan sistem. Satu dokumen berisi banyak baris dan disimpan sekaligus: bila satu baris ditolak, tidak ada yang tersimpan.
+          Catat jumlah barang yang sudah tersedia di toko sebelum POS mulai digunakan. Satu dokumen berisi banyak baris dan disimpan sekaligus: bila satu baris ditolak, tidak ada yang tersimpan.
           Produk yang sudah punya pergerakan stok tidak bisa diisi di sini (gunakan adjustment).
         </p>
       </div>
@@ -106,7 +106,7 @@ export function OpeningBalancePage() {
               <th className="w-8 px-3 py-2">#</th>
               <th className="px-3 py-2">Produk</th>
               <th className="w-28 px-3 py-2">Qty</th>
-              <th className="w-32 px-3 py-2">HPP / satuan</th>
+              <th className="w-32 px-3 py-2">Harga Modal / satuan</th>
               <th className="w-40 px-3 py-2">Kadaluarsa</th>
               <th className="w-28 px-3 py-2">Kode batch</th>
               <th className="w-10 px-3 py-2" />
@@ -168,7 +168,7 @@ export function OpeningBalancePage() {
 
       <label className="block max-w-xl text-sm">
         <span className="mb-1 block font-medium">Catatan dokumen (opsional)</span>
-        <input className={inputCls} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="mis. Stok awal cut-over" />
+        <input className={inputCls} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="mis. Stok eksisting sebelum POS digunakan" />
       </label>
 
       <div>
@@ -178,9 +178,9 @@ export function OpeningBalancePage() {
       </div>
 
       {confirming && (
-        <Modal title="Simpan stok awal?" onClose={() => !mutation.isPending && setConfirming(false)}>
+        <Modal title="Simpan stok eksisting toko?" onClose={() => !mutation.isPending && setConfirming(false)}>
           <div className="space-y-2 p-5 text-sm">
-            <p>{filledCount} baris akan dicatat sebagai satu dokumen stok awal.</p>
+            <p>{filledCount} baris akan dicatat sebagai satu dokumen stok eksisting toko.</p>
             <p className="text-slate-600">Setelah tersimpan, koreksi dilakukan lewat adjustment, bukan mengubah dokumen ini.</p>
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">

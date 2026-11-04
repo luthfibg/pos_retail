@@ -17,7 +17,7 @@ use LogicException;
  *  - stok negatif DILARANG (cek di service + CHECK constraint di database)
  *  - penjualan memakai FEFO: batch dengan kadaluarsa terdekat keluar lebih dulu; tanpa tanggal = terakhir
  *    (lalu urut received_at, jadi produk tanpa kadaluarsa berperilaku FIFO). Batch yang SUDAH kadaluarsa tidak dijual [ASUMSI]
- *  - HPP rata-rata bergerak per produk (bukan per batch), dihitung di SQL (DECIMAL) agar eksak
+ *  - unit_cost master produk mengikuti biaya masuk terbaru; biaya pergerakan dan penjualan tetap disnapshot
  *  - qty dihitung sebagai bilangan bulat satuan 0,001 (Decimal) agar bebas galat float
  *
  * SEMUA metode yang mengubah stok WAJIB dipanggil di dalam DB::transaction milik pemanggil
@@ -446,7 +446,7 @@ class InventoryService
                 'from_bucket' => 'sellable',
                 'qty' => Decimal::qtyString($take),
                 'movement_type' => 'sale',
-                'unit_cost' => $product->avg_cost,
+                'unit_cost' => $product->unit_cost,
                 'ref_type' => $refType,
                 'ref_id' => $refId,
                 'occurred_at' => $now,
@@ -461,7 +461,7 @@ class InventoryService
                 'shelf_position_id' => $row->shelf_position_id === null ? null : (int) $row->shelf_position_id,
                 'expiry_date' => $row->expiry_date,
                 'qty' => Decimal::qtyString($take),
-                'unit_cost' => $product->avg_cost,
+                'unit_cost' => $product->unit_cost,
             ];
         }
 
@@ -608,7 +608,7 @@ class InventoryService
                 'batch_id' => $batchId,
                 'qty' => $qty,
                 'movement_type' => 'transfer',
-                'unit_cost' => $product->avg_cost,
+                'unit_cost' => $product->unit_cost,
                 'ref_type' => $refType,
                 'ref_id' => $refId,
                 'occurred_at' => $now,
@@ -706,7 +706,7 @@ class InventoryService
                 'to_bucket' => $diff > 0 ? 'sellable' : ($isDamage ? 'damaged' : null),
                 'qty' => Decimal::qtyString(abs($diff)),
                 'movement_type' => $isWriteOff ? 'write_off' : 'adjustment',
-                'unit_cost' => $product->avg_cost,
+                'unit_cost' => $product->unit_cost,
                 'ref_type' => 'stock_adjustment',
                 'ref_id' => $adjustmentId,
                 'occurred_at' => $now,
@@ -776,7 +776,7 @@ class InventoryService
             'name' => $product->name,
             'unit_name' => $product->unit_name,
             'track_expiry' => (bool) $product->track_expiry,
-            'avg_cost' => $product->avg_cost,
+            'unit_cost' => $product->unit_cost,
             'totals' => [
                 'qty_sellable' => Decimal::qtyString($totals['sellable']),
                 'qty_quarantine' => Decimal::qtyString($totals['quarantine']),
@@ -850,7 +850,7 @@ class InventoryService
     // ------------------------------------------------------------------ internal
 
     /**
-     * Barang masuk ke bucket sellable: batch baru, saldo, pergerakan, dan HPP rata-rata bergerak.
+     * Barang masuk ke bucket sellable: batch baru, saldo, pergerakan, dan pembaruan Harga Modal terbaru.
      *
      * @return array{batch_id: int, balance_id: int}
      */
@@ -876,9 +876,6 @@ class InventoryService
         }
         $qtyText = Decimal::qtyString($units);
         $now = $this->now();
-
-        // stok sebelum masuk (semua bucket) untuk HPP; baris produk sudah dikunci pemanggil
-        $onHandBefore = $this->onHand((int) $product->id);
 
         $batchId = DB::table('product_batches')->insertGetId([
             'product_id' => $product->id,
@@ -909,28 +906,13 @@ class InventoryService
         ]);
 
         if ($unitCost !== null) {
-            // HPP baru = (stok_lama x hpp_lama + qty x biaya) / (stok_lama + qty), dibulatkan 4 desimal
             DB::update(
-                'UPDATE products SET '.
-                'avg_cost = ROUND((CAST(? AS DECIMAL(18,3)) * avg_cost + CAST(? AS DECIMAL(18,3)) * CAST(? AS DECIMAL(18,4))) '.
-                '/ (CAST(? AS DECIMAL(18,3)) + CAST(? AS DECIMAL(18,3))), 4), '.
-                'last_cost = ROUND(CAST(? AS DECIMAL(18,4)), 2) '.
-                'WHERE id = ?',
-                [$onHandBefore, $qtyText, $unitCost, $onHandBefore, $qtyText, $unitCost, $product->id],
+                'UPDATE products SET unit_cost = ROUND(CAST(? AS DECIMAL(18,4)), 4) WHERE id = ?',
+                [$unitCost, $product->id],
             );
         }
 
         return ['batch_id' => $batchId, 'balance_id' => $balanceId];
-    }
-
-    private function onHand(int $productId): string
-    {
-        $total = DB::table('inventory_balances')
-            ->where('product_id', $productId)
-            ->selectRaw('COALESCE(SUM(qty_sellable + qty_quarantine + qty_damaged), 0) as total')
-            ->value('total');
-
-        return Decimal::qtyString(Decimal::qty((string) $total));
     }
 
     private function lockOrCreateBalance(int $productId, int $locationId, ?int $positionId, ?int $batchId): int

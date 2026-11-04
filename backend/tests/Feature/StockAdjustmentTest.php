@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\PermissionResolver;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\SeededTestCase;
@@ -100,7 +101,7 @@ class StockAdjustmentTest extends SeededTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'stock_adjustment.request', 'entity_id' => $id]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'stock_adjustment.approve', 'entity_id' => $id]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'stock_adjustment.post', 'entity_id' => $id]);
-        $this->assertSame('2500.0000', DB::table('products')->where('id', $fixture['product_id'])->value('avg_cost'));
+        $this->assertSame('2500.0000', DB::table('products')->where('id', $fixture['product_id'])->value('unit_cost'));
         $this->assertSame($cashier->id, (int) DB::table('stock_adjustments')->where('id', $id)->value('requested_by'));
     }
 
@@ -120,7 +121,7 @@ class StockAdjustmentTest extends SeededTestCase
             'store_id' => $storeId,
             'effect' => 'deny',
         ]);
-        app(\App\Services\PermissionResolver::class)->flush();
+        app(PermissionResolver::class)->flush();
 
         $this->getJson('/api/inventory/adjustments?status=requested')
             ->assertOk()->assertJsonPath('data.0.id', $id);

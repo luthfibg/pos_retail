@@ -42,7 +42,7 @@ export function ProductStockDialog({ product, onClose }: { product: Product; onC
             </dl>
 
             {showCost && (
-              <p className="text-slate-600">HPP rata-rata: <span className="font-medium">{formatRupiah(stock.avg_cost)}</span></p>
+              <p className="text-slate-600">Harga Modal: <span className="font-medium">{formatRupiah(stock.unit_cost)}</span></p>
             )}
 
             {stock.batches.length === 0 ? (
@@ -67,7 +67,7 @@ export function ProductStockDialog({ product, onClose }: { product: Product; onC
                           <td className="px-3 py-2">
                             {b.batch_code ?? '—'}
                             <div className="text-xs text-slate-400">
-                              {b.is_opening ? 'Stok awal' : 'Diterima'} · {formatDateTime(b.received_at)}
+                              {b.is_opening ? 'Stok eksisting' : 'Diterima'} · {formatDateTime(b.received_at)}
                             </div>
                           </td>
                           <td className="px-3 py-2">

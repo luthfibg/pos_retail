@@ -137,7 +137,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 | GET / POST / PATCH | `/api/categories` | `inventory.view` / `category.manage` |
 | GET / POST / PATCH | `/api/suppliers` | `supplier.manage` |
 | GET | `/api/products`, `/api/products/{id}`, `/api/products/by-barcode/{barcode}` | `inventory.view` |
-| POST / PATCH | `/api/products` | `product.create` / `product.update` (harga: `price.change`, status: `product.activate`) |
+| POST / PATCH | `/api/products` | `product.create` / `product.update` (`unit_cost` wajib saat create dan bisa dikoreksi via `price.change`; harga jual: `price.change`; status: `product.activate`) |
 
 **Endpoint tambahan (WS-A/WS-B, lolos test; kontrak lengkap di `docs/BACKEND_PROGRESS.md`):** `GET /api/inventory/products/{id}/stock`, `GET /api/inventory/movements`, `POST /api/inventory/opening-balances`, `GET|POST /api/inventory/transfers`, `GET /api/inventory/transfers/{id}`, `POST /api/inventory/transfers/{id}/post|cancel`, `GET|POST /api/inventory/adjustments`, `GET /api/inventory/adjustments/{id}`, `POST /api/inventory/adjustments/{id}/request|approve|cancel` · `GET/POST /api/customers`, `GET/PATCH /api/customers/{id}`, `POST /api/customers/{id}/verify`, `PUT|GET /api/customers/{id}/credit-limit(s)` · `GET /api/notifications`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`.
 

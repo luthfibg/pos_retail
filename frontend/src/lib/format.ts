@@ -21,13 +21,13 @@ export function formatQty(value: Decimal | null | undefined): string {
   return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 3 }).format(n);
 }
 
-export type LocalDecimalKind = 'quantity' | 'price';
+export type LocalDecimalKind = 'quantity' | 'price' | 'cost';
 
 /** Format angka untuk kolom input Indonesia: pemisah ribuan titik, desimal koma, nol pecahan di belakang dibuang. */
 export function formatLocalDecimal(value: string, kind: LocalDecimalKind): string {
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value.trim());
   if (!match) return value;
-  const maxFractionDigits = kind === 'quantity' ? 3 : 2;
+  const maxFractionDigits = kind === 'quantity' ? 3 : kind === 'cost' ? 4 : 2;
   if ((match[3]?.length ?? 0) > maxFractionDigits) return value;
   const integer = (match[2] ?? '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const fraction = (match[3] ?? '').slice(0, maxFractionDigits).replace(/0+$/, '');

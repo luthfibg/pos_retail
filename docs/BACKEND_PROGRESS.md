@@ -76,7 +76,7 @@ Troubleshooting exchange 401: backend menulis `Platform CLI login ticket issued.
 |---|---|---|---|
 | GET | `/api/inventory/products/{product}/stock` | `inventory.view` | Stok satu produk per batch/posisi + total |
 | GET | `/api/inventory/movements` | `inventory.view` | Riwayat pergerakan stok (terbaru dulu) |
-| POST | `/api/inventory/opening-balances` | `inventory.adjust.approve` (Admin) | **Stok awal** (satu dokumen, banyak baris, atomik) |
+| POST | `/api/inventory/opening-balances` | `inventory.adjust.approve` (Admin) | **Stok eksisting toko** (satu dokumen, banyak baris, atomik) |
 | GET | `/api/inventory/transfers` | `stock_transfer.create` | Daftar/filter dokumen transfer |
 | POST | `/api/inventory/transfers` | `stock_transfer.create` | Buat draft transfer stok |
 | GET | `/api/inventory/transfers/{id}` | `stock_transfer.create` | Detail draft/posted/cancelled |
@@ -91,19 +91,21 @@ Troubleshooting exchange 401: backend menulis `Platform CLI login ticket issued.
 
 Daftar produk (`GET /api/products`) sudah memuat `stock_sellable` dan `stock_status`; angka itu kini terisi dari saldo nyata.
 
-### POST `/api/inventory/opening-balances` — layar "Stok Awal" (Admin)
+Master produk menyimpan satu nilai biaya kanonis, `unit_cost` (`DECIMAL(18,4)`; label UI **Harga Modal**). Field ini wajib bernilai lebih dari nol saat `POST /api/products`, dapat dikoreksi melalui `PATCH /api/products/{id}` oleh pemegang `price.change`, serta dikembalikan pada detail/daftar produk. Saat stok masuk dengan biaya, `unit_cost` diganti dengan biaya terbaru; perubahan manual dan otomatis dicatat pada audit produk. Nilai ini dipakai untuk snapshot HPP penjualan dan estimasi harga PR.
+
+### POST `/api/inventory/opening-balances` — layar "Stok Eksisting Toko" (Admin)
 
 Permintaan:
 ```json
 {
-  "note": "Stok awal cut-over",
+  "note": "Stok eksisting sebelum POS digunakan",
   "items": [
     { "product_id": 12, "qty": "24", "unit_cost": "2000", "expiry_date": "2027-03-01", "batch_code": "L1" },
     { "product_id": 15, "qty": "10.5", "unit_cost": "1000" }
   ]
 }
 ```
-- `items`: 1–200 baris. `qty` wajib, > 0, maks 3 desimal. `unit_cost` opsional (isi agar HPP terbentuk), maks 4 desimal. `expiry_date` opsional (`YYYY-MM-DD`; stok awal boleh tanpa tanggal, produk `track_expiry` pun). `batch_code`, `shelf_position_id` opsional.
+- `items`: 1–200 baris. `qty` wajib, > 0, maks 3 desimal. `unit_cost` opsional sebagai biaya barang masuk (maks. 4 desimal); bila diisi, nilai itu menjadi Harga Modal master terbaru untuk produk tersebut. Bila kosong, Harga Modal master yang sudah ada dipertahankan. `expiry_date` opsional (`YYYY-MM-DD`; stok eksisting boleh tanpa tanggal, produk `track_expiry` pun). `batch_code`, `shelf_position_id` opsional.
 - Produk yang sama boleh muncul di beberapa baris (batch/kadaluarsa berbeda).
 
 Respons 201:
@@ -118,7 +120,7 @@ Kesalahan 422 menunjuk baris: `errors["items.1.product_id"]` (produk tidak ada /
 ```json
 { "data": {
     "product_id": 12, "sku": "P-000012", "name": "Air Mineral 600ml", "unit_name": "pcs",
-    "track_expiry": true, "avg_cost": "2000.0000",
+    "track_expiry": true, "unit_cost": "2000.0000",
     "totals": { "qty_sellable": "24.000", "qty_quarantine": "0.000", "qty_damaged": "0.000" },
     "batches": [
       { "balance_id": 5, "batch_id": 7, "batch_code": "L1", "expiry_date": "2027-03-01",
@@ -128,7 +130,7 @@ Kesalahan 422 menunjuk baris: `errors["items.1.product_id"]` (produk tidak ada /
 ```
 - `expiry_status`: `none` (tanpa tanggal) · `ok` · `near_expiry` (≤ ambang, default 30 hari) · `expired`. Gunakan untuk lencana warna **sekaligus teks** (jangan hanya warna).
 - Urutan array = urutan FEFO (yang akan dijual lebih dulu di atas). Kasir **tidak** memilih batch.
-- `avg_cost` (HPP) sensitif secara bisnis; tampilkan hanya di layar Admin.
+- `unit_cost` (Harga Modal) sensitif secara bisnis; tampilkan hanya kepada pengguna berizin.
 
 ### GET `/api/inventory/movements`
 Query: `product_id`, `movement_type` (`opening_balance|receipt|putaway|transfer|sale|sale_void|customer_return|supplier_return_out|supplier_replacement_in|adjustment|write_off`), `date_from`, `date_to` (`YYYY-MM-DD`, tanggal WIB), `per_page` (1–100, default 25).
@@ -501,7 +503,7 @@ Permintaan buat:
 - Harga beli = harga di PO. `unit_cost` hanya boleh diubah pemegang `goods_receipt.verify_documents` (Kasir mengirim nilai berbeda → 403). Kasir **tidak** menerima `unit_cost`/`price_variance` pada respons (`null`).
 - `qty_damaged` hanya **dicatat** (untuk klaim/retur supplier, Paket 3); tidak menambah stok dan tidak mengurangi sisa pesanan.
 - Respons `data`: `id, doc_number ("GR-…"), po_id, po_doc_number, supplier_name, receiving_location_id, receiving_location_name, delivery_note_no, invoice_no, status (draft|posted|cancelled), document_status (pending|verified), received_by_name, posted_at, verified_by_name, verified_at`, `items[]` (`po_item_id, product_id, sku, name, qty_ordered, qty_received, qty_damaged, qty_short, unit_cost, po_unit_price, price_variance, expiry_date, batch_code, shelf_position_id`). `qty_short` = sisa pesanan setelah penerimaan ini (di baris pertama tiap baris PO).
-- Efek posting: batch baru + saldo + pergerakan `receipt` + HPP rata-rata bergerak (lihat Inventory), qty PO terpenuhi, status PO `partially_received`/`received`. Bila ada barang rusak, Admin mendapat notifikasi `goods_receipt.damaged`.
+- Efek posting: batch baru + saldo + pergerakan `receipt` + pembaruan Harga Modal ke biaya masuk terbaru (lihat Inventory), qty PO terpenuhi, status PO `partially_received`/`received`. Bila ada barang rusak, Admin mendapat notifikasi `goods_receipt.damaged`.
 - Bila lokasi tujuan bertipe gudang, lokasi tersebut harus aktif dan `warehouse_enabled=true`; aturan diperiksa saat membuat **dan** memposting draft. Posisi rak per item opsional, tetapi bila diisi harus berada pada rak aktif di lokasi penerimaan. Stok tanpa posisi dapat dipindahkan/di-putaway memakai alur transfer stok.
 - UI dapat mengambil pilihan lokasi lewat `GET /api/goods-receipts/receiving-locations`; endpoint hanya mengembalikan lokasi aktif milik toko dan menyembunyikan gudang saat konfigurasi nonaktif.
 
@@ -966,7 +968,7 @@ PR draft otomatis dibuat dan disinkronkan backend ketika stok berubah, ambang pe
 
 `low_stock_threshold` dikirim sebagai string qty (contoh `"3.000"`). Pada data produk, `restock_quantity` diterima di `POST /api/products` dan `PATCH /api/products/{id}`, serta dikembalikan pada daftar/detail produk. Field ini qty desimal (maks. 99.999, 3 desimal), default `"0.000"` untuk kompatibilitas produk lama.
 
-Satu PR otomatis draft per toko memuat setiap produk menipis dengan kuantitas pengisian ulang produk. `est_price` diambil dari `avg_cost` master dan dibulatkan 2 desimal sesuai skema harga estimasi PR; `est_total` dihitung ulang atomik. Draft diperbarui saat stok/HPP/master/ambang berubah; baris yang tidak lagi memenuhi kriteria dihapus dan draft kosong dibatalkan sistem. Produk yang sudah tercakup PR yang menunggu proses atau PO aktif tidak diminta ulang.
+Satu PR otomatis draft per toko memuat setiap produk menipis dengan kuantitas pengisian ulang produk. `est_price` diambil dari `unit_cost` master dan dibulatkan 2 desimal sesuai skema harga estimasi PR; `est_total` dihitung ulang atomik. Draft diperbarui saat stok/Harga Modal/master/ambang berubah; baris yang tidak lagi memenuhi kriteria dihapus dan draft kosong dibatalkan sistem. Produk yang sudah tercakup PR yang menunggu proses atau PO aktif tidak diminta ulang.
 
 Kasir dapat melihat PR otomatis dan hanya dapat meneruskannya (`POST /api/purchase-requisitions/{id}/submit`); data PR otomatis tidak dapat dibuat manual, diedit, atau dibatalkan oleh Kasir. PR manual tetap tersedia untuk Admin/Purchasing. Setelah diajukan, PR otomatis tidak berubah; deteksi berikutnya membuat draft baru untuk barang yang belum tercakup dokumen pembelian aktif.
 
@@ -978,6 +980,7 @@ Sinkronisasi dipanggil atomik dari stok awal, penjualan/void, penerimaan barang,
 
 ## Riwayat
 - **2026-11-04** — Pemantauan stok per toko dengan ambang default 3.000, field `restock_quantity` di master produk, dan satu PR otomatis dinamis yang menghitung estimasi HPP/total; sinkronisasi atomik pada perubahan stok/master/setting, sementara Kasir hanya dapat meneruskan PR otomatis. Migration 000065. Validasi terarah 122 test (1.158 assertions) dan Pint lulus.
+- **2026-11-04** — Field HPP master disederhanakan menjadi `unit_cost` tunggal (`DECIMAL(18,4)`), diisi wajib saat produk dibuat, dapat dikoreksi Admin melalui edit, dan diganti dengan biaya terbaru saat penerimaan/stok masuk memiliki biaya. `last_cost` dihapus; snapshot biaya transaksi tetap disimpan. Label UI untuk nilai produk adalah **Harga Modal**; form stok awal diberi nama **Stok Eksisting Toko**. Migration 000066. Tes backend terarah 113/113 (1.051 assertions) dan Pint lulus.
 - **2026-11-03** — Alokasi Kas Pembelian untuk PO: ledger rekening bank manual, saldo awal/penyesuaian ber-audit, alokasi penuh berdasarkan nilai PO, saldo tersedia dikurangi pencadangan tanpa mengklaim transfer bank, dan pelepasan alokasi saat PO dibatalkan atau nilainya berubah. Setiap PO kini menunggu konfirmasi Owner setelah dana dicadangkan. Rekening dimasking di endpoint; Finance diberi permission kelola/alokasi, Owner melihat, Admin mewarisi semua. `PurchaseOrderTest` (17) dan `GoodsReceiptTest` (16) lulus; suite penuh 294/297 dengan tiga kegagalan di test lama yang tidak terkait. Pint file baru lulus. Migrasi 000060 dan PermissionSeeder perlu dijalankan pada database existing.
 - **2026-11-02** — Laporan laba kotor `GET /api/reports/profit` memakai `line_total` dan HPP snapshot per item; penjualan kredit dipisah expected/valid dan pembayaran parsial Finance mengakui laba secara proporsional. Pencatatan pembayaran HRD kini masuk atomik ke ledger akun `main_cash`. Permission baru `reports.profit.view` untuk Admin, Owner, Finance, dan Accounting; `BillingTest` 11 lulus dan tes profit terarah 1 lulus.
 - **2026-11-02** — Endpoint Retail `PATCH /api/settings/store-name` hanya mengizinkan perubahan `name` (maks. 150 karakter), izin `settings.manage`, konteks toko aktif, dan audit `settings.store_name`; request menolak field toko lain. Tidak menambahkan endpoint read/create/delete atau perubahan atribut lain. `StoreNameSettingTest`: 3 test lulus.

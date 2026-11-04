@@ -223,8 +223,7 @@ CREATE TABLE products (
   unit_name VARCHAR(20) NOT NULL DEFAULT 'pcs',
   track_expiry TINYINT(1) NOT NULL DEFAULT 0,
   sell_price DECIMAL(18,2) NULL,                    -- NULL selama status pending_price
-  avg_cost DECIMAL(18,4) NOT NULL DEFAULT 0,        -- HPP rata-rata bergerak
-  last_cost DECIMAL(18,2) NULL,
+  unit_cost DECIMAL(18,4) NOT NULL DEFAULT 0,       -- Harga Modal per satuan; mengikuti biaya masuk terbaru
   min_stock DECIMAL(18,3) NOT NULL DEFAULT 0,
   critical_stock DECIMAL(18,3) NOT NULL DEFAULT 0,
   status ENUM('pending_price','active','inactive') NOT NULL DEFAULT 'pending_price',

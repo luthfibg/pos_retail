@@ -26,6 +26,7 @@ export function ProductsPage() {
   const { can } = useAuth();
   const [dialog, setDialog] = useState<{ product?: Product } | null>(null);
   const canEdit = can('product.update');
+  const canViewCost = can('inventory.adjust.approve');
   const [stockOf, setStockOf] = useState<Product | null>(null);
 
   const categories = useQuery({ queryKey: ['categories', 'all'], queryFn: () => categoryApi.list() });
@@ -94,6 +95,7 @@ export function ProductsPage() {
               <th className="px-3 py-2">Nama</th>
               <th className="px-3 py-2">Kategori</th>
               <th className="px-3 py-2 text-right">Harga jual</th>
+              {canViewCost && <th className="px-3 py-2 text-right">Harga Modal</th>}
               <th className="px-3 py-2 text-right">Stok</th>
               <th className="px-3 py-2 text-right">Isi ulang</th>
               <th className="px-3 py-2">Kondisi stok</th>
@@ -111,6 +113,7 @@ export function ProductsPage() {
                 <td className="px-3 py-2">{p.name}</td>
                 <td className="px-3 py-2 text-slate-600">{p.category_name ?? '—'}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.sell_price)}</td>
+                {canViewCost && <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.unit_cost)}</td>}
                 <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.stock_sellable)} {p.unit_name}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.restock_quantity)} {p.unit_name}</td>
                 <td className="px-3 py-2"><StockBadge status={p.stock_status} /></td>
@@ -124,10 +127,10 @@ export function ProductsPage() {
               </tr>
             ))}
             {!products.isLoading && rows.length === 0 && (
-              <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
+              <tr><td colSpan={canViewCost ? 10 : 9} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
             )}
             {products.isLoading && (
-              <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
+              <tr><td colSpan={canViewCost ? 10 : 9} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
             )}
           </tbody>
         </table>

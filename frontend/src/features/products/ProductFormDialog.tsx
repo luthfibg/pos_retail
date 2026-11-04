@@ -34,7 +34,7 @@ export function ProductFormDialog({ product, onClose }: Props) {
   const mode = product ? 'edit' : 'create';
   const { can } = useAuth();
   const qc = useQueryClient();
-  const caps = { canSetPrice: can('price.change'), canActivate: can('product.activate') };
+  const caps = { canSetPrice: can('price.change'), canSetCost: can('price.change'), canActivate: can('product.activate') };
 
   const [values, setValues] = useState<ProductFormValues>(() => (product ? valuesFromProduct(product) : emptyValues()));
   const [errors, setErrors] = useState<FormErrors>({});
@@ -173,6 +173,17 @@ export function ProductFormDialog({ product, onClose }: Props) {
                 ? 'Harga ditetapkan oleh Admin. Produk baru berstatus "Menunggu harga" dan belum bisa dijual.'
                 : <>Harga jual: <span className="font-medium">{formatRupiah(product?.sell_price)}</span> (hanya Admin yang dapat mengubah).</>}
             </div>
+          )}
+
+          {(mode === 'create' || caps.canSetCost) && (
+            <Field label="Harga Modal (Rp)" error={err('unit_cost')} hint="Harga Modal awal; setiap barang masuk dengan biaya akan menggantinya dengan biaya terbaru.">
+              <LocalDecimalInput
+                className={`${inputCls} tabular-nums`}
+                kind="cost"
+                value={values.unitCost}
+                onChange={(value) => set('unitCost', value)}
+              />
+            </Field>
           )}
 
           <div className="grid grid-cols-2 gap-3">

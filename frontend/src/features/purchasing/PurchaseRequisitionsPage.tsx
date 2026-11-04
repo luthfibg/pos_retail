@@ -394,7 +394,7 @@ export function PurchaseRequisitionDetailDialog({
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <Detail label="Nomor PR" value={pr.doc_number} />
             <Detail label="Status" value={STATUS_LABEL[pr.status]} />
-            <Detail label="Pemohon" value={pr.requester_name} />
+            <Detail label={pr.is_auto_generated ? 'Sumber' : 'Pemohon'} value={pr.is_auto_generated ? 'Sistem pemantauan stok' : pr.requester_name} />
             <Detail label="Dibuat" value={formatDateTime(pr.created_at)} />
             <Detail label="Diajukan" value={formatDateTime(pr.submitted_at)} />
             <Detail label="Estimasi total" value={formatRupiah(pr.est_total)} />

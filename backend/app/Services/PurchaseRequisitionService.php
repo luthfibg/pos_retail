@@ -251,9 +251,9 @@ class PurchaseRequisitionService
                 ->get([
                     'p.id',
                     'p.restock_quantity',
-                    'p.avg_cost',
+                    'p.unit_cost',
                     DB::raw('COALESCE(stock.stock_sellable, 0) as stock_sellable'),
-                    DB::raw('ROUND(p.avg_cost, 2) as est_price'),
+                    DB::raw('ROUND(p.unit_cost, 2) as est_price'),
                 ]);
 
             $coveredProductIds = $this->coveredByOpenRequisitions(

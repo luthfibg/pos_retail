@@ -28,6 +28,7 @@ class ProductTest extends SeededTestCase
             'barcode' => sprintf('89990000%05d', $n),
             'name' => "Produk {$n}",
             'sell_price' => 5000,
+            'unit_cost' => 2000,
         ])->assertCreated()->json('data.id');
     }
 
@@ -52,6 +53,7 @@ class ProductTest extends SeededTestCase
             'name' => 'Air Mineral 600ml',
             'category_id' => $categoryId,
             'sell_price' => 3500,
+            'unit_cost' => 2500,
             'min_stock' => 24,
             'critical_stock' => 6,
             'track_expiry' => true,
@@ -59,6 +61,7 @@ class ProductTest extends SeededTestCase
 
         $response->assertJsonPath('data.status', 'active')
             ->assertJsonPath('data.sell_price', '3500.00')
+            ->assertJsonPath('data.unit_cost', '2500.0000')
             ->assertJsonPath('data.track_expiry', true)
             ->assertJsonPath('data.unit_name', 'pcs')
             ->assertJsonPath('data.category_name', 'Minuman')
@@ -73,12 +76,39 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Admin');
 
-        $this->postJson('/api/products', ['name' => 'Tanpa Harga'])
+        $this->postJson('/api/products', ['name' => 'Tanpa Harga', 'unit_cost' => '1000'])
             ->assertCreated()
             ->assertJsonPath('data.status', 'pending_price')
             ->assertJsonPath('data.sell_price', null);
 
         $this->assertDatabaseCount('price_history', 0);
+    }
+
+    public function test_product_creation_requires_positive_unit_cost(): void
+    {
+        $this->signIn('Admin');
+
+        $this->postJson('/api/products', ['name' => 'Tanpa Harga Modal'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['unit_cost']);
+        $this->postJson('/api/products', ['name' => 'Harga Modal Nol', 'unit_cost' => '0'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['unit_cost']);
+        $this->postJson('/api/products', ['name' => 'Presisi Harga Modal', 'unit_cost' => '1.23456'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['unit_cost']);
+    }
+
+    public function test_admin_can_correct_unit_cost_and_audit_the_change(): void
+    {
+        $admin = $this->signIn('Admin');
+        $id = $this->makeProduct(['unit_cost' => '2000']);
+
+        $this->patchJson("/api/products/{$id}", ['unit_cost' => '2500.1234'])
+            ->assertOk()->assertJsonPath('data.unit_cost', '2500.1234');
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'product.update',
+            'entity_id' => $id,
+            'actor_id' => $admin->id,
+        ]);
     }
 
     public function test_product_restock_quantity_is_saved_and_returned(): void
@@ -88,8 +118,10 @@ class ProductTest extends SeededTestCase
         $response = $this->postJson('/api/products', [
             'name' => 'Stok Otomatis',
             'sell_price' => '5000',
+            'unit_cost' => '2500.1234',
             'restock_quantity' => '2.500',
         ])->assertCreated()
+            ->assertJsonPath('data.unit_cost', '2500.1234')
             ->assertJsonPath('data.restock_quantity', '2.500');
 
         $id = $response->json('data.id');
@@ -111,6 +143,7 @@ class ProductTest extends SeededTestCase
 
         $this->postJson('/api/products', [
             'name' => 'Kuantitas Tidak Valid',
+            'unit_cost' => '1000',
             'restock_quantity' => '1.2345',
         ])->assertUnprocessable()->assertJsonValidationErrors(['restock_quantity']);
     }
@@ -119,8 +152,8 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Kasir');
 
-        $first = $this->postJson('/api/products', ['name' => 'Permen Baru'])->assertCreated();
-        $second = $this->postJson('/api/products', ['name' => 'Permen Lain'])->assertCreated();
+        $first = $this->postJson('/api/products', ['name' => 'Permen Baru', 'unit_cost' => '1000'])->assertCreated();
+        $second = $this->postJson('/api/products', ['name' => 'Permen Lain', 'unit_cost' => '1000'])->assertCreated();
 
         $first->assertJsonPath('data.status', 'pending_price')->assertJsonPath('data.sell_price', null);
 
@@ -140,9 +173,10 @@ class ProductTest extends SeededTestCase
 
         $this->signIn('Kasir', 'kasir-uji');
 
-        $this->postJson('/api/products', ['name' => 'Coba Harga', 'sell_price' => 1000])->assertForbidden();
+        $this->postJson('/api/products', ['name' => 'Coba Harga', 'sell_price' => 1000, 'unit_cost' => '1000'])->assertForbidden();
         $this->patchJson("/api/products/{$id}", ['name' => 'Ubah'])->assertForbidden();
         $this->patchJson("/api/products/{$id}", ['sell_price' => 1])->assertForbidden();
+        $this->patchJson("/api/products/{$id}", ['unit_cost' => 1])->assertForbidden();
     }
 
     public function test_duplicate_sku_and_barcode_are_rejected_even_for_inactive_products(): void
@@ -152,9 +186,9 @@ class ProductTest extends SeededTestCase
         $id = $this->makeProduct(['sku' => 'A-1', 'barcode' => '111111']);
         $this->patchJson("/api/products/{$id}", ['status' => 'inactive'])->assertOk();
 
-        $this->postJson('/api/products', ['name' => 'Baru', 'barcode' => '111111'])
+        $this->postJson('/api/products', ['name' => 'Baru', 'barcode' => '111111', 'unit_cost' => '1000'])
             ->assertStatus(422)->assertJsonValidationErrors('barcode');
-        $this->postJson('/api/products', ['name' => 'Baru', 'sku' => 'a-1'])
+        $this->postJson('/api/products', ['name' => 'Baru', 'sku' => 'a-1', 'unit_cost' => '1000'])
             ->assertStatus(422)->assertJsonValidationErrors('sku');
     }
 
@@ -188,7 +222,7 @@ class ProductTest extends SeededTestCase
     public function test_activation_requires_a_price(): void
     {
         $this->signIn('Kasir', 'kasir-uji');
-        $id = $this->postJson('/api/products', ['name' => 'Menunggu Harga'])->json('data.id');
+        $id = $this->postJson('/api/products', ['name' => 'Menunggu Harga', 'unit_cost' => '1000'])->json('data.id');
 
         $this->signIn('Admin', 'admin-uji');
 
@@ -224,7 +258,7 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Admin');
 
-        $this->postJson('/api/products', ['name' => 'X', 'min_stock' => 5, 'critical_stock' => 9])
+        $this->postJson('/api/products', ['name' => 'X', 'unit_cost' => '1000', 'min_stock' => 5, 'critical_stock' => 9])
             ->assertStatus(422)->assertJsonValidationErrors('critical_stock');
 
         $id = $this->makeProduct(['min_stock' => 10, 'critical_stock' => 3]);
@@ -237,7 +271,7 @@ class ProductTest extends SeededTestCase
         $this->signIn('Admin');
         $inactive = $this->makeCategory('Lama', active: false);
 
-        $this->postJson('/api/products', ['name' => 'X', 'category_id' => $inactive])
+        $this->postJson('/api/products', ['name' => 'X', 'unit_cost' => '1000', 'category_id' => $inactive])
             ->assertStatus(422)->assertJsonValidationErrors('category_id');
     }
 
@@ -263,7 +297,7 @@ class ProductTest extends SeededTestCase
 
         $this->makeProduct(['sku' => 'AQ-600', 'barcode' => '8991111000011', 'name' => 'Air Mineral 600ml', 'category_id' => $categoryId]);
         $this->makeProduct(['sku' => 'TB-250', 'barcode' => '8992222000022', 'name' => 'Teh Botol 250ml']);
-        $this->postJson('/api/products', ['name' => 'Belum Berharga']);
+        $this->postJson('/api/products', ['name' => 'Belum Berharga', 'unit_cost' => '1000']);
 
         $this->getJson('/api/products')->assertOk()->assertJsonPath('total', 3);
         $this->getJson('/api/products?q=mineral')->assertOk()->assertJsonPath('total', 1);

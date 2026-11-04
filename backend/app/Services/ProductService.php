@@ -14,12 +14,13 @@ use Illuminate\Validation\ValidationException;
  * Master produk. Aturan utama:
  *  - satu produk = satu barcode (pcs); SKU dan barcode TIDAK dapat diubah (barcode tidak boleh dipakai ulang)
  *  - Kasir hanya dapat membuat produk berstatus pending_price tanpa harga; barcode/SKU dibuat otomatis bila kosong
- *  - harga hanya diubah oleh pemegang price.change (tercatat di price_history dan audit log)
+ *  - harga jual dan Harga Modal hanya diubah oleh pemegang price.change
+ *    (harga jual tercatat di price_history; semua perubahan tercatat di audit log)
  *  - produk aktif wajib berharga; produk dengan stok tidak boleh dinonaktifkan
  */
 class ProductService
 {
-    private const PLAIN_FIELDS = ['name', 'category_id', 'unit_name', 'min_stock', 'critical_stock', 'restock_quantity'];
+    private const PLAIN_FIELDS = ['name', 'category_id', 'unit_name', 'unit_cost', 'min_stock', 'critical_stock', 'restock_quantity'];
 
     public function __construct(
         private AuditLogger $audit,
@@ -97,6 +98,7 @@ class ProductService
                     'unit_name' => $data['unit_name'] ?? 'pcs',
                     'track_expiry' => ! empty($data['track_expiry']) ? 1 : 0,
                     'sell_price' => $price,
+                    'unit_cost' => $data['unit_cost'],
                     'min_stock' => $min,
                     'critical_stock' => $critical,
                     'restock_quantity' => $data['restock_quantity'] ?? '0.000',
@@ -123,6 +125,7 @@ class ProductService
                         'name' => $data['name'],
                         'status' => $status,
                         'sell_price' => $price,
+                        'unit_cost' => $data['unit_cost'],
                         'restock_quantity' => $data['restock_quantity'] ?? '0.000',
                     ],
                     storeId: $storeId,
@@ -149,6 +152,7 @@ class ProductService
     public function update(User $actor, int $storeId, int $id, array $data, bool $canSetPrice, bool $canChangeStatus): array
     {
         abort_if(array_key_exists('sell_price', $data) && ! $canSetPrice, 403, 'Anda tidak berwenang mengubah harga jual.');
+        abort_if(array_key_exists('unit_cost', $data) && ! $canSetPrice, 403, 'Anda tidak berwenang mengubah Harga Modal.');
         abort_if(array_key_exists('status', $data) && ! $canChangeStatus, 403, 'Anda tidak berwenang mengubah status produk.');
 
         DB::transaction(function () use ($actor, $storeId, $id, $data) {
@@ -248,7 +252,7 @@ class ProductService
                 );
             }
 
-            if (array_key_exists('restock_quantity', $changes) || $statusChanged) {
+            if (array_key_exists('restock_quantity', $changes) || array_key_exists('unit_cost', $changes) || $statusChanged) {
                 $this->requisitions->synchronizeAutomatic($actor, $storeId, [$id]);
             }
         });
@@ -282,7 +286,7 @@ class ProductService
             'unit_name' => $row->unit_name,
             'track_expiry' => (bool) $row->track_expiry,
             'sell_price' => $row->sell_price,
-            'avg_cost' => $row->avg_cost,
+            'unit_cost' => $row->unit_cost,
             'min_stock' => $row->min_stock,
             'critical_stock' => $row->critical_stock,
             'restock_quantity' => $row->restock_quantity,

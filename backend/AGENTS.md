@@ -1,6 +1,12 @@
 <laravel-boost-guidelines>
 # Laravel Application
 
+## POS Retail domain conventions
+
+- The product master has one canonical cost field, `unit_cost`; do not reintroduce `avg_cost` or `last_cost`. A stock-in with a cost replaces `unit_cost` with that latest cost.
+- Use `unit_cost` in backend/database/API contracts. Any user-visible label for this value must say **Harga Modal**.
+- The user-visible inventory opening-balance workflow is named **Stok Eksisting Toko**. Keep internal endpoint and movement codes unchanged unless explicitly requested.
+
 This repository contains a Laravel application. Complete the following setup before working on the user's request.
 
 ## Prerequisites

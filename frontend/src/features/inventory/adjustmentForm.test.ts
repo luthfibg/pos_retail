@@ -16,7 +16,7 @@ const stock: ProductStock = {
   name: 'Produk',
   unit_name: 'pcs',
   track_expiry: false,
-  avg_cost: '1000.0000',
+  unit_cost: '1000.0000',
   totals: { qty_sellable: '5.000', qty_quarantine: '0.000', qty_damaged: '0.000' },
   batches: [{
     balance_id: 1,

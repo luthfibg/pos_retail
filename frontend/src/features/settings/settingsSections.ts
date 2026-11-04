@@ -46,8 +46,8 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
   },
   {
     id: 'stock-authority', group: 'store', title: 'Kewenangan stok', permission: 'settings.manage', defaultOpen: false,
-    description: 'Siapa yang boleh stok awal, penerimaan, transfer, serta mengajukan dan menyetujui adjustment/opname.',
-    keywords: ['inventory', 'opname', 'adjustment', 'penerimaan', 'transfer', 'stok awal', 'wewenang', 'role'],
+    description: 'Siapa yang boleh mencatat stok eksisting toko, penerimaan, transfer, serta mengajukan dan menyetujui adjustment/opname.',
+    keywords: ['inventory', 'opname', 'adjustment', 'penerimaan', 'transfer', 'stok eksisting toko', 'wewenang', 'role'],
   },
   {
     id: 'vat', group: 'sales', title: 'PPN', permission: 'settings.manage', defaultOpen: true,

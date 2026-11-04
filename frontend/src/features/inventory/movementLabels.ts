@@ -1,7 +1,7 @@
 import type { MovementType } from '@/lib/api/types';
 
 export const MOVEMENT_LABEL: Record<MovementType, string> = {
-  opening_balance: 'Stok awal',
+  opening_balance: 'Stok eksisting toko',
   receipt: 'Penerimaan barang',
   putaway: 'Penempatan rak',
   transfer: 'Transfer',

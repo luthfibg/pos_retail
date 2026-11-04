@@ -152,21 +152,20 @@ class InventoryServiceTest extends SeededTestCase
         $this->assertSame(2, DB::table('inventory_movements')->where('movement_type', 'sale_void')->count());
     }
 
-    public function test_moving_average_cost_and_last_cost(): void
+    public function test_unit_cost_follows_latest_stock_in_cost_and_sale_keeps_cost_snapshot(): void
     {
         $p = $this->makeProduct();
 
         $this->receive($p, '10', '1000');
-        $this->assertSame('1000.0000', DB::table('products')->where('id', $p)->value('avg_cost'));
+        $this->assertSame('1000.0000', DB::table('products')->where('id', $p)->value('unit_cost'));
 
-        $this->receive($p, '30', '2000');   // (10x1000 + 30x2000) / 40 = 1750
-        $this->assertSame('1750.0000', DB::table('products')->where('id', $p)->value('avg_cost'));
-        $this->assertSame('2000.00', DB::table('products')->where('id', $p)->value('last_cost'));
+        $this->receive($p, '30', '2000');
+        $this->assertSame('2000.0000', DB::table('products')->where('id', $p)->value('unit_cost'));
 
         // penjualan tidak mengubah HPP, dan snapshot biaya ikut alokasi
         $allocations = $this->sell($p, '5');
-        $this->assertSame('1750.0000', $allocations[0]['unit_cost']);
-        $this->assertSame('1750.0000', DB::table('products')->where('id', $p)->value('avg_cost'));
+        $this->assertSame('2000.0000', $allocations[0]['unit_cost']);
+        $this->assertSame('2000.0000', DB::table('products')->where('id', $p)->value('unit_cost'));
     }
 
     public function test_receive_requires_expiry_for_tracked_products(): void

@@ -29,7 +29,7 @@ use Throwable;
  *  - produk track_expiry wajib bertanggal kadaluarsa; produk lain tidak boleh. [ASUMSI] barang yang sudah lewat tanggal kadaluarsa
  *    ditolak sebagai "diterima layak jual" (catat sebagai rusak)
  *  - harga beli = harga di PO; hanya pemegang goods_receipt.verify_documents yang boleh mengubahnya (selisih tampil sebagai price_variance)
- *  - stok masuk lewat InventoryService::receive (batch + saldo + pergerakan `receipt` + HPP rata-rata bergerak), semua dalam satu transaksi
+ *  - stok masuk lewat InventoryService::receive (batch + saldo + pergerakan `receipt` + Harga Modal terbaru), semua dalam satu transaksi
  *  - penerimaan gudang hanya diizinkan bila warehouse_enabled aktif; posisi rak tujuan opsional dan dapat diisi saat putaway
  *  - [ASUMSI] qty_damaged hanya dicatat di dokumen (untuk klaim/retur supplier, Paket 3); tidak menambah stok dan tidak mengurangi sisa pesanan
  *  - GR terposting tidak diedit; koreksi lewat dokumen koreksi (belum ada)

@@ -70,7 +70,7 @@ class SupplierReturnService
             $items = array_values($data['items']);
             $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
             $products = DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
-                ->orderBy('id')->lockForUpdate()->get(['id', 'track_expiry', 'avg_cost'])->keyBy('id');
+                ->orderBy('id')->lockForUpdate()->get(['id', 'track_expiry', 'unit_cost'])->keyBy('id');
             $locations = DB::table('locations')
                 ->where('store_id', $storeId)
                 ->whereIn('id', collect($items)->pluck('location_id')->map(fn ($id) => (int) $id)->unique()->all())
@@ -135,7 +135,7 @@ class SupplierReturnService
                     'shelf_position_id' => $positionId,
                     'source_bucket' => $sourceBucket,
                     'qty' => Decimal::qtyString(Decimal::qty((string) $item['qty'])),
-                    'unit_cost' => $product->avg_cost,
+                    'unit_cost' => $product->unit_cost,
                 ];
             }
 

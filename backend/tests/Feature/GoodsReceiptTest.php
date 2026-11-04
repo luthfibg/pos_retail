@@ -59,7 +59,7 @@ class GoodsReceiptTest extends SeededTestCase
 
         $this->assertMatchesRegularExpression('/^GR-\d{6}-000001$/', $response->json('data.doc_number'));
         $this->assertSame(10.0, $this->stock($p));
-        $this->assertSame(2000.0, (float) DB::table('products')->where('id', $p)->value('avg_cost'));
+        $this->assertSame(2000.0, (float) DB::table('products')->where('id', $p)->value('unit_cost'));
 
         $grItem = (int) $response->json('data.items.0.id');
         $this->assertSame(1, DB::table('product_batches')->where('goods_receipt_item_id', $grItem)->count());
@@ -160,7 +160,7 @@ class GoodsReceiptTest extends SeededTestCase
             ->assertJsonPath('data.items.0.po_unit_price', '2000.00')
             ->assertJsonPath('data.items.0.price_variance', '500.00');
 
-        $this->assertSame(2500.0, (float) DB::table('products')->where('id', $p)->value('avg_cost'));
+        $this->assertSame(2500.0, (float) DB::table('products')->where('id', $p)->value('unit_cost'));
     }
 
     public function test_warehouse_receipt_requires_enabled_active_location_and_supports_putaway_position(): void

@@ -49,7 +49,7 @@ class OpeningBalanceTest extends SeededTestCase
             'to_location_id' => $location, 'to_bucket' => 'sellable', 'ref_type' => 'opening_balance', 'ref_id' => 1, 'created_by' => $admin->id,
         ]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'inventory.opening_balance', 'actor_id' => $admin->id]);
-        $this->assertSame('2000.0000', DB::table('products')->where('id', $a)->value('avg_cost'));
+        $this->assertSame('2000.0000', DB::table('products')->where('id', $a)->value('unit_cost'));
 
         // produk di daftar menampilkan stok baru
         $this->getJson("/api/products/{$a}")->assertJsonPath('data.stock_sellable', '24.000');

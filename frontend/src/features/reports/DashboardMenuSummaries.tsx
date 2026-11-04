@@ -174,7 +174,7 @@ export function DashboardMenuSummaries({
     return { value: countLabel(total, 'retur'), detail: 'Menunggu keputusan atau barang pengganti.' };
   });
 
-  add('/inventory/opening', 'Stok Awal', ['dashboard-menu', 'opening-stock', report?.inventory.counts.low_stock], async () => ({
+  add('/inventory/opening', 'Stok Eksisting Toko', ['dashboard-menu', 'opening-stock', report?.inventory.counts.low_stock], async () => ({
     value: report ? countLabel(report.inventory.counts.low_stock, 'produk menipis') : '—',
     detail: 'Periksa kebutuhan stok toko.',
   }));

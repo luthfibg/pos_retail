@@ -3,6 +3,7 @@ import type { Product, ProductInput, ProductStatus } from '@/lib/api/types';
 /** Kemampuan pengguna yang memengaruhi form. Diturunkan dari permission; backend tetap memvalidasi. */
 export interface ProductCaps {
   canSetPrice: boolean; // price.change
+  canSetCost: boolean; // price.change
   canActivate: boolean; // product.activate
 }
 
@@ -14,6 +15,7 @@ export interface ProductFormValues {
   unitName: string;
   trackExpiry: boolean;
   sellPrice: string;
+  unitCost: string;
   minStock: string;
   criticalStock: string;
   restockQuantity: string;
@@ -22,7 +24,7 @@ export interface ProductFormValues {
 }
 
 export type FormErrors = Partial<Record<
-  'sku' | 'barcode' | 'name' | 'category_id' | 'unit_name' | 'sell_price' | 'min_stock' | 'critical_stock' | 'restock_quantity' | 'status',
+  'sku' | 'barcode' | 'name' | 'category_id' | 'unit_name' | 'sell_price' | 'unit_cost' | 'min_stock' | 'critical_stock' | 'restock_quantity' | 'status',
   string
 >>;
 
@@ -34,7 +36,7 @@ export type UpdatePayload = Partial<Omit<ProductInput, 'sku' | 'barcode'>> & {
 export function emptyValues(): ProductFormValues {
   return {
     sku: '', barcode: '', name: '', categoryId: '', unitName: 'pcs', trackExpiry: false,
-    sellPrice: '', minStock: '0', criticalStock: '0', restockQuantity: '0', status: 'pending_price', reason: '',
+    sellPrice: '', unitCost: '', minStock: '0', criticalStock: '0', restockQuantity: '0', status: 'pending_price', reason: '',
   };
 }
 
@@ -47,6 +49,7 @@ export function valuesFromProduct(p: Product): ProductFormValues {
     unitName: p.unit_name,
     trackExpiry: p.track_expiry,
     sellPrice: p.sell_price ?? '',
+    unitCost: p.unit_cost,
     minStock: p.min_stock,
     criticalStock: p.critical_stock,
     restockQuantity: p.restock_quantity,
@@ -91,6 +94,14 @@ export function validateProduct(
     e.sell_price = 'Harga tidak valid (maks. 2 desimal).';
   }
 
+  const unitCost = normalizeDecimal(v.unitCost);
+  const costChanged = original !== undefined && Number(original.unit_cost) !== Number(unitCost);
+  if (mode === 'create' || (caps.canSetCost && costChanged)) {
+    if (!/^\d{1,14}(?:\.\d{1,4})?$/.test(unitCost) || Number(unitCost) <= 0) {
+      e.unit_cost = 'Harga Modal wajib lebih dari 0 (maksimal 4 desimal).';
+    }
+  }
+
   const min = normalizeDecimal(v.minStock);
   const crit = normalizeDecimal(v.criticalStock);
   if (!min || !QTY_RE.test(min)) e.min_stock = 'Isi angka (maks. 3 desimal).';
@@ -127,6 +138,7 @@ export function buildCreatePayload(v: ProductFormValues, caps: ProductCaps): Pro
     min_stock: normalizeDecimal(v.minStock),
     critical_stock: normalizeDecimal(v.criticalStock),
     restock_quantity: normalizeDecimal(v.restockQuantity),
+    unit_cost: normalizeDecimal(v.unitCost),
   };
   if (v.sku.trim()) input.sku = v.sku.trim();
   if (v.barcode.trim()) input.barcode = v.barcode.trim();
@@ -161,6 +173,9 @@ export function buildUpdatePayload(
 
   const restock = normalizeDecimal(v.restockQuantity);
   if (!sameNumber(original.restock_quantity, restock)) p.restock_quantity = restock;
+
+  const unitCost = normalizeDecimal(v.unitCost);
+  if (caps.canSetCost && !sameNumber(original.unit_cost, unitCost)) p.unit_cost = unitCost;
 
   const price = normalizeDecimal(v.sellPrice);
   if (caps.canSetPrice && price && !sameNumber(original.sell_price, price)) p.sell_price = price;

@@ -4,7 +4,7 @@ import type { StockAuthorityRule, StockAuthorityUpdate } from '@/lib/api/types';
 export type StockDraft = Record<string, string[]>;
 
 export const ACTION_TITLE: Record<string, string> = {
-  opening_balance: 'Stok awal',
+  opening_balance: 'Stok eksisting toko',
   receipt: 'Penerimaan barang',
   supplier_return: 'Retur supplier',
   transfer: 'Transfer / putaway',

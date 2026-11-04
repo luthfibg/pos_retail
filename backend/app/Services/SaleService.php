@@ -408,7 +408,7 @@ class SaleService
                 'discount_id' => $line['discount_id'],
                 'discount_amount' => Decimal::moneyString($line['discount']),
                 'line_total' => Decimal::moneyString($line['line_total']),
-                'cost_snapshot' => $product->avg_cost ?? '0.0000',
+                'cost_snapshot' => $product->unit_cost ?? '0.0000',
             ]);
 
             try {

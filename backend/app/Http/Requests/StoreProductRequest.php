@@ -26,6 +26,7 @@ class StoreProductRequest extends FormRequest
             'unit_name' => ['nullable', 'string', 'max:20'],
             'track_expiry' => ['nullable', 'boolean'],
             'sell_price' => ['nullable', 'numeric', 'min:0', 'max:999999999999'],
+            'unit_cost' => ['required', 'numeric', 'min:0.0001', 'max:99999999999999', 'regex:/^\d+(?:\.\d{1,4})?$/'],
             'min_stock' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'critical_stock' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'restock_quantity' => ['nullable', 'numeric', 'min:0', 'max:99999', 'regex:/^\d+(?:\.\d{1,3})?$/'],
