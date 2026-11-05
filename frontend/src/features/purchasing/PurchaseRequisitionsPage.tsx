@@ -510,7 +510,7 @@ export function PurchaseRequisitionDetailDialog({
                 <button type="button" disabled={saving} onClick={() => financeCheck.mutate('pass')} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{financeCheck.isPending ? 'Memproses…' : 'Lanjutkan'}</button>
               </>}
               {canCreatePo && (pr.status === 'approved' || pr.status === 'finance_checked') && (
-                <button type="button" onClick={() => onCreatePo(pr)} className="rounded-md bg-blue-700 px-3 py-2 text-sm font-medium text-white">Siapkan & buat PO</button>
+                <button type="button" onClick={() => onCreatePo(pr)} className="rounded-md bg-blue-700 px-3 py-2 text-sm font-medium text-white">Buat Permintaan</button>
               )}
             </div>
           )}

@@ -195,8 +195,6 @@ export function PurchaseBoardPage() {
     po_prepare: canCreatePo && can('purchase_fund.allocate'),
     po_send: canSendPo,
   };
-  const hint = FLOW_STAGES.find((stage) => stage.key === tab)?.hint ?? '';
-  const truncated = (prs.data?.total ?? 0) > (prs.data?.data.length ?? 0) || (pos.data?.total ?? 0) > (pos.data?.data.length ?? 0);
 
   return (
     <>
@@ -252,7 +250,6 @@ export function PurchaseBoardPage() {
         <ErrorNotice error={prs.error ?? pos.error ?? actionError} />
 
         <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-600">{hint}</p>
           {(prs.isLoading || pos.isLoading) && <p className="text-sm text-slate-500">Memuat dokumen…</p>}
 
           {tab === 'pr_review' && (
@@ -312,7 +309,6 @@ export function PurchaseBoardPage() {
             />
           )}
 
-          {truncated && <p className="text-xs text-slate-500">Papan menampilkan 100 dokumen terbaru per jenis. Dokumen yang lebih lama tidak muncul di sini.</p>}
         </section>
 
         {createOpen && <PurchaseRequisitionForm onClose={() => setCreateOpen(false)} onSaved={(pr) => { setCreateOpen(false); setSelectedId(pr.id); refetchAll(); }} />}
@@ -419,7 +415,7 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
                   {isPrPrintable(pr.status) && <button type="button" disabled={busyKey === `pr-${pr.id}`} onClick={() => onPrint(pr)} className="font-medium text-slate-700 hover:underline disabled:opacity-50">Cetak</button>}
                   <button type="button" onClick={() => onOpen(pr)} className="font-medium text-blue-700 hover:underline">Detail</button>
                   {canAct(pr) && <button type="button" onClick={() => onOpen(pr)} className="rounded-md bg-slate-900 px-3 py-1.5 font-medium text-white">Periksa Permintaan</button>}
-                  {canCreatePo && stage === 'po_prepare' && <button type="button" disabled={busyKey === `pr-${pr.id}`} onClick={() => onCreatePo(pr)} className="rounded-md bg-blue-700 px-3 py-1.5 font-medium text-white disabled:opacity-60">{busyKey === `pr-${pr.id}` ? 'Memuat…' : 'Siapkan & buat PO'}</button>}
+                  {canCreatePo && stage === 'po_prepare' && <button type="button" disabled={busyKey === `pr-${pr.id}`} onClick={() => onCreatePo(pr)} className="rounded-md bg-blue-700 px-3 py-1.5 font-medium text-white disabled:opacity-60">{busyKey === `pr-${pr.id}` ? 'Memuat…' : 'Buat Permintaan'}</button>}
                 </span>
               </td>
             </tr>

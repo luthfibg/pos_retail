@@ -18,10 +18,10 @@ export type FlowStage = 'pr_review' | 'po_prepare' | 'po_send';
 /** `'archive'` = di luar papan (status akhir/keluar alur); dipakai pelacak tahap dan pemberitahuan perpindahan. */
 export type FlowTab = FlowStage | 'archive';
 
-export const FLOW_STAGES: ReadonlyArray<{ key: FlowStage; label: string; hint: string }> = [
-  { key: 'pr_review', label: 'Permintaan Pembelian', hint: 'Finance memeriksa Permintaan. Setelah lolos, Permintaan siap disiapkan menjadi PO.' },
-  { key: 'po_prepare', label: 'Buat Pemesanan', hint: 'Pilih supplier, jumlah, rekening, lalu otorisasi Owner satu kali untuk langsung membuat PO.' },
-  { key: 'po_send', label: 'Cetak Dokumen', hint: 'Cetak PO terlebih dahulu. Setelah dialog cetak ditutup, konfirmasikan pengiriman ke supplier. Penerimaan barang tetap dicatat setelah PO dikirim.' },
+export const FLOW_STAGES: ReadonlyArray<{ key: FlowStage; label: string }> = [
+  { key: 'pr_review', label: 'Permintaan Pembelian' },
+  { key: 'po_prepare', label: 'Buat Pemesanan' },
+  { key: 'po_send', label: 'Cetak Dokumen' },
 ];
 
 const PR_STAGE: Partial<Record<PurchaseRequisitionStatus, FlowStage>> = {

@@ -154,6 +154,8 @@ Lihat `FRONTEND_REQUESTS.md`. **FR-01** pratinjau penjualan sudah diintegrasikan
 
 ## Riwayat
 
+- **2026-11-05** — Placeholder saat daftar Permintaan atau PO kosong dipertahankan/dikembalikan; yang dihapus hanya hint dan teks deskriptif papan.
+- **2026-11-05** — Hint/deskripsi pada tab papan Permintaan Pembelian dan keterangan batas 100 dokumen dihapus. Placeholder daftar kosong tetap ditampilkan.
 - **2026-11-05** — Kartu **Saldo Kas Pembelian** di header papan pembelian dihapus sesuai permintaan; komponen `PurchaseFundBalance` yang tak lagi digunakan juga dihapus. Ringkasan dana dan alokasi tetap dipakai pada dialog pembuatan/pengelolaan PO.
 - **2026-11-05** — Menu **Penerimaan Barang** dan **Retur Supplier** dipindahkan dari dropdown **Pembelian** ke dropdown **Inventory**, tanpa mengubah permission maupun route. Ekspektasi sidebar per role dan tes navigasi diperbarui.
 - **2026-11-05** — Label status PO `received` diubah dari **Diterima lengkap** menjadi **Sukses**. Pada detail PO, status Sukses kini memakai teks hijau; badge status di tabel sudah memakai warna hijau.
