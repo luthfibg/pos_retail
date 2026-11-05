@@ -8,7 +8,7 @@ import type { PurchaseOrder, PurchaseOrderSummary, PurchaseRequisition, Purchase
 import { formatDate, formatDateTime, formatRupiah } from '@/lib/format';
 import { ORDER_STATUS_LABEL, PurchaseOrderCreateDialog, PurchaseOrderManageDialog } from './PurchaseOrderDialogs';
 import { PurchasePrintSheet, type PrintJob } from './PurchasePrint';
-import { PurchaseFundPanel } from './PurchaseFundPanel';
+import { PurchaseFundBalance } from './PurchaseFundBalance';
 import {
   PurchaseRequisitionDetailDialog,
   PurchaseRequisitionForm,
@@ -16,7 +16,6 @@ import {
   STATUS_LABEL,
 } from './PurchaseRequisitionsPage';
 import {
-  ARCHIVE_TAB,
   FLOW_STAGES,
   buildBoard,
   isPoPrintable,
@@ -52,7 +51,6 @@ export function PurchasingEntryPage() {
 export function PurchaseBoardPage() {
   const { can, me } = useAuth();
   const canCreatePr = can('purchase_requisition.create');
-  const canCreateManualPr = can('settings.manage') || can('purchase_order.create');
   const canFinanceCheck = can('purchase_requisition.finance_check');
   const canApprove = can('purchase_requisition.approve');
   const canCreatePo = can('purchase_order.create');
@@ -60,7 +58,7 @@ export function PurchaseBoardPage() {
   const canViewPurchaseFund = can('purchase_fund.view') || can('purchase_fund.allocate');
   const canManagePo = canCreatePo || canSendPo || canApprove || canViewPurchaseFund;
 
-  const [tab, setTab] = useState<FlowTab>('pr_review');
+  const [tab, setTab] = useState<FlowStage>('pr_review');
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -187,7 +185,7 @@ export function PurchaseBoardPage() {
     await printPo(await purchaseOrderApi.get(id));
   });
 
-  function openTab(next: FlowTab, target?: { kind: 'pr' | 'po'; id: number }) {
+  function openTab(next: FlowStage, target?: { kind: 'pr' | 'po'; id: number }) {
     setTab(next);
     setNotice(null);
     setHighlight(target ?? null);
@@ -198,8 +196,7 @@ export function PurchaseBoardPage() {
     po_prepare: canCreatePo && can('purchase_fund.allocate'),
     po_send: canSendPo,
   };
-  const activeStage = FLOW_STAGES.find((stage) => stage.key === tab);
-  const hint = tab === 'archive' ? ARCHIVE_TAB.hint : activeStage?.hint ?? '';
+  const hint = FLOW_STAGES.find((stage) => stage.key === tab)?.hint ?? '';
   const truncated = (prs.data?.total ?? 0) > (prs.data?.data.length ?? 0) || (pos.data?.total ?? 0) > (pos.data?.data.length ?? 0);
 
   return (
@@ -212,7 +209,8 @@ export function PurchaseBoardPage() {
               Proses pembelian dalam tiga tahap: periksa Permintaan, siapkan dan setujui PO sekali, lalu cetak dan konfirmasi pengiriman.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canViewPurchaseFund && <PurchaseFundBalance />}
             <input
               className={`${inputCls} w-64`}
               placeholder="Cari nomor, pemohon, atau supplier"
@@ -220,11 +218,8 @@ export function PurchaseBoardPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            {canCreateManualPr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat Permintaan</button>}
           </div>
         </header>
-
-        {canViewPurchaseFund && <PurchaseFundPanel />}
 
         <div role="tablist" aria-label="Tahap pembelian" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
           {visibleStages.map((stage, index) => {
@@ -245,23 +240,15 @@ export function PurchaseBoardPage() {
               </button>
             );
           })}
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'archive'}
-            onClick={() => openTab('archive')}
-            className={`flex items-center gap-2 border-b-2 border-l border-l-slate-200 px-4 py-3 text-sm ${tab === 'archive' ? 'border-b-slate-900 bg-slate-50 font-semibold' : 'border-b-transparent text-slate-500 hover:bg-slate-50'}`}
-          >
-            {ARCHIVE_TAB.label}
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs tabular-nums text-slate-600">{tabCount(board, 'archive')}</span>
-          </button>
         </div>
 
         {notice && (
           <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            <span><strong className="font-mono">{notice.doc}</strong> sekarang berstatus “{notice.statusText}” dan pindah ke tab <strong>{tabLabel(notice.tab)}</strong>.</span>
+            {notice.tab === 'archive'
+              ? <span><strong className="font-mono">{notice.doc}</strong> sekarang berstatus “{notice.statusText}” dan tidak lagi tampil di papan pembelian.</span>
+              : <span><strong className="font-mono">{notice.doc}</strong> sekarang berstatus “{notice.statusText}” dan pindah ke tab <strong>{tabLabel(notice.tab)}</strong>.</span>}
             <span className="flex gap-2">
-              <button type="button" onClick={() => openTab(notice.tab, { kind: notice.kind, id: notice.id })} className="rounded-md bg-emerald-800 px-3 py-1.5 font-medium text-white">Buka tab</button>
+              {notice.tab !== 'archive' && <button type="button" onClick={() => openTab(notice.tab as FlowStage, { kind: notice.kind, id: notice.id })} className="rounded-md bg-emerald-800 px-3 py-1.5 font-medium text-white">Buka tab</button>}
               <button type="button" onClick={() => setNotice(null)} className="rounded-md border border-emerald-300 px-3 py-1.5">Tutup</button>
             </span>
           </div>
@@ -330,19 +317,6 @@ export function PurchaseBoardPage() {
             />
           )}
 
-          {tab === 'archive' && (
-            <div className="space-y-5">
-              <div>
-                <h2 className="mb-2 text-sm font-semibold">Permintaan ({board.archivePr.length})</h2>
-                <PrTable rows={board.archivePr} stage="archive" highlightId={highlight?.kind === 'pr' ? highlight.id : null} busyKey={busyKey} canAct={() => false} canCreatePo={false} onOpen={openPr} onCreatePo={() => undefined} onPrint={(pr) => void printPrById(pr.id)} />
-              </div>
-              {canManagePo && <div>
-                <h2 className="mb-2 text-sm font-semibold">PO dibatalkan ({board.archivePo.length})</h2>
-                <PoTable rows={board.archivePo} stage="archive" highlightId={highlight?.kind === 'po' ? highlight.id : null} busyKey={busyKey} canAct={false} onOpen={openPo} onPrint={(po) => void printPoById(po.id)} />
-              </div>}
-            </div>
-          )}
-
           {truncated && <p className="text-xs text-slate-500">Papan menampilkan 100 dokumen terbaru per jenis. Dokumen yang lebih lama tidak muncul di sini.</p>}
         </section>
 
@@ -401,16 +375,15 @@ function Empty({ text }: { text: string }) {
   return <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">{text}</p>;
 }
 
-const REQUEST_EMPTY: Record<FlowTab, string> = {
+const REQUEST_EMPTY: Record<FlowStage, string> = {
   pr_review: 'Tidak ada Permintaan baru yang menunggu pemeriksaan Finance.',
   po_prepare: 'Tidak ada Permintaan siap PO atau PO yang menunggu persiapan/persetujuan.',
   po_send: 'Belum ada PO yang menunggu dicetak/dikirim atau sedang diterima.',
-  archive: 'Belum ada Permintaan di riwayat.',
 };
 
 function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpen, onCreatePo, onPrint }: {
   rows: PurchaseRequisitionSummary[];
-  stage: FlowTab;
+  stage: FlowStage;
   highlightId: number | null;
   busyKey: string | null;
   canAct: (pr: PurchaseRequisitionSummary) => boolean;
@@ -430,7 +403,6 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
             <th className="px-3 py-2">Alasan</th>
             <th className="px-3 py-2 text-right">Barang</th>
             <th className="px-3 py-2 text-right">Estimasi</th>
-            {stage === 'archive' && <th className="px-3 py-2">Status</th>}
             <th className="px-3 py-2">Diajukan</th>
             <th className="px-3 py-2" />
           </tr>
@@ -446,7 +418,6 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
               <td className="max-w-xs truncate px-3 py-2">{pr.reason || '—'}</td>
               <td className="px-3 py-2 text-right tabular-nums">{pr.items_count}</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(pr.est_total)}</td>
-              {stage === 'archive' && <td className="px-3 py-2"><StatusChip text={STATUS_LABEL[pr.status]} tone={pr.status === 'rejected' || pr.status === 'cancelled' ? 'red' : pr.status === 'converted' ? 'green' : 'slate'} /></td>}
               <td className="px-3 py-2">{formatDateTime(pr.submitted_at)}</td>
               <td className="whitespace-nowrap px-3 py-2 text-right">
                 <span className="inline-flex items-center gap-3">
@@ -466,7 +437,7 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
 
 function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }: {
   rows: PurchaseOrderSummary[];
-  stage: FlowTab;
+  stage: FlowStage;
   highlightId: number | null;
   busyKey: string | null;
   canAct: boolean;
@@ -474,7 +445,7 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
   onPrint: (po: PurchaseOrderSummary) => void;
 }) {
   if (rows.length === 0) {
-    return <Empty text={stage === 'po_prepare' ? 'Tidak ada PO yang menunggu persiapan atau persetujuan.' : stage === 'po_send' ? 'Belum ada PO yang menunggu dikirim ke supplier.' : 'Tidak ada PO dibatalkan.'} />;
+    return <Empty text={stage === 'po_prepare' ? 'Tidak ada PO yang menunggu persiapan atau persetujuan.' : 'Belum ada PO yang menunggu dikirim ke supplier.'} />;
   }
   return (
     <div className="overflow-x-auto">
@@ -485,7 +456,7 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
             <th className="px-3 py-2">Dari Permintaan</th>
             <th className="px-3 py-2">Supplier</th>
             <th className="px-3 py-2">Tanggal PO</th>
-            <th className="px-3 py-2">Perkiraan tiba</th>
+            <th className="px-3 py-2">Permintaan tiba</th>
             <th className="px-3 py-2 text-right">Total</th>
             <th className="px-3 py-2">Status</th>
             {stage === 'po_send' && <th className="px-3 py-2">Penerimaan</th>}
@@ -501,7 +472,7 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
               <td className="px-3 py-2">{formatDate(po.order_date)}</td>
               <td className="px-3 py-2">{formatDate(po.expected_date)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(po.total)}</td>
-              <td className="px-3 py-2"><StatusChip text={ORDER_STATUS_LABEL[po.status]} tone={po.status === 'pending_confirmation' ? 'amber' : po.status === 'cancelled' ? 'red' : po.status === 'received' ? 'green' : 'slate'} /></td>
+              <td className="px-3 py-2"><StatusChip text={ORDER_STATUS_LABEL[po.status]} tone={po.status === 'pending_confirmation' ? 'amber' : po.status === 'received' ? 'green' : 'slate'} /></td>
               {stage === 'po_send' && <td className="px-3 py-2">{RECEIPT_LABEL[po.receipt_status]}</td>}
               <td className="whitespace-nowrap px-3 py-2 text-right">
                 <span className="inline-flex items-center gap-3">

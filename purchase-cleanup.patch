@@ -1,0 +1,525 @@
+diff --git a/docs/FRONTEND_PROGRESS.md b/docs/FRONTEND_PROGRESS.md
+index ee19791..1d9d2d6 100644
+--- a/docs/FRONTEND_PROGRESS.md
++++ b/docs/FRONTEND_PROGRESS.md
+@@ -154,6 +154,7 @@ Lihat `FRONTEND_REQUESTS.md`. **FR-01** pratinjau penjualan sudah diintegrasikan
+ 
+ ## Riwayat
+ 
++- **2026-11-05** — Penyederhanaan papan pembelian: tab "Riwayat" (Permintaan keluar alur + PO dibatalkan) dihapus; panel "Kas Pembelian & rekening bank" dihapus beserta form "Tambah rekening bank", tabel rekening (saldo tercatat/dicadangkan/tersedia), form "Sesuaikan saldo", dan box "Dialokasikan ke PO aktif". Yang tersisa hanya kartu kecil "Saldo Kas Pembelian" di header (`PurchaseFundBalance.tsx`, menggantikan `PurchaseFundPanel.tsx`). `buildBoard` tidak lagi menyimpan `archivePr`/`archivePo`; status `'archive'` kini hanya penanda "di luar papan" untuk pelacak tahap dan pemberitahuan perpindahan (tanpa tombol Buka tab). Tidak ada data atau skema backend yang berubah. PERHATIAN: PO tetap mewajibkan `bank_account_id` dengan saldo tersedia cukup (`StorePurchaseOrderRequest`), sedangkan satu-satunya UI untuk menambah rekening (`POST /api/bank-accounts`) dan menyesuaikan saldo (`POST /api/bank-accounts/{id}/adjustments`) kini tidak ada; wrapper `purchaseFundApi.createBankAccount/adjustBankAccount` dibiarkan (belum terpakai). Dua teks di dialog PO yang menyuruh menambah/menyesuaikan rekening dinetralkan. Typecheck penuh dan uji klik belum dijalankan.
+ - **2026-11-04** — Alur PR–PO diringkas: Finance meloloskan PR langsung ke tahap siapkan PO; pemilihan supplier, item, rekening, dan autentikasi Owner digabung saat PO langsung dibuat approved. Papan pembelian menampilkan tiga tahap, dan PO harus dibuka melalui cetak sebelum tombol konfirmasi terkirim aktif. Backend mengalokasikan rekening dan membuat PO atomik; endpoint draft/konfirmasi lama dipertahankan untuk dokumen lama. Typecheck, 8 tes alur purchasing, dan production build lulus; suite penuh 221 lulus/222, satu kegagalan ekspektasi urutan grup navigasi lama di `nav.test.ts` (tidak terkait). Uji klik menunggu.
+ - **2026-11-04** — Catatan stok dan ambang pada detail/cetakan PR otomatis kini memakai formatter kuantitas, sehingga `3.000` dan `5.000` tampil `3` dan `5`. Catatan manual tetap tidak berubah. Typecheck dan 8 tes purchasing terkait lulus.
+ - **2026-11-04** — Input kuantitas di Kasir, master Produk (batas stok), stok awal, transfer, dan penyesuaian stok memakai formatter desimal lokal agar nilai seperti `3.000` tampil `3` dan pecahan tetap dapat dimasukkan. Nilai yang dikirim ke API tetap desimal kanonis. Typecheck, 63 tes terarah, dan build produksi lulus. Suite penuh 220/221; satu kegagalan ekspektasi urutan menu di `nav.test.ts`, tidak terkait perubahan kuantitas.
+diff --git a/frontend/src/features/purchasing/PurchaseBoardPage.tsx b/frontend/src/features/purchasing/PurchaseBoardPage.tsx
+index 8b36700..62839bf 100644
+--- a/frontend/src/features/purchasing/PurchaseBoardPage.tsx
++++ b/frontend/src/features/purchasing/PurchaseBoardPage.tsx
+@@ -8,7 +8,7 @@ import type { PurchaseOrder, PurchaseOrderSummary, PurchaseRequisition, Purchase
+ import { formatDate, formatDateTime, formatRupiah } from '@/lib/format';
+ import { ORDER_STATUS_LABEL, PurchaseOrderCreateDialog, PurchaseOrderManageDialog } from './PurchaseOrderDialogs';
+ import { PurchasePrintSheet, type PrintJob } from './PurchasePrint';
+-import { PurchaseFundPanel } from './PurchaseFundPanel';
++import { PurchaseFundBalance } from './PurchaseFundBalance';
+ import {
+   PurchaseRequisitionDetailDialog,
+   PurchaseRequisitionForm,
+@@ -16,7 +16,6 @@ import {
+   STATUS_LABEL,
+ } from './PurchaseRequisitionsPage';
+ import {
+-  ARCHIVE_TAB,
+   FLOW_STAGES,
+   buildBoard,
+   isPoPrintable,
+@@ -60,7 +59,7 @@ export function PurchaseBoardPage() {
+   const canViewPurchaseFund = can('purchase_fund.view') || can('purchase_fund.allocate');
+   const canManagePo = canCreatePo || canSendPo || canApprove || canViewPurchaseFund;
+ 
+-  const [tab, setTab] = useState<FlowTab>('pr_review');
++  const [tab, setTab] = useState<FlowStage>('pr_review');
+   const [search, setSearch] = useState('');
+   const [createOpen, setCreateOpen] = useState(false);
+   const [selectedId, setSelectedId] = useState<number | null>(null);
+@@ -187,7 +186,7 @@ export function PurchaseBoardPage() {
+     await printPo(await purchaseOrderApi.get(id));
+   });
+ 
+-  function openTab(next: FlowTab, target?: { kind: 'pr' | 'po'; id: number }) {
++  function openTab(next: FlowStage, target?: { kind: 'pr' | 'po'; id: number }) {
+     setTab(next);
+     setNotice(null);
+     setHighlight(target ?? null);
+@@ -198,8 +197,7 @@ export function PurchaseBoardPage() {
+     po_prepare: canCreatePo && can('purchase_fund.allocate'),
+     po_send: canSendPo,
+   };
+-  const activeStage = FLOW_STAGES.find((stage) => stage.key === tab);
+-  const hint = tab === 'archive' ? ARCHIVE_TAB.hint : activeStage?.hint ?? '';
++  const hint = FLOW_STAGES.find((stage) => stage.key === tab)?.hint ?? '';
+   const truncated = (prs.data?.total ?? 0) > (prs.data?.data.length ?? 0) || (pos.data?.total ?? 0) > (pos.data?.data.length ?? 0);
+ 
+   return (
+@@ -212,7 +210,8 @@ export function PurchaseBoardPage() {
+               Proses pembelian dalam tiga tahap: periksa Permintaan, siapkan dan setujui PO sekali, lalu cetak dan konfirmasi pengiriman.
+             </p>
+           </div>
+-          <div className="flex items-center gap-2">
++          <div className="flex flex-wrap items-center gap-2">
++            {canViewPurchaseFund && <PurchaseFundBalance />}
+             <input
+               className={`${inputCls} w-64`}
+               placeholder="Cari nomor, pemohon, atau supplier"
+@@ -224,8 +223,6 @@ export function PurchaseBoardPage() {
+           </div>
+         </header>
+ 
+-        {canViewPurchaseFund && <PurchaseFundPanel />}
+-
+         <div role="tablist" aria-label="Tahap pembelian" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
+           {visibleStages.map((stage, index) => {
+             const count = tabCount(board, stage.key);
+@@ -245,23 +242,15 @@ export function PurchaseBoardPage() {
+               </button>
+             );
+           })}
+-          <button
+-            type="button"
+-            role="tab"
+-            aria-selected={tab === 'archive'}
+-            onClick={() => openTab('archive')}
+-            className={`flex items-center gap-2 border-b-2 border-l border-l-slate-200 px-4 py-3 text-sm ${tab === 'archive' ? 'border-b-slate-900 bg-slate-50 font-semibold' : 'border-b-transparent text-slate-500 hover:bg-slate-50'}`}
+-          >
+-            {ARCHIVE_TAB.label}
+-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs tabular-nums text-slate-600">{tabCount(board, 'archive')}</span>
+-          </button>
+         </div>
+ 
+         {notice && (
+           <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+-            <span><strong className="font-mono">{notice.doc}</strong> sekarang berstatus “{notice.statusText}” dan pindah ke tab <strong>{tabLabel(notice.tab)}</strong>.</span>
++            {notice.tab === 'archive'
++              ? <span><strong className="font-mono">{notice.doc}</strong> sekarang berstatus “{notice.statusText}” dan tidak lagi tampil di papan pembelian.</span>
++              : <span><strong className="font-mono">{notice.doc}</strong> sekarang berstatus “{notice.statusText}” dan pindah ke tab <strong>{tabLabel(notice.tab)}</strong>.</span>}
+             <span className="flex gap-2">
+-              <button type="button" onClick={() => openTab(notice.tab, { kind: notice.kind, id: notice.id })} className="rounded-md bg-emerald-800 px-3 py-1.5 font-medium text-white">Buka tab</button>
++              {notice.tab !== 'archive' && <button type="button" onClick={() => openTab(notice.tab as FlowStage, { kind: notice.kind, id: notice.id })} className="rounded-md bg-emerald-800 px-3 py-1.5 font-medium text-white">Buka tab</button>}
+               <button type="button" onClick={() => setNotice(null)} className="rounded-md border border-emerald-300 px-3 py-1.5">Tutup</button>
+             </span>
+           </div>
+@@ -330,19 +319,6 @@ export function PurchaseBoardPage() {
+             />
+           )}
+ 
+-          {tab === 'archive' && (
+-            <div className="space-y-5">
+-              <div>
+-                <h2 className="mb-2 text-sm font-semibold">Permintaan ({board.archivePr.length})</h2>
+-                <PrTable rows={board.archivePr} stage="archive" highlightId={highlight?.kind === 'pr' ? highlight.id : null} busyKey={busyKey} canAct={() => false} canCreatePo={false} onOpen={openPr} onCreatePo={() => undefined} onPrint={(pr) => void printPrById(pr.id)} />
+-              </div>
+-              {canManagePo && <div>
+-                <h2 className="mb-2 text-sm font-semibold">PO dibatalkan ({board.archivePo.length})</h2>
+-                <PoTable rows={board.archivePo} stage="archive" highlightId={highlight?.kind === 'po' ? highlight.id : null} busyKey={busyKey} canAct={false} onOpen={openPo} onPrint={(po) => void printPoById(po.id)} />
+-              </div>}
+-            </div>
+-          )}
+-
+           {truncated && <p className="text-xs text-slate-500">Papan menampilkan 100 dokumen terbaru per jenis. Dokumen yang lebih lama tidak muncul di sini.</p>}
+         </section>
+ 
+@@ -401,16 +377,15 @@ function Empty({ text }: { text: string }) {
+   return <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">{text}</p>;
+ }
+ 
+-const REQUEST_EMPTY: Record<FlowTab, string> = {
++const REQUEST_EMPTY: Record<FlowStage, string> = {
+   pr_review: 'Tidak ada Permintaan baru yang menunggu pemeriksaan Finance.',
+   po_prepare: 'Tidak ada Permintaan siap PO atau PO yang menunggu persiapan/persetujuan.',
+   po_send: 'Belum ada PO yang menunggu dicetak/dikirim atau sedang diterima.',
+-  archive: 'Belum ada Permintaan di riwayat.',
+ };
+ 
+ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpen, onCreatePo, onPrint }: {
+   rows: PurchaseRequisitionSummary[];
+-  stage: FlowTab;
++  stage: FlowStage;
+   highlightId: number | null;
+   busyKey: string | null;
+   canAct: (pr: PurchaseRequisitionSummary) => boolean;
+@@ -430,7 +405,6 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
+             <th className="px-3 py-2">Alasan</th>
+             <th className="px-3 py-2 text-right">Barang</th>
+             <th className="px-3 py-2 text-right">Estimasi</th>
+-            {stage === 'archive' && <th className="px-3 py-2">Status</th>}
+             <th className="px-3 py-2">Diajukan</th>
+             <th className="px-3 py-2" />
+           </tr>
+@@ -446,7 +420,6 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
+               <td className="max-w-xs truncate px-3 py-2">{pr.reason || '—'}</td>
+               <td className="px-3 py-2 text-right tabular-nums">{pr.items_count}</td>
+               <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(pr.est_total)}</td>
+-              {stage === 'archive' && <td className="px-3 py-2"><StatusChip text={STATUS_LABEL[pr.status]} tone={pr.status === 'rejected' || pr.status === 'cancelled' ? 'red' : pr.status === 'converted' ? 'green' : 'slate'} /></td>}
+               <td className="px-3 py-2">{formatDateTime(pr.submitted_at)}</td>
+               <td className="whitespace-nowrap px-3 py-2 text-right">
+                 <span className="inline-flex items-center gap-3">
+@@ -466,7 +439,7 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
+ 
+ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }: {
+   rows: PurchaseOrderSummary[];
+-  stage: FlowTab;
++  stage: FlowStage;
+   highlightId: number | null;
+   busyKey: string | null;
+   canAct: boolean;
+@@ -474,7 +447,7 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
+   onPrint: (po: PurchaseOrderSummary) => void;
+ }) {
+   if (rows.length === 0) {
+-    return <Empty text={stage === 'po_prepare' ? 'Tidak ada PO yang menunggu persiapan atau persetujuan.' : stage === 'po_send' ? 'Belum ada PO yang menunggu dikirim ke supplier.' : 'Tidak ada PO dibatalkan.'} />;
++    return <Empty text={stage === 'po_prepare' ? 'Tidak ada PO yang menunggu persiapan atau persetujuan.' : 'Belum ada PO yang menunggu dikirim ke supplier.'} />;
+   }
+   return (
+     <div className="overflow-x-auto">
+@@ -501,7 +474,7 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
+               <td className="px-3 py-2">{formatDate(po.order_date)}</td>
+               <td className="px-3 py-2">{formatDate(po.expected_date)}</td>
+               <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(po.total)}</td>
+-              <td className="px-3 py-2"><StatusChip text={ORDER_STATUS_LABEL[po.status]} tone={po.status === 'pending_confirmation' ? 'amber' : po.status === 'cancelled' ? 'red' : po.status === 'received' ? 'green' : 'slate'} /></td>
++              <td className="px-3 py-2"><StatusChip text={ORDER_STATUS_LABEL[po.status]} tone={po.status === 'pending_confirmation' ? 'amber' : po.status === 'received' ? 'green' : 'slate'} /></td>
+               {stage === 'po_send' && <td className="px-3 py-2">{RECEIPT_LABEL[po.receipt_status]}</td>}
+               <td className="whitespace-nowrap px-3 py-2 text-right">
+                 <span className="inline-flex items-center gap-3">
+diff --git a/frontend/src/features/purchasing/PurchaseFundBalance.tsx b/frontend/src/features/purchasing/PurchaseFundBalance.tsx
+new file mode 100644
+index 0000000..2437e60
+--- /dev/null
++++ b/frontend/src/features/purchasing/PurchaseFundBalance.tsx
+@@ -0,0 +1,28 @@
++import { useQuery } from '@tanstack/react-query';
++import { useAuth } from '@/features/auth/AuthProvider';
++import { purchaseFundApi } from '@/lib/api/endpoints';
++import { formatRupiah } from '@/lib/format';
++
++/**
++ * Saldo Kas Pembelian ringkas untuk header papan pembelian.
++ * Rincian rekening bank, penyesuaian saldo, dan total alokasi PO tidak ditampilkan di sini.
++ */
++export function PurchaseFundBalance() {
++  const { can } = useAuth();
++  const summary = useQuery({
++    queryKey: ['purchase-fund'],
++    queryFn: purchaseFundApi.summary,
++    enabled: can('purchase_fund.view') || can('purchase_fund.allocate'),
++  });
++
++  return (
++    <div className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-right" aria-live="polite">
++      <div className="text-xs text-slate-500">Saldo Kas Pembelian</div>
++      {summary.isError ? (
++        <div className="max-w-56 text-xs text-red-700">{summary.error instanceof Error ? summary.error.message : 'Saldo gagal dimuat.'}</div>
++      ) : (
++        <div className="font-semibold tabular-nums">{summary.data ? formatRupiah(summary.data.balance) : 'Memuat…'}</div>
++      )}
++    </div>
++  );
++}
+diff --git a/frontend/src/features/purchasing/PurchaseFundPanel.tsx b/frontend/src/features/purchasing/PurchaseFundPanel.tsx
+deleted file mode 100644
+index fad70df..0000000
+--- a/frontend/src/features/purchasing/PurchaseFundPanel.tsx
++++ /dev/null
+@@ -1,175 +0,0 @@
+-import { useState, type FormEvent } from 'react';
+-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+-import { ErrorNotice } from '@/components/ui/ErrorNotice';
+-import { Field, inputCls } from '@/components/ui/Field';
+-import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
+-import { purchaseFundApi } from '@/lib/api/endpoints';
+-import { formatRupiah } from '@/lib/format';
+-import { useAuth } from '@/features/auth/AuthProvider';
+-
+-const emptyAccount = {
+-  bank_name: '',
+-  account_name: '',
+-  account_number: '',
+-  opening_balance: '0',
+-  reason: '',
+-};
+-
+-export function PurchaseFundPanel() {
+-  const { can } = useAuth();
+-  const qc = useQueryClient();
+-  const [account, setAccount] = useState(emptyAccount);
+-  const [adjustment, setAdjustment] = useState({ accountId: '', direction: 'increase' as 'increase' | 'decrease', amount: '', reason: '' });
+-  const summary = useQuery({
+-    queryKey: ['purchase-fund'],
+-    queryFn: purchaseFundApi.summary,
+-    enabled: can('purchase_fund.view') || can('purchase_fund.allocate'),
+-  });
+-  const refresh = () => qc.invalidateQueries({ queryKey: ['purchase-fund'] });
+-  const create = useMutation({
+-    mutationFn: () => purchaseFundApi.createBankAccount(account),
+-    onSuccess: () => {
+-      setAccount(emptyAccount);
+-      return refresh();
+-    },
+-  });
+-  const adjust = useMutation({
+-    mutationFn: () => purchaseFundApi.adjustBankAccount(Number(adjustment.accountId), {
+-      direction: adjustment.direction,
+-      amount: adjustment.amount,
+-      reason: adjustment.reason,
+-    }),
+-    onSuccess: () => {
+-      setAdjustment({ accountId: '', direction: 'increase', amount: '', reason: '' });
+-      return refresh();
+-    },
+-  });
+-
+-  function submitAccount(event: FormEvent) {
+-    event.preventDefault();
+-    create.mutate();
+-  }
+-
+-  function submitAdjustment(event: FormEvent) {
+-    event.preventDefault();
+-    adjust.mutate();
+-  }
+-
+-  return (
+-    <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+-      <div>
+-        <h2 className="font-semibold">Kas Pembelian & rekening bank</h2>
+-        <p className="mt-1 text-xs text-slate-600">
+-          Saldo rekening dicatat manual. Alokasi hanya mencadangkan dana di sistem dan bukan transfer bank.
+-        </p>
+-      </div>
+-      <ErrorNotice error={summary.error ?? create.error ?? adjust.error} />
+-      {summary.isLoading ? <p className="text-sm text-slate-500">Memuat saldo…</p> : summary.data && (
+-        <>
+-          <div className="grid gap-3 sm:grid-cols-2">
+-            <div className="rounded-md bg-slate-50 p-3">
+-              <div className="text-xs text-slate-500">Saldo Kas Pembelian</div>
+-              <div className="mt-1 font-semibold tabular-nums">{formatRupiah(summary.data.balance)}</div>
+-            </div>
+-            <div className="rounded-md bg-slate-50 p-3">
+-              <div className="text-xs text-slate-500">Dialokasikan ke PO aktif</div>
+-              <div className="mt-1 font-semibold tabular-nums">{formatRupiah(summary.data.reserved_total)}</div>
+-            </div>
+-          </div>
+-          <div className="overflow-x-auto rounded-md border border-slate-200">
+-            <table className="w-full min-w-[620px] text-left text-sm">
+-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+-                <tr>
+-                  <th className="px-3 py-2">Rekening</th>
+-                  <th className="px-3 py-2 text-right">Saldo tercatat</th>
+-                  <th className="px-3 py-2 text-right">Dicadangkan</th>
+-                  <th className="px-3 py-2 text-right">Tersedia untuk alokasi</th>
+-                  {can('bank_account.manage') && <th className="px-3 py-2">Penyesuaian</th>}
+-                </tr>
+-              </thead>
+-              <tbody className="divide-y divide-slate-100">
+-                {summary.data.bank_accounts.map((item) => (
+-                  <tr key={item.id}>
+-                    <td className="px-3 py-2">
+-                      <div className="font-medium">{item.bank_name} · {item.account_name}</div>
+-                      <div className="text-xs text-slate-500">{item.account_number_masked}{item.is_active ? '' : ' · Nonaktif'}</div>
+-                    </td>
+-                    <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(item.balance)}</td>
+-                    <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(item.reserved_for_purchase_fund)}</td>
+-                    <td className="px-3 py-2 text-right font-medium tabular-nums">{formatRupiah(item.available_balance)}</td>
+-                    {can('bank_account.manage') && (
+-                      <td className="px-3 py-2">
+-                        {item.is_active && <button
+-                          type="button"
+-                          className="text-xs font-medium text-blue-700 underline"
+-                          onClick={() => setAdjustment((current) => ({ ...current, accountId: String(item.id) }))}
+-                        >
+-                          Sesuaikan saldo
+-                        </button>}
+-                      </td>
+-                    )}
+-                  </tr>
+-                ))}
+-                {summary.data.bank_accounts.length === 0 && (
+-                  <tr><td className="px-3 py-4 text-center text-slate-500" colSpan={can('bank_account.manage') ? 5 : 4}>Belum ada rekening bank.</td></tr>
+-                )}
+-              </tbody>
+-            </table>
+-          </div>
+-          {adjustment.accountId && can('bank_account.manage') && (
+-            <form className="grid gap-3 rounded-md border border-slate-200 p-3 sm:grid-cols-2" onSubmit={submitAdjustment}>
+-              <div className="sm:col-span-2 text-sm font-medium">
+-                Penyesuaian manual · {summary.data.bank_accounts.find((item) => String(item.id) === adjustment.accountId)?.bank_name}
+-              </div>
+-              <Field label="Jenis penyesuaian">
+-                <select className={inputCls} value={adjustment.direction} onChange={(event) => setAdjustment({ ...adjustment, direction: event.target.value as 'increase' | 'decrease' })}>
+-                  <option value="increase">Tambah saldo</option>
+-                  <option value="decrease">Kurangi saldo</option>
+-                </select>
+-              </Field>
+-              <Field label="Jumlah">
+-                <LocalDecimalInput className={inputCls} kind="price" required value={adjustment.amount} onChange={(amount) => setAdjustment({ ...adjustment, amount })} />
+-              </Field>
+-              <Field label="Alasan" >
+-                <input className={inputCls} required maxLength={255} value={adjustment.reason} onChange={(event) => setAdjustment({ ...adjustment, reason: event.target.value })} />
+-              </Field>
+-              <div className="flex items-end gap-2">
+-                <button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={adjust.isPending} onClick={() => setAdjustment({ accountId: '', direction: 'increase', amount: '', reason: '' })}>Batal</button>
+-                <button type="submit" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={adjust.isPending}>
+-                  {adjust.isPending ? 'Menyimpan…' : 'Simpan penyesuaian'}
+-                </button>
+-              </div>
+-            </form>
+-          )}
+-          {can('bank_account.manage') && (
+-            <details className="rounded-md border border-slate-200 p-3">
+-              <summary className="cursor-pointer text-sm font-medium">Tambah rekening bank</summary>
+-              <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={submitAccount}>
+-                <Field label="Nama bank">
+-                  <input className={inputCls} required maxLength={100} value={account.bank_name} onChange={(event) => setAccount({ ...account, bank_name: event.target.value })} />
+-                </Field>
+-                <Field label="Nama pemilik rekening">
+-                  <input className={inputCls} required maxLength={150} value={account.account_name} onChange={(event) => setAccount({ ...account, account_name: event.target.value })} />
+-                </Field>
+-                <Field label="Nomor rekening">
+-                  <input className={inputCls} required maxLength={60} value={account.account_number} onChange={(event) => setAccount({ ...account, account_number: event.target.value })} />
+-                </Field>
+-                <Field label="Saldo awal">
+-                  <LocalDecimalInput className={inputCls} kind="price" required value={account.opening_balance} onChange={(opening_balance) => setAccount({ ...account, opening_balance })} />
+-                </Field>
+-                <Field label="Alasan pencatatan saldo awal">
+-                  <input className={inputCls} required maxLength={255} value={account.reason} onChange={(event) => setAccount({ ...account, reason: event.target.value })} />
+-                </Field>
+-                <div className="sm:col-span-2">
+-                  <button type="submit" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={create.isPending}>
+-                    {create.isPending ? 'Menyimpan…' : 'Simpan rekening'}
+-                  </button>
+-                </div>
+-              </form>
+-            </details>
+-          )}
+-        </>
+-      )}
+-    </section>
+-  );
+-}
+diff --git a/frontend/src/features/purchasing/PurchaseOrderDialogs.tsx b/frontend/src/features/purchasing/PurchaseOrderDialogs.tsx
+index 6d44a39..da2f6fb 100644
+--- a/frontend/src/features/purchasing/PurchaseOrderDialogs.tsx
++++ b/frontend/src/features/purchasing/PurchaseOrderDialogs.tsx
+@@ -210,7 +210,7 @@ export function PurchaseOrderCreateDialog({
+               })}
+             </select>
+           </Field>
+-          {fund.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif. Tambahkan rekening sebelum membuat PO.</p>}
++          {fund.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif, sehingga PO belum dapat dibuat.</p>}
+           {fund.data && bankAccounts.length > 0 && !bankAccounts.some((account) => compareMoney(account.available_balance, orderTotal) !== -1) && (
+             <p className="text-xs text-amber-800">Saldo tersedia semua rekening aktif belum mencukupi total PO.</p>
+           )}
+@@ -357,7 +357,7 @@ export function PurchaseOrderManageDialog({
+           )}
+           {po.status === 'draft' && can('purchase_fund.allocate') && !po.fund_allocation
+             && fund.data?.bank_accounts.every((account) => !account.is_active || compareMoney(account.available_balance, po.total ?? '0') === -1)
+-            && <p className="text-xs text-amber-800">Tidak ada rekening aktif dengan saldo tersedia yang cukup. Minta Finance/Admin memeriksa saldo rekening atau lakukan penyesuaian manual yang diaudit.</p>}
++            && <p className="text-xs text-amber-800">Tidak ada rekening aktif dengan saldo tersedia yang cukup untuk total PO ini.</p>}
+           {po.status === 'pending_confirmation' && can('purchase_requisition.approve') && (
+             <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+               <p className="text-sm">PO memerlukan konfirmasi Owner. Masukkan kredensial pemberi persetujuan untuk autentikasi ulang.</p>
+diff --git a/frontend/src/features/purchasing/purchaseFlow.test.ts b/frontend/src/features/purchasing/purchaseFlow.test.ts
+index bbe30c1..4a506fb 100644
+--- a/frontend/src/features/purchasing/purchaseFlow.test.ts
++++ b/frontend/src/features/purchasing/purchaseFlow.test.ts
+@@ -60,7 +60,16 @@ describe('purchaseFlow', () => {
+     expect(tabCount(board, 'pr_review')).toBe(2);
+     expect(tabCount(board, 'po_prepare')).toBe(4);
+     expect(tabCount(board, 'po_send')).toBe(3);
+-    expect(tabCount(board, 'archive')).toBe(2);
++  });
++
++  it('dokumen di luar alur tidak masuk papan (tidak ada tab riwayat)', () => {
++    const board = buildBoard(
++      [pr(1, 'submitted'), pr(2, 'rejected'), pr(3, 'returned'), pr(4, 'cancelled'), pr(5, 'converted'), pr(6, 'draft')],
++      [po(1, 'approved'), po(2, 'cancelled')],
++    );
++    const shown = [...board.pr_review, ...board.pr_ready, ...board.po_prepare, ...board.po_send];
++    expect(shown.map((item) => item.doc_number)).toEqual(['PR-1', 'PO-1']);
++    expect(Object.keys(board)).toEqual(['pr_review', 'pr_ready', 'po_prepare', 'po_send']);
+   });
+ 
+   it('pelacak Permintaan converted mengikuti posisi PO-nya', () => {
+diff --git a/frontend/src/features/purchasing/purchaseFlow.ts b/frontend/src/features/purchasing/purchaseFlow.ts
+index 26e4808..903fc6e 100644
+--- a/frontend/src/features/purchasing/purchaseFlow.ts
++++ b/frontend/src/features/purchasing/purchaseFlow.ts
+@@ -10,9 +10,12 @@ import { formatQty } from '@/lib/format';
+ /**
+  * Tahap kerja pembelian, dengan status Permintaan dan PO yang berhubungan dikelompokkan bersama:
+  * Permintaan Masuk -> Siapkan & setujui PO -> Cetak & kirim PO.
++ * Dokumen yang keluar dari alur (Permintaan dikembalikan/ditolak/dibatalkan/Draft/sudah seluruhnya dipesan, PO dibatalkan)
++ * TIDAK ditampilkan di papan; tidak ada tab riwayat. Data tetap tersimpan di backend.
+  * Hanya logika murni (tanpa React) supaya mudah diuji.
+  */
+ export type FlowStage = 'pr_review' | 'po_prepare' | 'po_send';
++/** `'archive'` = di luar papan (status akhir/keluar alur); dipakai pelacak tahap dan pemberitahuan perpindahan. */
+ export type FlowTab = FlowStage | 'archive';
+ 
+ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStage; label: string; hint: string }> = [
+@@ -21,11 +24,6 @@ export const FLOW_STAGES: ReadonlyArray<{ key: FlowStage; label: string; hint: s
+   { key: 'po_send', label: 'Cetak & kirim PO', hint: 'Cetak PO terlebih dahulu. Setelah dialog cetak ditutup, konfirmasikan pengiriman ke supplier. Penerimaan barang tetap dicatat setelah PO dikirim.' },
+ ];
+ 
+-export const ARCHIVE_TAB = {
+-  label: 'Riwayat',
+-  hint: 'Permintaan yang dikembalikan, ditolak, dibatalkan, masih Draft, atau sudah seluruhnya dipesan; serta PO yang dibatalkan.',
+-} as const;
+-
+ const PR_STAGE: Partial<Record<PurchaseRequisitionStatus, FlowStage>> = {
+   submitted: 'pr_review',
+   finance_checked: 'po_prepare',
+@@ -49,12 +47,11 @@ export function poStage(status: PurchaseOrderStatus): FlowTab {
+   return PO_STAGE[status] ?? 'archive';
+ }
+ 
+-export function tabLabel(tab: FlowTab): string {
+-  if (tab === 'archive') return ARCHIVE_TAB.label;
++export function tabLabel(tab: FlowStage): string {
+   return FLOW_STAGES.find((stage) => stage.key === tab)?.label ?? tab;
+ }
+ 
+-/** Permintaan yang sudah dipesan seluruhnya (`converted`) ditampilkan di posisi PO-nya, bukan di Riwayat, pada pelacak detail. */
++/** Permintaan yang sudah dipesan seluruhnya (`converted`) ditampilkan di posisi PO-nya pada pelacak detail. */
+ export function trackerStageForPr(pr: Pick<PurchaseRequisition, 'status' | 'purchase_orders'>): FlowTab {
+   if (pr.status === 'converted') {
+     return pr.purchase_orders.some((po) => poStage(po.status) === 'po_send') ? 'po_send' : 'po_prepare';
+@@ -91,28 +88,24 @@ export interface FlowBoard {
+   pr_ready: PurchaseRequisitionSummary[];
+   po_prepare: PurchaseOrderSummary[];
+   po_send: PurchaseOrderSummary[];
+-  archivePr: PurchaseRequisitionSummary[];
+-  archivePo: PurchaseOrderSummary[];
+ }
+ 
++/** Hanya dokumen yang masih berjalan di alur; dokumen di luar alur (`'archive'`) dibuang dari papan. */
+ export function buildBoard(prs: PurchaseRequisitionSummary[], pos: PurchaseOrderSummary[]): FlowBoard {
+-  const board: FlowBoard = { pr_review: [], pr_ready: [], po_prepare: [], po_send: [], archivePr: [], archivePo: [] };
++  const board: FlowBoard = { pr_review: [], pr_ready: [], po_prepare: [], po_send: [] };
+   for (const pr of prs) {
+     const stage = prStage(pr.status);
+     if (stage === 'pr_review') board.pr_review.push(pr);
+     else if (stage === 'po_prepare') board.pr_ready.push(pr);
+-    else board.archivePr.push(pr);
+   }
+   for (const po of pos) {
+     const stage = poStage(po.status);
+     if (stage === 'po_prepare' || stage === 'po_send') board[stage].push(po);
+-    else board.archivePo.push(po);
+   }
+   return board;
+ }
+ 
+-export function tabCount(board: FlowBoard, tab: FlowTab): number {
+-  if (tab === 'archive') return board.archivePr.length + board.archivePo.length;
++export function tabCount(board: FlowBoard, tab: FlowStage): number {
+   if (tab === 'po_prepare') return board.pr_ready.length + board.po_prepare.length;
+   if (tab === 'po_send') return board.po_send.length;
+   return board[tab].length;

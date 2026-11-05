@@ -10,21 +10,19 @@ import { formatQty } from '@/lib/format';
 /**
  * Tahap kerja pembelian, dengan status Permintaan dan PO yang berhubungan dikelompokkan bersama:
  * Permintaan Masuk -> Siapkan & setujui PO -> Cetak & kirim PO.
+ * Dokumen yang keluar dari alur (Permintaan dikembalikan/ditolak/dibatalkan/Draft/sudah seluruhnya dipesan, PO dibatalkan)
+ * TIDAK ditampilkan di papan; tidak ada tab riwayat. Data tetap tersimpan di backend.
  * Hanya logika murni (tanpa React) supaya mudah diuji.
  */
 export type FlowStage = 'pr_review' | 'po_prepare' | 'po_send';
+/** `'archive'` = di luar papan (status akhir/keluar alur); dipakai pelacak tahap dan pemberitahuan perpindahan. */
 export type FlowTab = FlowStage | 'archive';
 
 export const FLOW_STAGES: ReadonlyArray<{ key: FlowStage; label: string; hint: string }> = [
-  { key: 'pr_review', label: 'Permintaan Masuk', hint: 'Finance memeriksa Permintaan. Setelah lolos, Permintaan siap disiapkan menjadi PO.' },
-  { key: 'po_prepare', label: 'Siapkan & setujui PO', hint: 'Pilih supplier, jumlah, rekening, lalu otorisasi Owner satu kali untuk langsung membuat PO.' },
-  { key: 'po_send', label: 'Cetak & kirim PO', hint: 'Cetak PO terlebih dahulu. Setelah dialog cetak ditutup, konfirmasikan pengiriman ke supplier. Penerimaan barang tetap dicatat setelah PO dikirim.' },
+  { key: 'pr_review', label: 'Permintaan Pembelian', hint: 'Finance memeriksa Permintaan. Setelah lolos, Permintaan siap disiapkan menjadi PO.' },
+  { key: 'po_prepare', label: 'Buat Pemesanan', hint: 'Pilih supplier, jumlah, rekening, lalu otorisasi Owner satu kali untuk langsung membuat PO.' },
+  { key: 'po_send', label: 'Cetak Dokumen', hint: 'Cetak PO terlebih dahulu. Setelah dialog cetak ditutup, konfirmasikan pengiriman ke supplier. Penerimaan barang tetap dicatat setelah PO dikirim.' },
 ];
-
-export const ARCHIVE_TAB = {
-  label: 'Riwayat',
-  hint: 'Permintaan yang dikembalikan, ditolak, dibatalkan, masih Draft, atau sudah seluruhnya dipesan; serta PO yang dibatalkan.',
-} as const;
 
 const PR_STAGE: Partial<Record<PurchaseRequisitionStatus, FlowStage>> = {
   submitted: 'pr_review',
@@ -49,12 +47,11 @@ export function poStage(status: PurchaseOrderStatus): FlowTab {
   return PO_STAGE[status] ?? 'archive';
 }
 
-export function tabLabel(tab: FlowTab): string {
-  if (tab === 'archive') return ARCHIVE_TAB.label;
+export function tabLabel(tab: FlowStage): string {
   return FLOW_STAGES.find((stage) => stage.key === tab)?.label ?? tab;
 }
 
-/** Permintaan yang sudah dipesan seluruhnya (`converted`) ditampilkan di posisi PO-nya, bukan di Riwayat, pada pelacak detail. */
+/** Permintaan yang sudah dipesan seluruhnya (`converted`) ditampilkan di posisi PO-nya pada pelacak detail. */
 export function trackerStageForPr(pr: Pick<PurchaseRequisition, 'status' | 'purchase_orders'>): FlowTab {
   if (pr.status === 'converted') {
     return pr.purchase_orders.some((po) => poStage(po.status) === 'po_send') ? 'po_send' : 'po_prepare';
@@ -91,28 +88,24 @@ export interface FlowBoard {
   pr_ready: PurchaseRequisitionSummary[];
   po_prepare: PurchaseOrderSummary[];
   po_send: PurchaseOrderSummary[];
-  archivePr: PurchaseRequisitionSummary[];
-  archivePo: PurchaseOrderSummary[];
 }
 
+/** Hanya dokumen yang masih berjalan di alur; dokumen di luar alur (`'archive'`) dibuang dari papan. */
 export function buildBoard(prs: PurchaseRequisitionSummary[], pos: PurchaseOrderSummary[]): FlowBoard {
-  const board: FlowBoard = { pr_review: [], pr_ready: [], po_prepare: [], po_send: [], archivePr: [], archivePo: [] };
+  const board: FlowBoard = { pr_review: [], pr_ready: [], po_prepare: [], po_send: [] };
   for (const pr of prs) {
     const stage = prStage(pr.status);
     if (stage === 'pr_review') board.pr_review.push(pr);
     else if (stage === 'po_prepare') board.pr_ready.push(pr);
-    else board.archivePr.push(pr);
   }
   for (const po of pos) {
     const stage = poStage(po.status);
     if (stage === 'po_prepare' || stage === 'po_send') board[stage].push(po);
-    else board.archivePo.push(po);
   }
   return board;
 }
 
-export function tabCount(board: FlowBoard, tab: FlowTab): number {
-  if (tab === 'archive') return board.archivePr.length + board.archivePo.length;
+export function tabCount(board: FlowBoard, tab: FlowStage): number {
   if (tab === 'po_prepare') return board.pr_ready.length + board.po_prepare.length;
   if (tab === 'po_send') return board.po_send.length;
   return board[tab].length;

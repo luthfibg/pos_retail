@@ -45,7 +45,6 @@ export function PurchaseRequisitionsPage() {
     || can('purchase_order.create')
     || can('purchase_order.send');
   const canCreatePr = can('purchase_requisition.create');
-  const canCreateManualPr = can('settings.manage') || can('purchase_order.create');
   const canManagePo = can('purchase_order.create')
     || can('purchase_order.send')
     || can('purchase_requisition.approve');
@@ -53,7 +52,6 @@ export function PurchaseRequisitionsPage() {
   const [queryText, setQueryText] = useState('');
   const [status, setStatus] = useState<PurchaseRequisitionStatus | ''>('');
   const [page, setPage] = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editId, setEditId] = useState<number | null>(null);
   const [createPoForPr, setCreatePoForPr] = useState<PurchaseRequisition | null>(null);
@@ -78,40 +76,41 @@ export function PurchaseRequisitionsPage() {
 
   return (
     <div className="space-y-5 p-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="space-y-1">
         <div>
           <h1 className="text-xl font-semibold">Permintaan Pembelian</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-600">
+          <p className="max-w-2xl text-sm text-slate-600">
             {canViewAll
               ? 'Periksa Permintaan toko, siapkan PO dengan satu otorisasi Owner, lalu pantau pengiriman hingga penerimaan.'
-              : 'Ajukan Permintaan otomatis dari pemantauan stok ke Finance. Permintaan manual dibuat oleh Admin atau Purchasing.'}
+              : 'Ajukan Permintaan otomatis dari pemantauan stok ke Finance.'}
           </p>
         </div>
-        {canCreateManualPr && <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">Buat Permintaan</button>}
       </header>
 
-      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-        <form onSubmit={applySearch} className="flex flex-wrap items-end gap-3">
+      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+        <form onSubmit={applySearch} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1fr)_minmax(14rem,1fr)_auto] lg:items-end">
           <Field label="Nomor Permintaan">
-            <input className={`${inputCls} w-56`} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="Masukkan nomor…" />
+            <input className={inputCls} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="Masukkan nomor…" />
           </Field>
           <Field label="Status">
-            <select className={`${inputCls} w-56`} value={status} onChange={(event) => { setStatus(event.target.value as PurchaseRequisitionStatus | ''); setPage(1); }}>
+            <select className={inputCls} value={status} onChange={(event) => { setStatus(event.target.value as PurchaseRequisitionStatus | ''); setPage(1); }}>
               <option value="">Semua status</option>
               {FILTER_STATUSES.map((value) => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
             </select>
           </Field>
-          <button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm">Terapkan</button>
-          {canCreatePr && (
-            <button
-              type="button"
-              onClick={() => void list.refetch()}
-              disabled={list.isFetching}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-60"
-            >
-              {list.isFetching ? 'Memuat…' : 'Perbarui daftar'}
-            </button>
-          )}
+          <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-1">
+            <button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm">Terapkan</button>
+            {canCreatePr && (
+              <button
+                type="button"
+                onClick={() => void list.refetch()}
+                disabled={list.isFetching}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-60"
+              >
+                {list.isFetching ? 'Memuat…' : 'Perbarui daftar'}
+              </button>
+            )}
+          </div>
         </form>
 
         <ErrorNotice error={list.error} />
@@ -167,7 +166,6 @@ export function PurchaseRequisitionsPage() {
         )}
       </section>
 
-      {createOpen && <PurchaseRequisitionForm onClose={() => setCreateOpen(false)} onSaved={(pr) => { setCreateOpen(false); setSelectedId(pr.id); }} />}
       {editId !== null && <PurchaseRequisitionForm prId={editId} onClose={() => setEditId(null)} onSaved={(pr) => { setEditId(null); setSelectedId(pr.id); }} />}
       {selectedId !== null && <PurchaseRequisitionDetailDialog
         prId={selectedId}

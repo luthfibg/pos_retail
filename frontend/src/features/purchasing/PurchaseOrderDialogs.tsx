@@ -210,7 +210,7 @@ export function PurchaseOrderCreateDialog({
               })}
             </select>
           </Field>
-          {fund.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif. Tambahkan rekening sebelum membuat PO.</p>}
+          {fund.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif, sehingga PO belum dapat dibuat.</p>}
           {fund.data && bankAccounts.length > 0 && !bankAccounts.some((account) => compareMoney(account.available_balance, orderTotal) !== -1) && (
             <p className="text-xs text-amber-800">Saldo tersedia semua rekening aktif belum mencukupi total PO.</p>
           )}
@@ -357,7 +357,7 @@ export function PurchaseOrderManageDialog({
           )}
           {po.status === 'draft' && can('purchase_fund.allocate') && !po.fund_allocation
             && fund.data?.bank_accounts.every((account) => !account.is_active || compareMoney(account.available_balance, po.total ?? '0') === -1)
-            && <p className="text-xs text-amber-800">Tidak ada rekening aktif dengan saldo tersedia yang cukup. Minta Finance/Admin memeriksa saldo rekening atau lakukan penyesuaian manual yang diaudit.</p>}
+            && <p className="text-xs text-amber-800">Tidak ada rekening aktif dengan saldo tersedia yang cukup untuk total PO ini.</p>}
           {po.status === 'pending_confirmation' && can('purchase_requisition.approve') && (
             <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
               <p className="text-sm">PO memerlukan konfirmasi Owner. Masukkan kredensial pemberi persetujuan untuk autentikasi ulang.</p>

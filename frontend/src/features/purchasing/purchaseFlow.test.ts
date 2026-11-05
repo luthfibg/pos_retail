@@ -60,7 +60,16 @@ describe('purchaseFlow', () => {
     expect(tabCount(board, 'pr_review')).toBe(2);
     expect(tabCount(board, 'po_prepare')).toBe(4);
     expect(tabCount(board, 'po_send')).toBe(3);
-    expect(tabCount(board, 'archive')).toBe(2);
+  });
+
+  it('dokumen di luar alur tidak masuk papan (tidak ada tab riwayat)', () => {
+    const board = buildBoard(
+      [pr(1, 'submitted'), pr(2, 'rejected'), pr(3, 'returned'), pr(4, 'cancelled'), pr(5, 'converted'), pr(6, 'draft')],
+      [po(1, 'approved'), po(2, 'cancelled')],
+    );
+    const shown = [...board.pr_review, ...board.pr_ready, ...board.po_prepare, ...board.po_send];
+    expect(shown.map((item) => item.doc_number)).toEqual(['PR-1', 'PO-1']);
+    expect(Object.keys(board)).toEqual(['pr_review', 'pr_ready', 'po_prepare', 'po_send']);
   });
 
   it('pelacak Permintaan converted mengikuti posisi PO-nya', () => {

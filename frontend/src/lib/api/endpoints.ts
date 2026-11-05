@@ -74,7 +74,8 @@ export const reportApi = {
 };
 
 export const billingApi = {
-  periods: (page = 1) => api<Paginated<BillingPeriod>>('/billing-periods', { query: { page, per_page: 25 } }),
+  periods: (page = 1, perPage = 25) =>
+    api<Paginated<BillingPeriod>>('/billing-periods', { query: { page, per_page: perPage } }),
   currentPeriod: () => api<{ data: BillingPeriod | null }>('/billing-periods/current').then((r) => r.data),
   period: (id: number) => api<{ data: BillingPeriod }>(`/billing-periods/${id}`).then((r) => r.data),
   openPeriod: (input: { label?: string; scheduled_close_date?: string }) =>
