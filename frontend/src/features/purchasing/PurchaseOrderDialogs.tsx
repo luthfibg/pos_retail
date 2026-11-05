@@ -191,7 +191,7 @@ export function PurchaseOrderCreateDialog({
               {availableItems.map((item) => {
                 const line = lines[item.product_id] ?? { selected: false, qty: '', price: '' };
                 return (
-                  <div key={item.product_id} className="grid grid-cols-[auto_1fr_5.5rem_7rem] items-end gap-2 rounded-md border border-slate-200 p-2">
+                  <div key={item.product_id} className="grid grid-cols-[auto_1fr_5.5rem_7rem] items-center gap-2 rounded-md border border-slate-200 p-2">
                     <input type="checkbox" aria-label={`Pilih ${item.name}`} checked={line.selected} onChange={(event) => updateLine(item.product_id, { selected: event.target.checked })} />
                     <div className="min-w-0 text-sm">
                       <div className="truncate font-medium">{item.name}</div>
@@ -213,7 +213,7 @@ export function PurchaseOrderCreateDialog({
 
         <section className="space-y-3 rounded-md border border-blue-200 bg-blue-50 p-3">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <h3 className="font-semibold">Rekening pada PO</h3>
+            <h3 className="font-semibold">Rekening Tercantum</h3>
             <span className="font-medium tabular-nums">Total PO: {formatRupiah(orderTotal)}</span>
           </div>
           <Field label="Pilih rekening">
@@ -330,7 +330,7 @@ export function PurchaseOrderManageDialog({
           </div>
           {po.bank_account && (
             <section className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
-              <div className="font-semibold">Rekening pada PO</div>
+              <div className="font-semibold">Rekening tercantum</div>
               <div className="mt-1">{po.bank_account.bank_name} · {po.bank_account.account_name} ({po.bank_account.account_number_masked})</div>
             </section>
           )}

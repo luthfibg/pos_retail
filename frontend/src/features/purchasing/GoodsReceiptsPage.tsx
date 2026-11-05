@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError } from '@/lib/api/client';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
-import { useAuth } from '@/features/auth/AuthProvider';
 import { goodsReceiptApi, productApi, purchaseOrderApi } from '@/lib/api/endpoints';
 import type { GoodsReceipt, GoodsReceiptStatus, PurchaseOrderItem } from '@/lib/api/types';
 import { formatDate, formatDateTime, formatQty, formatRupiah } from '@/lib/format';
@@ -41,7 +39,6 @@ function emptyLine(poItem: PurchaseOrderItem, key = String(poItem.id)): GoodsRec
 }
 
 export function GoodsReceiptsPage() {
-  const { can } = useAuth();
   const [poSearchValue, setPoSearchValue] = useState('');
   const [poSearch, setPoSearch] = useState('');
   const [poPage, setPoPage] = useState(1);
@@ -75,15 +72,13 @@ export function GoodsReceiptsPage() {
   return (
     <div className="space-y-5 p-6">
       <header>
-        <h1 className="text-xl font-semibold">Penerimaan Barang</h1>
-        <p className="mt-1 text-sm text-slate-600">Terima barang dari PO yang dapat diproses. Stok bertambah setelah dokumen penerimaan diposting.</p>
+        <h1 className="text-xl font-semibold">Bukti Penerimaan Barang</h1>
       </header>
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-semibold">PO yang dapat diterima</h2>
-            <p className="text-xs text-slate-500">PO berstatus disetujui, dikirim, atau sebagian diterima.</p>
+            <h2 className="font-semibold">Pemesanan diterima</h2>
           </div>
           <form onSubmit={applyPoSearch} className="flex gap-2">
             <label className="sr-only" htmlFor="receivable-po-search">Cari nomor PO</label>
@@ -138,7 +133,6 @@ export function GoodsReceiptsPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="font-semibold">Riwayat penerimaan</h2>
-            <p className="text-xs text-slate-500">Buka dokumen untuk melihat detail, memposting Draft, atau memverifikasi dokumen.</p>
           </div>
           <form onSubmit={applyReceiptSearch} className="flex gap-2">
             <label className="sr-only" htmlFor="receipt-search">Cari nomor penerimaan</label>
@@ -155,10 +149,9 @@ export function GoodsReceiptsPage() {
               <table className="w-full min-w-[650px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-3 py-2">Nomor GR</th>
                     <th className="px-3 py-2">PO / Supplier</th>
+                    <th className="px-3 py-2">Nomor GR</th>
                     <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Dokumen</th>
                     <th className="px-3 py-2">Dibuat oleh</th>
                     <th className="px-3 py-2">Aksi</th>
                   </tr>
@@ -166,12 +159,11 @@ export function GoodsReceiptsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {receipts.data.data.map((receipt) => (
                     <tr key={receipt.id}>
-                      <td className="px-3 py-2 font-mono font-medium">{receipt.doc_number}</td>
                       <td className="px-3 py-2">{receipt.po_doc_number}<div className="text-xs text-slate-500">{receipt.supplier_name}</div></td>
+                      <td className="px-3 py-2 font-mono font-medium">{receipt.doc_number}</td>
                       <td className="px-3 py-2">{STATUS_LABEL[receipt.status]}</td>
-                      <td className="px-3 py-2">{receipt.document_status === 'verified' ? 'Terverifikasi' : 'Menunggu verifikasi'}</td>
                       <td className="px-3 py-2">{receipt.received_by_name}</td>
-                      <td className="px-3 py-2"><button type="button" onClick={() => setSelectedReceiptId(receipt.id)} className="font-medium text-blue-700 hover:underline">Detail</button></td>
+                      <td className="px-3 py-2"><button type="button" onClick={() => setSelectedReceiptId(receipt.id)} className="font-medium text-blue-700 hover:underline">Periksa Dokumen</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -190,7 +182,7 @@ export function GoodsReceiptsPage() {
       </section>
 
       {createPoId !== null && <CreateGoodsReceiptDialog poId={createPoId} onClose={() => setCreatePoId(null)} onCreated={(receipt) => { setCreatePoId(null); setSelectedReceiptId(receipt.id); }} />}
-      {selectedReceiptId !== null && <GoodsReceiptDetailDialog receiptId={selectedReceiptId} canVerify={can('goods_receipt.verify_documents')} onClose={() => setSelectedReceiptId(null)} />}
+      {selectedReceiptId !== null && <GoodsReceiptDetailDialog receiptId={selectedReceiptId} onClose={() => setSelectedReceiptId(null)} />}
     </div>
   );
 }
@@ -310,13 +302,13 @@ function CreateGoodsReceiptDialog({
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label={`Diterima (${item.unit_name})`} error={errors?.qtyReceived} hint="Contoh: 20 atau 1,5.">
+                    <Field label={`Diterima (${item.unit_name})`} error={errors?.qtyReceived}>
                       <LocalDecimalInput className={inputCls} kind="quantity" value={line.qtyReceived} onChange={(value) => updateLine(line.key, 'qtyReceived', value)} />
                     </Field>
-                    <Field label={`Rusak (${item.unit_name})`} error={errors?.qtyDamaged} hint="Contoh: 2 atau 0,5.">
+                    <Field label={`Rusak (${item.unit_name})`} error={errors?.qtyDamaged}>
                       <LocalDecimalInput className={inputCls} kind="quantity" value={line.qtyDamaged} onChange={(value) => updateLine(line.key, 'qtyDamaged', value)} />
                     </Field>
-                    <Field label="Tanggal kedaluwarsa" error={errors?.expiryDate} hint={expiryRequired ? 'Wajib untuk produk yang melacak kedaluwarsa.' : 'Kosongkan untuk produk tanpa pelacakan kedaluwarsa.'}>
+                    <Field label="Tanggal kedaluwarsa" error={errors?.expiryDate}>
                       <input type="date" min={todayWib()} className={inputCls} value={line.expiryDate} onChange={(event) => updateLine(line.key, 'expiryDate', event.target.value)} disabled={expiryLoading || !expiryRequired} />
                     </Field>
                     <Field label="Kode batch (opsional)">
@@ -336,7 +328,6 @@ function CreateGoodsReceiptDialog({
           <ErrorNotice error={create.error} />
           {confirming && (
             <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
-              <p>Dokumen penerimaan Draft akan dibuat. Stok belum bertambah sampai Draft diposting.</p>
               <div className="flex justify-end gap-2">
                 <button type="button" disabled={create.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2">Periksa lagi</button>
                 <button type="button" disabled={create.isPending || expiryLoading || Boolean(expiryError)} onClick={() => create.mutate()} className="rounded-md bg-slate-900 px-3 py-2 font-medium text-white disabled:opacity-60">{create.isPending ? 'Menyimpan…' : 'Konfirmasi buat Draft'}</button>
@@ -357,28 +348,19 @@ function CreateGoodsReceiptDialog({
 
 function GoodsReceiptDetailDialog({
   receiptId,
-  canVerify,
   onClose,
 }: {
   receiptId: number;
-  canVerify: boolean;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentError, setAttachmentError] = useState('');
   const attachmentInput = useRef<HTMLInputElement>(null);
-  const [deliveryNoteNo, setDeliveryNoteNo] = useState('');
-  const [invoiceNo, setInvoiceNo] = useState('');
-  const [confirmAction, setConfirmAction] = useState<'post' | 'cancel' | 'verify' | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'post' | 'cancel' | null>(null);
   const detail = useQuery({ queryKey: ['goods-receipt', receiptId], queryFn: () => goodsReceiptApi.get(receiptId) });
   const receipt = detail.data;
   const attachmentsOpen = receipt !== undefined && receipt.status !== 'cancelled' && receipt.document_status !== 'verified';
-
-  useEffect(() => {
-    setDeliveryNoteNo(detail.data?.delivery_note_no ?? '');
-    setInvoiceNo(detail.data?.invoice_no ?? '');
-  }, [detail.data]);
 
   async function refresh(receipt: GoodsReceipt) {
     await Promise.all([
@@ -392,11 +374,6 @@ function GoodsReceiptDetailDialog({
 
   const post = useMutation({ mutationFn: () => goodsReceiptApi.post(receiptId), onSuccess: refresh, onError: () => setConfirmAction(null) });
   const cancel = useMutation({ mutationFn: () => goodsReceiptApi.cancel(receiptId), onSuccess: refresh, onError: () => setConfirmAction(null) });
-  const verify = useMutation({
-    mutationFn: () => goodsReceiptApi.verifyDocuments(receiptId, { delivery_note_no: deliveryNoteNo.trim(), invoice_no: invoiceNo.trim() }),
-    onSuccess: refresh,
-    onError: () => setConfirmAction(null),
-  });
   const upload = useMutation({
     mutationFn: () => {
       if (!attachmentFile) throw new Error('Pilih berkas lampiran terlebih dahulu.');
@@ -424,8 +401,8 @@ function GoodsReceiptDetailDialog({
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
   });
-  const mutationError = post.error ?? cancel.error ?? verify.error ?? upload.error ?? download.error;
-  const saving = post.isPending || cancel.isPending || verify.isPending || upload.isPending || download.isPending;
+  const mutationError = post.error ?? cancel.error ?? upload.error ?? download.error;
+  const saving = post.isPending || cancel.isPending || upload.isPending || download.isPending;
 
   return (
     <Modal title="Detail penerimaan" onClose={() => !saving && onClose()}>
@@ -434,16 +411,13 @@ function GoodsReceiptDetailDialog({
       ) : receipt ? (
         <div className="space-y-4 p-5">
           <ErrorNotice error={mutationError} />
-          {mutationError instanceof ApiError && mutationError.status === 422 && <p className="text-xs text-slate-500">Periksa kembali sisa PO dan kelengkapan dokumen; data mungkin telah berubah sejak penerimaan dibuat.</p>}
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <Detail label="Nomor GR" value={receipt.doc_number} />
             <Detail label="Nomor PO" value={receipt.po_doc_number} />
             <Detail label="Supplier" value={receipt.supplier_name} />
             <Detail label="Status" value={STATUS_LABEL[receipt.status]} />
-            <Detail label="Status dokumen" value={receipt.document_status === 'verified' ? 'Terverifikasi' : 'Menunggu verifikasi'} />
             <Detail label="Dibuat oleh" value={receipt.received_by_name} />
             <Detail label="Diposting" value={formatDateTime(receipt.posted_at)} />
-            {receipt.verified_by_name && <Detail label="Diverifikasi oleh" value={`${receipt.verified_by_name} · ${formatDateTime(receipt.verified_at)}`} />}
           </div>
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <Detail label="Surat jalan" value={receipt.delivery_note_no || 'Belum dicatat'} />
@@ -471,7 +445,7 @@ function GoodsReceiptDetailDialog({
             <section className="space-y-3 rounded-md border border-slate-200 p-3">
               <div>
                 <h3 className="text-sm font-semibold">Lampiran dokumen</h3>
-                <p className="mt-1 text-xs text-slate-500">JPEG, PNG, WebP, atau PDF; maksimum 10 MB per berkas. Berkas disimpan privat.</p>
+                <p className="mt-1 text-xs text-slate-500">Format berkas: JPEG, PNG, WebP, atau PDF.</p>
               </div>
               {receipt.attachments.length > 0 ? (
                 <ul className="divide-y divide-slate-100 rounded-md border border-slate-100">
@@ -525,7 +499,6 @@ function GoodsReceiptDetailDialog({
 
             {receipt.status === 'draft' && (
             <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-sm">Draft belum mengubah stok. Posting akan menambahkan jumlah diterima ke stok, memperbarui sisa PO, dan tidak memasukkan jumlah rusak ke stok.</p>
               {confirmAction === 'post' ? (
                 <div className="flex justify-end gap-2">
                   <button type="button" disabled={post.isPending} onClick={() => setConfirmAction(null)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
@@ -545,22 +518,6 @@ function GoodsReceiptDetailDialog({
             </div>
           )}
 
-          {canVerify && receipt.status === 'posted' && receipt.document_status === 'pending' && (
-            <form onSubmit={(event) => { event.preventDefault(); setConfirmAction('verify'); }} className="space-y-3 rounded-md border border-blue-200 bg-blue-50 p-3">
-              <h3 className="text-sm font-semibold">Verifikasi surat jalan dan faktur</h3>
-              <p className="text-xs text-slate-600">Kedua nomor wajib diisi; verifikasi tersedia setelah penerimaan diposting.</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Nomor surat jalan"><input className={inputCls} maxLength={60} required value={deliveryNoteNo} onChange={(event) => setDeliveryNoteNo(event.target.value)} /></Field>
-                <Field label="Nomor faktur"><input className={inputCls} maxLength={60} required value={invoiceNo} onChange={(event) => setInvoiceNo(event.target.value)} /></Field>
-              </div>
-              {confirmAction === 'verify' ? (
-                <div className="flex justify-end gap-2">
-                  <button type="button" disabled={verify.isPending} onClick={() => setConfirmAction(null)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Periksa lagi</button>
-                  <button type="button" disabled={verify.isPending || !deliveryNoteNo.trim() || !invoiceNo.trim()} onClick={() => verify.mutate()} className="rounded-md bg-blue-800 px-3 py-2 text-sm font-medium text-white">{verify.isPending ? 'Memverifikasi…' : 'Konfirmasi verifikasi'}</button>
-                </div>
-              ) : <div className="flex justify-end"><button type="submit" className="rounded-md bg-blue-800 px-3 py-2 text-sm font-medium text-white">Periksa dokumen</button></div>}
-            </form>
-          )}
         </div>
       ) : null}
     </Modal>
