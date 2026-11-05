@@ -93,6 +93,8 @@ Daftar produk (`GET /api/products`) sudah memuat `stock_sellable` dan `stock_sta
 
 Master produk menyimpan satu nilai biaya kanonis, `unit_cost` (`DECIMAL(18,4)`; label UI **Harga Modal**). Field ini wajib bernilai lebih dari nol saat `POST /api/products`, dapat dikoreksi melalui `PATCH /api/products/{id}` oleh pemegang `price.change`, serta dikembalikan pada detail/daftar produk. Saat stok masuk dengan biaya, `unit_cost` diganti dengan biaya terbaru; perubahan manual dan otomatis dicatat pada audit produk. Nilai ini dipakai untuk snapshot HPP penjualan dan estimasi harga PR.
 
+Produk dapat ditautkan ke satu atau lebih supplier melalui pivot `product_suppliers`. `POST /api/products` mewajibkan `supplier_ids` berisi minimal satu supplier aktif pada toko yang sama; `PATCH /api/products/{id}` menerima field tersebut untuk mengganti relasi. Daftar/detail produk mengembalikan `suppliers[]` (`id, code, name, is_active, default_payment_terms`). Produk lama tanpa relasi tetap perlu dilengkapi lewat edit master produk. PR otomatis tetap mengikuti pemantauan stok untuk produk lama yang belum ditautkan, tetapi item tersebut belum dapat dimasukkan ke PO sampai memiliki supplier aktif.
+
 ### POST `/api/inventory/opening-balances` — layar "Stok Eksisting Toko" (Admin)
 
 Permintaan:
@@ -437,13 +439,13 @@ Permintaan buat/ubah:
 
 Detail PR (`data`): `id, doc_number ("PR-202610-000001"), status, reason, est_total, requested_by, requester_name, submitted_at, created_at`, `items[]` (`id, product_id, sku, name, unit_name, qty, est_price, note`), `approvals[]` (`step: finance_check|owner_auth, decision: approved|returned|rejected, decided_by_name, note, is_self_approval, decided_at`), `purchase_orders[]` (`id, doc_number, status, total`). `qty` adalah satu-satunya kuantitas permintaan; informasi sisa alokasi PO disediakan terpisah di endpoint item PO.
 
-Daftar item PO yang tersedia (`GET /api/purchase-requisitions/{pr}/purchase-order-items`, hanya PR `approved`): `{ "pr_id": 5, "items": [{ "product_id": 12, "sku": "…", "name": "…", "unit_name": "pcs", "qty_available": "4.000", "est_price": "2500.00" }] }`. `qty_available` menghitung jumlah PR dikurangi kuantitas PO aktif; PO dibatalkan tidak mengurangi jumlah tersedia.
+Daftar item PO yang tersedia (`GET /api/purchase-requisitions/{pr}/purchase-order-items`, hanya PR `approved`): `{ "pr_id": 5, "items": [{ "product_id": 12, "sku": "…", "name": "…", "unit_name": "pcs", "qty_available": "4.000", "est_price": "2500.00", "suppliers": [{ "id": 2, "code": "SUP-02", "name": "Supplier", "default_payment_terms": "credit" }] }] }`. `qty_available` menghitung jumlah PR dikurangi kuantitas PO aktif; PO dibatalkan tidak mengurangi jumlah tersedia. `suppliers` hanya berisi supplier aktif yang terhubung ke produk.
 
 Untuk PO baru, autentikasi ulang Owner dikirim bersama create PO (bila toko memakai mode kunci, lihat bagian 14: kirim juga/atau `approver_key`): `approver_username` + `approver_password` (diketik pemberi persetujuan sendiri; salah → 422 `errors.approver_password`). Wajib selama setting `approval_reauth_required` aktif (default aktif). Bila pembuat PR = pemberi otorisasi, aturan `sod_owner_self_approve` (Owner) atau `sod_pr_creator_approver` (non-Owner) tetap diberlakukan; penandaan swa-persetujuan dicatat pada audit PO. Autentikasi dan persetujuan PR terpisah tetap berlaku untuk PR lama.
 
 ### 6.2 Purchase Order (PO)
 
-Daftar supplier dapat dibaca oleh pemegang `supplier.manage` atau `purchase_order.create` agar Purchasing dapat memilih supplier saat membuat PO. Membuat/mengubah supplier tetap memerlukan `supplier.manage`.
+Daftar supplier dapat dibaca oleh pemegang `supplier.manage`, `purchase_order.create`, `product.create`, atau `product.update` agar supplier dapat dipilih pada master produk dan PO. Membuat/mengubah supplier tetap memerlukan `supplier.manage`.
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
@@ -464,6 +466,8 @@ Permintaan buat:
   "items": [ { "product_id": 12, "qty_ordered": "10", "unit_price": "2400" } ] }
 ```
 `payment_terms` (`prepaid|credit|cod`) default dari supplier. `order_date` default hari ini (WIB).
+
+Setiap produk dalam PO harus terhubung ke `supplier_id` PO. Validasi ini berlaku di backend saat membuat PO maupun mengubah item/supplier pada PO draft. Untuk membagi Permintaan lintas supplier, buat PO terpisah untuk masing-masing supplier dan hanya masukkan produk yang terhubung dengannya.
 
 Status PO baru: `approved` → `sent` → `partially_received` → `received`; cabang `cancelled`. PO lama dapat tetap berstatus `draft` atau `pending_confirmation` dan memakai endpoint kompatibilitas. Semua PO baru memerlukan autentikasi Owner saat dibuat, tanpa auto-approval berdasarkan estimasi PR. Status penerimaan terpisah: `receipt_status` = `none|partial|complete`; `payment_status` = `unpaid` (pembayaran = Paket 2).
 
@@ -983,6 +987,8 @@ Sinkronisasi dipanggil atomik dari stok awal, penjualan/void, penerimaan barang,
 - **2026-11-04** — Alur PR/PO disederhanakan menjadi Finance pass → create PO atomik (pilih rekening, reservasi dana, satu otorisasi Owner) → cetak lalu konfirmasi kirim. Tes `PurchaseOrderTest` + `PurchaseRequisitionTest`: 31 lulus; Pint lulus.
 - **2026-11-04** — Pemantauan stok per toko dengan ambang default 3.000, field `restock_quantity` di master produk, dan satu PR otomatis dinamis yang menghitung estimasi HPP/total; sinkronisasi atomik pada perubahan stok/master/setting, sementara Kasir hanya dapat meneruskan PR otomatis. Migration 000065. Validasi terarah 122 test (1.158 assertions) dan Pint lulus.
 - **2026-11-04** — Field HPP master disederhanakan menjadi `unit_cost` tunggal (`DECIMAL(18,4)`), diisi wajib saat produk dibuat, dapat dikoreksi Admin melalui edit, dan diganti dengan biaya terbaru saat penerimaan/stok masuk memiliki biaya. `last_cost` dihapus; snapshot biaya transaksi tetap disimpan. Label UI untuk nilai produk adalah **Harga Modal**; form stok awal diberi nama **Stok Eksisting Toko**. Migration 000066. Tes backend terarah 113/113 (1.051 assertions) dan Pint lulus.
+- **2026-11-05** — Relasi produk–supplier banyak-ke-banyak ditambahkan. Supplier wajib dipilih saat membuat produk, relasi produk lama dapat diperbarui, daftar/detail produk mengembalikan supplier, dan pembuatan/perubahan PO memvalidasi bahwa setiap item memang berasal dari supplier PO tersebut. Daftar item PR untuk PO mengembalikan supplier aktif yang terkait. Migration 000068.
+- **2026-11-05** — Validasi relasi supplier produk/PO lulus pada 40 tes `ProductTest` dan `PurchaseOrderTest` (331 assertions); Pint lulus.
 - **2026-11-03** — Alokasi Kas Pembelian untuk PO: ledger rekening bank manual, saldo awal/penyesuaian ber-audit, alokasi penuh berdasarkan nilai PO, saldo tersedia dikurangi pencadangan tanpa mengklaim transfer bank, dan pelepasan alokasi saat PO dibatalkan atau nilainya berubah. Setiap PO kini menunggu konfirmasi Owner setelah dana dicadangkan. Rekening dimasking di endpoint; Finance diberi permission kelola/alokasi, Owner melihat, Admin mewarisi semua. `PurchaseOrderTest` (17) dan `GoodsReceiptTest` (16) lulus; suite penuh 294/297 dengan tiga kegagalan di test lama yang tidak terkait. Pint file baru lulus. Migrasi 000060 dan PermissionSeeder perlu dijalankan pada database existing.
 - **2026-11-02** — Laporan laba kotor `GET /api/reports/profit` memakai `line_total` dan HPP snapshot per item; penjualan kredit dipisah expected/valid dan pembayaran parsial Finance mengakui laba secara proporsional. Pencatatan pembayaran HRD kini masuk atomik ke ledger akun `main_cash`. Permission baru `reports.profit.view` untuk Admin, Owner, Finance, dan Accounting; `BillingTest` 11 lulus dan tes profit terarah 1 lulus.
 - **2026-11-02** — Endpoint Retail `PATCH /api/settings/store-name` hanya mengizinkan perubahan `name` (maks. 150 karakter), izin `settings.manage`, konteks toko aktif, dan audit `settings.store_name`; request menolak field toko lain. Tidak menambahkan endpoint read/create/delete atau perubahan atribut lain. `StoreNameSettingTest`: 3 test lulus.

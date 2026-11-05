@@ -16,8 +16,7 @@ class SupplierController extends Controller
         private SupplierService $suppliers,
         private StoreContext $stores,
         private PermissionResolver $permissions,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -25,7 +24,9 @@ class SupplierController extends Controller
         $storeId = $this->stores->requireIdFor($user);
         abort_unless(
             $this->permissions->allows($user, 'supplier.manage', $storeId)
-                || $this->permissions->allows($user, 'purchase_order.create', $storeId),
+                || $this->permissions->allows($user, 'purchase_order.create', $storeId)
+                || $this->permissions->allows($user, 'product.create', $storeId)
+                || $this->permissions->allows($user, 'product.update', $storeId),
             403,
             'Anda tidak memiliki izin untuk melihat daftar supplier.',
         );

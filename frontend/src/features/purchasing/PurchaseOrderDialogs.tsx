@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
-import { bankAccountApi, purchaseOrderApi, purchaseRequisitionApi, supplierApi } from '@/lib/api/endpoints';
+import { bankAccountApi, purchaseOrderApi, purchaseRequisitionApi } from '@/lib/api/endpoints';
 import type { ApprovalAuthMode, PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
 import { centsToMoney, lineCents, moneyToCents, qtyToMilli } from '@/lib/money';
@@ -42,10 +42,6 @@ export function PurchaseOrderCreateDialog({
 }) {
   const { me } = useAuth();
   const approvalMode: ApprovalAuthMode = me?.approval_auth_mode ?? 'password';
-  const suppliers = useQuery({
-    queryKey: ['suppliers', 'active-for-purchase-order'],
-    queryFn: () => supplierApi.list({ active_only: true, per_page: 100 }),
-  });
   const bankAccountsQuery = useQuery({
     queryKey: ['bank-accounts', 'purchase-order'],
     queryFn: bankAccountApi.list,
@@ -55,6 +51,14 @@ export function PurchaseOrderCreateDialog({
     queryFn: () => purchaseRequisitionApi.purchaseOrderItems(pr.id),
   });
   const rowsWithRemaining = availability.data?.items ?? [];
+  const supplierOptions = useMemo(() => {
+    const options = new Map<number, (typeof rowsWithRemaining)[number]['suppliers'][number]>();
+    for (const item of rowsWithRemaining) {
+      for (const supplier of item.suppliers) options.set(supplier.id, supplier);
+    }
+    return [...options.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [rowsWithRemaining]);
+  const autoSupplier = supplierOptions.length === 1 ? supplierOptions[0] : null;
   const [supplierId, setSupplierId] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
   const [terms, setTerms] = useState<'prepaid' | 'credit' | 'cod'>('cod');
@@ -72,15 +76,28 @@ export function PurchaseOrderCreateDialog({
     }])));
     initializedAvailability.current = true;
   }, [availability.data]);
-  const selectedLineCount = rowsWithRemaining.filter((item) => lines[item.product_id]?.selected).length;
-  const totalCents = rowsWithRemaining.reduce((total, item) => {
+  useEffect(() => {
+    if (!availability.data) return;
+    setSupplierId((current) => {
+      if (current && supplierOptions.some((supplier) => String(supplier.id) === current)) return current;
+      return autoSupplier ? String(autoSupplier.id) : '';
+    });
+    if (autoSupplier) setTerms(autoSupplier.default_payment_terms ?? 'cod');
+  }, [availability.data, autoSupplier, supplierOptions]);
+  const chosenSupplierId = Number(supplierId);
+  const availableItems = rowsWithRemaining.filter((item) =>
+    item.suppliers.some((supplier) => supplier.id === chosenSupplierId),
+  );
+  const unmappedItems = rowsWithRemaining.filter((item) => item.suppliers.length === 0);
+  const selectedLineCount = availableItems.filter((item) => lines[item.product_id]?.selected).length;
+  const totalCents = availableItems.reduce((total, item) => {
     const line = lines[item.product_id];
     if (!line?.selected) return total;
     const quantity = qtyToMilli(line.qty);
     const price = moneyToCents(line.price);
     return quantity === null || price === null ? total : total + lineCents(quantity, price);
   }, 0n);
-  const hasInvalidSelectedLine = rowsWithRemaining.some((item) => {
+  const hasInvalidSelectedLine = availableItems.some((item) => {
     const line = lines[item.product_id];
     if (!line?.selected) return false;
     return qtyToMilli(line.qty) === null || moneyToCents(line.price) === null;
@@ -99,7 +116,7 @@ export function PurchaseOrderCreateDialog({
       payment_terms: terms,
       order_date: orderDate,
       expected_date: expectedDate || undefined,
-      items: rowsWithRemaining.flatMap((item) => {
+      items: availableItems.flatMap((item) => {
         const line = lines[item.product_id];
         return line?.selected ? [{
           product_id: item.product_id,
@@ -113,7 +130,7 @@ export function PurchaseOrderCreateDialog({
 
   function chooseSupplier(id: string) {
     setSupplierId(id);
-    const supplier = suppliers.data?.data.find((item) => String(item.id) === id);
+    const supplier = supplierOptions.find((item) => String(item.id) === id);
     setTerms(supplier?.default_payment_terms ?? 'cod');
   }
 
@@ -132,16 +149,14 @@ export function PurchaseOrderCreateDialog({
   return (
     <Modal title={`Buat PO dari Permintaan ${pr.doc_number}`} onClose={() => !create.isPending && onClose()}>
       <form className="space-y-4 p-5" onSubmit={submit}>
-        <p className="text-sm text-slate-600">Pilih barang dan rekening yang dicantumkan pada PO, lalu otorisasi Owner. Rekening tidak terhubung ke saldo; PO langsung dibuat dan disetujui.</p>
-        <ErrorNotice error={suppliers.error} />
         <ErrorNotice error={availability.error} />
         <ErrorNotice error={bankAccountsQuery.error} />
         <ErrorNotice error={create.error} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Supplier">
-            <select className={inputCls} required value={supplierId} onChange={(event) => chooseSupplier(event.target.value)} disabled={suppliers.isLoading}>
-              <option value="">{suppliers.isLoading ? 'Memuat supplier…' : 'Pilih supplier'}</option>
-              {suppliers.data?.data.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} · {supplier.name}</option>)}
+            <select className={inputCls} required value={supplierId} onChange={(event) => chooseSupplier(event.target.value)} disabled={availability.isLoading || supplierOptions.length <= 1}>
+              <option value="">{supplierOptions.length === 0 ? 'Tidak ada supplier terkait' : 'Pilih supplier'}</option>
+              {supplierOptions.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} · {supplier.name}</option>)}
             </select>
           </Field>
           <Field label="Termin pembayaran">
@@ -165,9 +180,15 @@ export function PurchaseOrderCreateDialog({
             <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Memuat jumlah barang yang dapat dipesan…</p>
           ) : availability.error ? null : rowsWithRemaining.length === 0 ? (
             <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Semua jumlah Permintaan sudah dialokasikan ke PO.</p>
+          ) : supplierOptions.length === 0 ? (
+            <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">Belum ada supplier aktif yang terhubung ke produk pada Permintaan ini.</p>
+          ) : supplierId === '' ? (
+            <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Pilih supplier untuk melihat produk yang dapat dipesan.</p>
+          ) : availableItems.length === 0 ? (
+            <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Tidak ada produk tersisa untuk supplier ini.</p>
           ) : (
             <div className="max-h-72 space-y-2 overflow-auto">
-              {rowsWithRemaining.map((item) => {
+              {availableItems.map((item) => {
                 const line = lines[item.product_id] ?? { selected: false, qty: '', price: '' };
                 return (
                   <div key={item.product_id} className="grid grid-cols-[auto_1fr_5.5rem_7rem] items-end gap-2 rounded-md border border-slate-200 p-2">
@@ -187,6 +208,7 @@ export function PurchaseOrderCreateDialog({
               })}
             </div>
           )}
+          {unmappedItems.length > 0 && <p className="text-sm text-amber-800">Sebagian produk belum memiliki supplier aktif di master produk.</p>}
         </section>
 
         <section className="space-y-3 rounded-md border border-blue-200 bg-blue-50 p-3">
@@ -194,7 +216,6 @@ export function PurchaseOrderCreateDialog({
             <h3 className="font-semibold">Rekening pada PO</h3>
             <span className="font-medium tabular-nums">Total PO: {formatRupiah(orderTotal)}</span>
           </div>
-          <p className="text-xs text-slate-600">Pilih rekening yang akan dicantumkan pada dokumen PO. Sistem tidak menyimpan atau memeriksa saldo rekening.</p>
           <Field label="Pilih rekening">
             <select className={inputCls} required value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)} disabled={bankAccountsQuery.isLoading || bankAccountsQuery.isError}>
               <option value="">{bankAccountsQuery.isLoading ? 'Memuat rekening…' : 'Pilih rekening'}</option>
@@ -205,13 +226,12 @@ export function PurchaseOrderCreateDialog({
               ))}
             </select>
           </Field>
-          {bankAccountsQuery.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif. Tambahkan rekening dari menu Pengaturan sebelum membuat PO.</p>}
+          {bankAccountsQuery.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif.</p>}
         </section>
 
         <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
           <div>
             <h3 className="text-sm font-semibold">Persetujuan Owner</h3>
-            <p className="mt-1 text-xs text-slate-600">Otorisasi ini sekaligus mengesahkan supplier, jumlah, harga, dan rekening yang dicantumkan pada PO.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Username Owner">
@@ -228,7 +248,7 @@ export function PurchaseOrderCreateDialog({
 
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
           <button type="button" disabled={create.isPending} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || bankAccountsQuery.isLoading || bankAccountsQuery.isError || !selectedBank || selectedLineCount === 0 || hasInvalidSelectedLine} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || supplierId === '' || bankAccountsQuery.isLoading || bankAccountsQuery.isError || !selectedBank || selectedLineCount === 0 || hasInvalidSelectedLine} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
             {create.isPending ? 'Membuat PO…' : 'Setujui & buat PO'}
           </button>
         </div>
@@ -282,7 +302,7 @@ export function PurchaseOrderManageDialog({
       ) : po ? (
         <div className="space-y-4 p-5">
           <ErrorNotice error={submit.error ?? confirm.error ?? send.error} />
-          <PurchaseStageTracker current={poStage(po.status)} archivedNote="PO ini dibatalkan dan tidak lagi berjalan di alur pembelian." />
+          <PurchaseStageTracker current={poStage(po.status)} />
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <div><div className="text-xs text-slate-500">Nomor PO</div><div className="font-mono font-medium">{po.doc_number}</div></div>
             <div>
@@ -316,7 +336,6 @@ export function PurchaseOrderManageDialog({
           )}
           {po.status === 'pending_confirmation' && can('purchase_requisition.approve') && (
             <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
-              <p className="text-sm">PO memerlukan konfirmasi Owner. Masukkan kredensial pemberi persetujuan untuk autentikasi ulang.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Username Owner"><input className={inputCls} autoComplete="username" required value={credentials.approver_username} onChange={(event) => setCredentials({ ...credentials, approver_username: event.target.value })} /></Field>
                 {approvalMode !== 'key' && <Field label="Password Owner"><input className={inputCls} type="password" autoComplete="current-password" required value={credentials.approver_password} onChange={(event) => setCredentials({ ...credentials, approver_password: event.target.value })} /></Field>}
@@ -336,13 +355,11 @@ export function PurchaseOrderManageDialog({
           )}
           {po.status === 'approved' && can('purchase_order.send') && (
             <div className="space-y-2">
-              {!hasPrinted && <p className="text-sm text-amber-800">Cetak PO terlebih dahulu. Tombol pengiriman aktif setelah dialog cetak ditutup.</p>}
               <button type="button" disabled={busy || !hasPrinted} onClick={() => send.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
                 {send.isPending ? 'Menyimpan…' : 'Konfirmasi sudah dikirim ke supplier'}
               </button>
             </div>
           )}
-          {po.status === 'sent' && <p className="text-sm text-slate-600">PO telah dikirim ke supplier.</p>}
           {onPrint && isPoPrintable(po.status) && (
             <div className="flex justify-end border-t border-slate-100 pt-3">
               <button type="button" onClick={() => onPrint(po)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">{po.status === 'approved' && hasPrinted ? 'Cetak ulang PO' : 'Cetak PO'}</button>

@@ -27,8 +27,15 @@ class PurchaseOrderTest extends SeededTestCase
     }
 
     /** @return array<string, mixed> */
-    private function payload(int $prId, int $supplierId, int $productId, string $qty = '10', string $price = '2400', ?int $bankId = null, ?array $credentials = null): array
+    private function payload(int $prId, int $supplierId, int $productId, string $qty = '10', string $price = '2400', ?int $bankId = null, ?array $credentials = null, bool $linkSupplier = true): array
     {
+        if ($linkSupplier) {
+            DB::table('product_suppliers')->insertOrIgnore([
+                'product_id' => $productId,
+                'supplier_id' => $supplierId,
+            ]);
+        }
+
         return [
             'pr_id' => $prId,
             'supplier_id' => $supplierId,
@@ -36,6 +43,39 @@ class PurchaseOrderTest extends SeededTestCase
             ...($credentials ?? $this->adminCreds()),
             'items' => [['product_id' => $productId, 'qty_ordered' => $qty, 'unit_price' => $price]],
         ];
+    }
+
+    public function test_po_supplier_must_be_related_to_each_product(): void
+    {
+        $product = $this->product();
+        $linkedSupplier = $this->supplier();
+        $otherSupplier = $this->supplier();
+        DB::table('product_suppliers')->insert([
+            'product_id' => $product,
+            'supplier_id' => $linkedSupplier,
+        ]);
+        $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
+
+        $this->postJson('/api/purchase-orders', $this->payload($pr, $otherSupplier, $product, linkSupplier: false))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.0.product_id']);
+    }
+
+    public function test_draft_po_cannot_switch_to_a_supplier_unrelated_to_its_items(): void
+    {
+        $product = $this->product();
+        $linkedSupplier = $this->supplier();
+        $otherSupplier = $this->supplier();
+        DB::table('product_suppliers')->insert([
+            'product_id' => $product,
+            'supplier_id' => $linkedSupplier,
+        ]);
+        $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
+        $po = $this->po($pr, $linkedSupplier, [$product => ['5', '2000']], 'draft');
+
+        $this->patchJson("/api/purchase-orders/{$po}", ['supplier_id' => $otherSupplier])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.0.product_id']);
     }
 
     private function bankAccount(): int
@@ -103,6 +143,7 @@ class PurchaseOrderTest extends SeededTestCase
             ->assertOk()
             ->assertJsonPath('data.pr_id', $pr)
             ->assertJsonPath('data.items.0.qty_available', '4.000')
+            ->assertJsonPath('data.items.0.suppliers.0.id', $supplier)
             ->assertJsonMissingPath('data.items.0.qty_ordered')
             ->assertJsonMissingPath('data.items.0.qty_remaining');
 
@@ -350,7 +391,9 @@ class PurchaseOrderTest extends SeededTestCase
     {
         $p = $this->product();
         $pr = $this->pr($this->cashier->id, [$p => ['10', '2500']]);
-        $po = $this->po($pr, $this->supplier(), [$p => ['5', '2000']], 'draft');
+        $supplier = $this->supplier();
+        DB::table('product_suppliers')->insert(['product_id' => $p, 'supplier_id' => $supplier]);
+        $po = $this->po($pr, $supplier, [$p => ['5', '2000']], 'draft');
 
         $this->patchJson("/api/purchase-orders/{$po}", ['items' => [['product_id' => $p, 'qty_ordered' => '8', 'unit_price' => '2100']]])
             ->assertOk()->assertJsonPath('data.total', '16800.00')->assertJsonPath('data.items.0.qty_ordered', '8.000');

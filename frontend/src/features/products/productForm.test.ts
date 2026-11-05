@@ -10,7 +10,9 @@ const kasir = { canSetPrice: false, canSetCost: false, canActivate: false };
 const product: Product = {
   id: 1, sku: 'P-000001', barcode: '2000000000015', name: 'Teh Botol', category_id: 3,
   category_name: 'Minuman', unit_name: 'pcs', track_expiry: false, sell_price: '3500.00',
-  unit_cost: '2000.0000', min_stock: '10.000', critical_stock: '3.000', restock_quantity: '24.000', status: 'active',
+  unit_cost: '2000.0000',
+  suppliers: [{ id: 8, code: 'SUP-8', name: 'Supplier Teh', is_active: true, default_payment_terms: 'cod' }],
+  min_stock: '10.000', critical_stock: '3.000', restock_quantity: '24.000', status: 'active',
   stock_sellable: '12.000', stock_status: 'aman',
 };
 
@@ -46,6 +48,11 @@ describe('validateProduct', () => {
 });
 
 describe('buildCreatePayload', () => {
+  it('menyertakan supplier yang dipilih', () => {
+    const v = { ...emptyValues(), name: 'Roti', supplierIds: [4, 9] };
+    expect(buildCreatePayload(v, kasir).supplier_ids).toEqual([4, 9]);
+  });
+
   it('Kasir tidak mengirim harga', () => {
     const v = { ...emptyValues(), name: ' Roti ', sellPrice: '5000', unitCost: '2000,1234' };
     const p = buildCreatePayload(v, kasir);
@@ -71,6 +78,10 @@ describe('buildUpdatePayload', () => {
   it('mengirimkan perubahan jumlah isi ulang saja', () => {
     const v = { ...valuesFromProduct(product), restockQuantity: '30' };
     expect(buildUpdatePayload(v, product, admin)).toEqual({ restock_quantity: '30' });
+  });
+  it('mengirimkan perubahan supplier saja', () => {
+    const v = { ...valuesFromProduct(product), supplierIds: [9] };
+    expect(buildUpdatePayload(v, product, admin)).toEqual({ supplier_ids: [9] });
   });
   it('mengirim Harga Modal yang dikoreksi hanya untuk pengguna berizin', () => {
     const v = { ...valuesFromProduct(product), unitCost: '2100' };

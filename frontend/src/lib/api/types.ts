@@ -315,6 +315,7 @@ export interface Product {
   track_expiry: boolean;
   sell_price: Decimal | null;
   unit_cost: Decimal;
+  suppliers: ProductSupplier[];
   min_stock: Decimal;
   critical_stock: Decimal;
   restock_quantity: Decimal;
@@ -327,6 +328,7 @@ export interface ProductInput {
   sku?: string;
   barcode?: string;
   name: string;
+  supplier_ids: number[];
   category_id?: number | null;
   unit_name?: string;
   track_expiry?: boolean;
@@ -335,6 +337,14 @@ export interface ProductInput {
   min_stock?: Decimal;
   critical_stock?: Decimal;
   restock_quantity?: Decimal;
+}
+
+export interface ProductSupplier {
+  id: number;
+  code: string;
+  name: string;
+  is_active: boolean;
+  default_payment_terms: PaymentTerms | null;
 }
 
 export interface StockMonitoringSetting {
@@ -974,6 +984,14 @@ export interface PurchaseOrderRequisitionItem {
   unit_name: string;
   qty_available: Decimal;
   est_price: Decimal | null;
+  suppliers: PurchaseOrderSupplier[];
+}
+
+export interface PurchaseOrderSupplier {
+  id: number;
+  code: string;
+  name: string;
+  default_payment_terms: PaymentTerms | null;
 }
 
 export interface PurchaseRequisition extends PurchaseRequisitionSummary {

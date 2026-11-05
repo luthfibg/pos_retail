@@ -291,7 +291,7 @@ export function PurchaseRequisitionForm({
     <Modal title={prId === undefined ? 'Buat permintaan pembelian' : 'Ubah permintaan pembelian'} onClose={() => !save.isPending && onClose()}>
       <form onSubmit={review} noValidate className="space-y-4 p-5">
         {errors.general && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{errors.general}</div>}
-        <Field label="Alasan / kebutuhan" hint="Opsional, maksimal 500 karakter.">
+        <Field label="Alasan / kebutuhan">
           <textarea className={inputCls} rows={2} maxLength={500} value={reason} onChange={(event) => { setReason(event.target.value); setErrors((current) => ({ ...current, general: undefined })); save.reset(); }} />
         </Field>
         <div className="space-y-3">
@@ -312,10 +312,10 @@ export function PurchaseRequisitionForm({
                   <button type="button" disabled={rows.length <= 1} onClick={() => { setRows((current) => current.filter((item) => item.key !== row.key)); setErrors((current) => ({ ...current, rows: {} })); }} aria-label={`Hapus baris ${index + 1}`} className="mt-6 rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">Hapus</button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Jumlah" error={rowErrors.qty} hint="Contoh: 20 atau 1,5. Maksimal 3 angka pecahan.">
+                  <Field label="Jumlah" error={rowErrors.qty}>
                     <LocalDecimalInput className={inputCls} kind="quantity" value={row.qty} onChange={(value) => updateRow(row.key, { qty: value })} />
                   </Field>
-                  <Field label="Estimasi harga / unit (opsional)" error={rowErrors.est_price} hint="Contoh: 6.000 atau 6.000,50.">
+                  <Field label="Estimasi harga / unit (opsional)" error={rowErrors.est_price}>
                     <LocalDecimalInput className={inputCls} kind="price" value={row.estPrice} onChange={(value) => updateRow(row.key, { estPrice: value })} />
                   </Field>
                   <Field label="Catatan baris" error={rowErrors.note}>
@@ -329,7 +329,7 @@ export function PurchaseRequisitionForm({
         <ErrorNotice error={save.error instanceof ApiError && save.error.status === 422 ? null : save.error} />
         {confirming ? (
           <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
-            <p>{prId === undefined ? 'Simpan permintaan sebagai Draft?' : 'Simpan perubahan Draft Permintaan?' } Permintaan belum diajukan ke Finance.</p>
+            <p>{prId === undefined ? 'Simpan permintaan sebagai Draft?' : 'Simpan perubahan Draft Permintaan?'}</p>
             <div className="flex justify-end gap-2">
               <button type="button" disabled={save.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2">Periksa lagi</button>
               <button type="button" disabled={save.isPending} onClick={() => save.mutate(buildPurchaseRequisitionInput(rows, reason))} className="rounded-md bg-slate-900 px-3 py-2 font-medium text-white disabled:opacity-60">{save.isPending ? 'Menyimpan…' : 'Simpan Draft'}</button>
@@ -408,7 +408,7 @@ export function PurchaseRequisitionDetailDialog({
       ) : pr ? (
         <div className="space-y-4 p-5">
           <ErrorNotice error={submit.error ?? cancel.error ?? financeCheck.error} />
-          {!pr.is_auto_generated && <PurchaseStageTracker current={trackerStageForPr(pr)} archivedNote={`Status: ${STATUS_LABEL[pr.status]}. Permintaan ini tidak lagi berjalan di alur pembelian.`} />}
+          {!pr.is_auto_generated && <PurchaseStageTracker current={trackerStageForPr(pr)} />}
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <Detail label="Nomor Permintaan" value={pr.doc_number} />
             <div>
@@ -471,7 +471,6 @@ export function PurchaseRequisitionDetailDialog({
 
           {confirmAction === 'finance-return' ? (
             <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
-              <p className="text-sm">Kembalikan Permintaan kepada pemohon untuk diperbaiki.</p>
               <Field label="Catatan keputusan">
                 <textarea className={`${inputCls} min-h-20`} value={note} onChange={(event) => setNote(event.target.value)} maxLength={500} required />
               </Field>

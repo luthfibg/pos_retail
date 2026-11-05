@@ -146,6 +146,30 @@ class PurchaseRequisitionService
             ->values()
             ->all();
 
+        $productIds = array_column($items, 'product_id');
+        $suppliersByProduct = $productIds === []
+            ? collect()
+            : DB::table('product_suppliers as ps')
+                ->join('suppliers as s', 's.id', '=', 'ps.supplier_id')
+                ->whereIn('ps.product_id', $productIds)
+                ->where('s.is_active', true)
+                ->orderBy('s.name')
+                ->get(['ps.product_id', 's.id', 's.code', 's.name', 's.default_payment_terms'])
+                ->groupBy('product_id');
+
+        foreach ($items as &$item) {
+            $item['suppliers'] = ($suppliersByProduct[(string) $item['product_id']] ?? collect())
+                ->map(fn ($supplier) => [
+                    'id' => (int) $supplier->id,
+                    'code' => $supplier->code,
+                    'name' => $supplier->name,
+                    'default_payment_terms' => $supplier->default_payment_terms,
+                ])
+                ->values()
+                ->all();
+        }
+        unset($item);
+
         return ['pr_id' => (int) $pr->id, 'items' => $items];
     }
 

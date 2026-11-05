@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { categoryApi, productApi } from '@/lib/api/endpoints';
+import { categoryApi, productApi, supplierApi } from '@/lib/api/endpoints';
 import { ApiError } from '@/lib/api/client';
-import type { Product, ProductStatus } from '@/lib/api/types';
+import type { Product, ProductStatus, Supplier } from '@/lib/api/types';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { Modal } from '@/components/ui/Modal';
 import { Field, inputCls } from '@/components/ui/Field';
@@ -24,6 +24,19 @@ const STATUS_LABEL: Record<ProductStatus, string> = {
   inactive: 'Nonaktif',
 };
 
+async function loadSuppliers(): Promise<Supplier[]> {
+  const firstPage = await supplierApi.list({ per_page: 100 });
+  if (firstPage.last_page === 1) return firstPage.data;
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: firstPage.last_page - 1 }, (_, index) =>
+      supplierApi.list({ per_page: 100, page: index + 2 }),
+    ),
+  );
+
+  return [...firstPage.data, ...remainingPages.flatMap((page) => page.data)];
+}
+
 interface Props {
   /** undefined = produk baru */
   product?: Product;
@@ -41,6 +54,10 @@ export function ProductFormDialog({ product, onClose }: Props) {
   const [created, setCreated] = useState<Product | null>(null);
 
   const categories = useQuery({ queryKey: ['categories', 'active'], queryFn: () => categoryApi.list(true) });
+  const suppliers = useQuery({
+    queryKey: ['suppliers', 'products'],
+    queryFn: loadSuppliers,
+  });
 
   const mutation = useMutation({
     mutationFn: (job: Job) =>
@@ -61,7 +78,8 @@ export function ProductFormDialog({ product, onClose }: Props) {
   const serverErrors: FormErrors = {};
   if (mutation.error instanceof ApiError && mutation.error.status === 422) {
     for (const [k, msgs] of Object.entries(mutation.error.errors ?? {})) {
-      (serverErrors as Record<string, string>)[k] = msgs[0] ?? '';
+      const field = k.startsWith('supplier_ids.') ? 'supplier_ids' : k;
+      (serverErrors as Record<string, string>)[field] = msgs[0] ?? '';
     }
   }
   const err = (k: keyof FormErrors) => errors[k] ?? serverErrors[k];
@@ -120,6 +138,7 @@ export function ProductFormDialog({ product, onClose }: Props) {
       <form onSubmit={onSubmit} noValidate>
         <div className="space-y-4 p-5">
           {showTopError && <ErrorNotice error={mutation.error} />}
+          <ErrorNotice error={suppliers.error} />
 
           <Field label="Nama produk" error={err('name')}>
             <input className={inputCls} value={values.name} onChange={(e) => set('name', e.target.value)} autoFocus />
@@ -145,6 +164,31 @@ export function ProductFormDialog({ product, onClose }: Props) {
               />
             </Field>
           </div>
+
+          <Field label="Supplier" error={err('supplier_ids')}>
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-300 p-2">
+              {suppliers.data?.map((supplier) => {
+                const selected = values.supplierIds.includes(supplier.id);
+                return (
+                  <label key={supplier.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      disabled={suppliers.isLoading || (!supplier.is_active && !selected)}
+                      onChange={(event) => set(
+                        'supplierIds',
+                        event.target.checked
+                          ? [...values.supplierIds, supplier.id]
+                          : values.supplierIds.filter((id) => id !== supplier.id),
+                      )}
+                    />
+                    <span>{supplier.code} · {supplier.name}{supplier.is_active ? '' : ' (Nonaktif)'}</span>
+                  </label>
+                );
+              })}
+              {suppliers.data?.length === 0 && <p className="text-sm text-slate-500">Belum ada supplier.</p>}
+            </div>
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Kategori" error={err('category_id')}>
@@ -228,7 +272,7 @@ export function ProductFormDialog({ product, onClose }: Props) {
 
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
           <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Batal</button>
-          <button type="submit" disabled={mutation.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+          <button type="submit" disabled={mutation.isPending || suppliers.isLoading || suppliers.isError} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
             {mutation.isPending ? 'Menyimpan…' : 'Simpan'}
           </button>
         </div>

@@ -50,7 +50,10 @@ class ProductService
             $query->where('products.status', $filters['status']);
         }
 
-        return $query->orderBy('products.name')->paginate($perPage)->through(fn ($row) => $this->present($row));
+        $products = $query->orderBy('products.name')->paginate($perPage);
+        $supplierMap = $this->suppliersByProduct($products->getCollection()->pluck('id')->map(fn ($id) => (int) $id)->all());
+
+        return $products->through(fn ($row) => $this->present($row, $supplierMap[(int) $row->id] ?? []));
     }
 
     /** @return array<string, mixed>|null */
@@ -58,7 +61,13 @@ class ProductService
     {
         $row = $this->baseQuery($storeId)->where('products.id', $id)->first();
 
-        return $row === null ? null : $this->present($row);
+        if ($row === null) {
+            return null;
+        }
+
+        $supplierMap = $this->suppliersByProduct([(int) $row->id]);
+
+        return $this->present($row, $supplierMap[(int) $row->id] ?? []);
     }
 
     /** @return array<string, mixed>|null */
@@ -66,7 +75,13 @@ class ProductService
     {
         $row = $this->baseQuery($storeId)->where('products.barcode', $barcode)->first();
 
-        return $row === null ? null : $this->present($row);
+        if ($row === null) {
+            return null;
+        }
+
+        $supplierMap = $this->suppliersByProduct([(int) $row->id]);
+
+        return $this->present($row, $supplierMap[(int) $row->id] ?? []);
     }
 
     /**
@@ -85,6 +100,7 @@ class ProductService
 
         try {
             $id = DB::transaction(function () use ($actor, $storeId, $data, $price, $min, $critical, $canActivate) {
+                $supplierIds = $this->validatedSupplierIds($storeId, $data['supplier_ids']);
                 $sku = $data['sku'] ?? $this->generateSku($storeId);
                 $barcode = $data['barcode'] ?? $this->generateBarcode($storeId);
                 $status = ($price !== null && $canActivate) ? 'active' : 'pending_price';
@@ -105,6 +121,7 @@ class ProductService
                     'status' => $status,
                     'created_by' => $actor->id,
                 ]);
+                $this->replaceSuppliers($id, $supplierIds);
 
                 if ($price !== null) {
                     DB::table('price_history')->insert([
@@ -127,6 +144,7 @@ class ProductService
                         'sell_price' => $price,
                         'unit_cost' => $data['unit_cost'],
                         'restock_quantity' => $data['restock_quantity'] ?? '0.000',
+                        'supplier_ids' => $supplierIds,
                     ],
                     storeId: $storeId,
                     actorId: $actor->id,
@@ -160,6 +178,23 @@ class ProductService
                 ->where('store_id', $storeId)->where('id', $id)->lockForUpdate()->first();
 
             abort_if($current === null, 404, 'Produk tidak ditemukan.');
+            $currentSupplierIds = DB::table('product_suppliers')
+                ->where('product_id', $id)
+                ->orderBy('supplier_id')
+                ->pluck('supplier_id')
+                ->map(fn ($supplierId) => (int) $supplierId)
+                ->all();
+            if ($currentSupplierIds === [] && ! array_key_exists('supplier_ids', $data)) {
+                throw ValidationException::withMessages([
+                    'supplier_ids' => ['Pilih minimal satu supplier untuk produk ini.'],
+                ]);
+            }
+            $supplierIdsChanged = false;
+            $supplierIds = $currentSupplierIds;
+            if (array_key_exists('supplier_ids', $data)) {
+                $supplierIds = $this->validatedSupplierIds($storeId, $data['supplier_ids'], $currentSupplierIds);
+                $supplierIdsChanged = $supplierIds !== $currentSupplierIds;
+            }
 
             // 1. kolom biasa
             $changes = [];
@@ -207,11 +242,26 @@ class ProductService
                 $columns['status'] = $data['status'];
             }
 
-            if ($columns === []) {
+            if ($columns === [] && ! $supplierIdsChanged) {
                 return;
             }
 
-            DB::table('products')->where('id', $id)->update($columns);
+            if ($columns !== []) {
+                DB::table('products')->where('id', $id)->update($columns);
+            }
+
+            if ($supplierIdsChanged) {
+                $this->replaceSuppliers($id, $supplierIds);
+                $this->audit->log(
+                    'product.suppliers_update',
+                    'product',
+                    $id,
+                    before: ['supplier_ids' => $currentSupplierIds],
+                    after: ['supplier_ids' => $supplierIds],
+                    storeId: $storeId,
+                    actorId: $actor->id,
+                );
+            }
 
             if ($changes !== []) {
                 $before = [];
@@ -252,7 +302,7 @@ class ProductService
                 );
             }
 
-            if (array_key_exists('restock_quantity', $changes) || array_key_exists('unit_cost', $changes) || $statusChanged) {
+            if (array_key_exists('restock_quantity', $changes) || array_key_exists('unit_cost', $changes) || $statusChanged || $supplierIdsChanged) {
                 $this->requisitions->synchronizeAutomatic($actor, $storeId, [$id]);
             }
         });
@@ -272,7 +322,7 @@ class ProductService
     }
 
     /** @return array<string, mixed> */
-    private function present(object $row): array
+    private function present(object $row, array $suppliers): array
     {
         $stock = (string) $row->stock_sellable;
 
@@ -287,6 +337,7 @@ class ProductService
             'track_expiry' => (bool) $row->track_expiry,
             'sell_price' => $row->sell_price,
             'unit_cost' => $row->unit_cost,
+            'suppliers' => $suppliers,
             'min_stock' => $row->min_stock,
             'critical_stock' => $row->critical_stock,
             'restock_quantity' => $row->restock_quantity,
@@ -294,6 +345,83 @@ class ProductService
             'stock_sellable' => $stock,
             'stock_status' => StockStatus::for($stock, $row->min_stock, $row->critical_stock),
         ];
+    }
+
+    /**
+     * @param  list<mixed>  $supplierIds
+     * @param  list<int>  $existingSupplierIds
+     * @return list<int>
+     */
+    private function validatedSupplierIds(int $storeId, array $supplierIds, array $existingSupplierIds = []): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $supplierIds)));
+        $suppliers = DB::table('suppliers')
+            ->where('store_id', $storeId)
+            ->whereIn('id', $ids)
+            ->get(['id', 'is_active']);
+
+        if ($suppliers->count() !== count($ids)) {
+            throw ValidationException::withMessages([
+                'supplier_ids' => ['Supplier tidak ditemukan di toko ini.'],
+            ]);
+        }
+
+        foreach ($suppliers as $supplier) {
+            if (! $supplier->is_active && ! in_array((int) $supplier->id, $existingSupplierIds, true)) {
+                throw ValidationException::withMessages([
+                    'supplier_ids' => ['Supplier baru harus berstatus aktif.'],
+                ]);
+            }
+        }
+
+        sort($ids);
+
+        return $ids;
+    }
+
+    /** @param list<int> $supplierIds */
+    private function replaceSuppliers(int $productId, array $supplierIds): void
+    {
+        DB::table('product_suppliers')->where('product_id', $productId)->delete();
+        foreach ($supplierIds as $supplierId) {
+            DB::table('product_suppliers')->insert([
+                'product_id' => $productId,
+                'supplier_id' => $supplierId,
+            ]);
+        }
+    }
+
+    /**
+     * @param  list<int>  $productIds
+     * @return array<int, list<array{id: int, code: string, name: string, is_active: bool, default_payment_terms: string}>>
+     */
+    private function suppliersByProduct(array $productIds): array
+    {
+        if ($productIds === []) {
+            return [];
+        }
+
+        return DB::table('product_suppliers as ps')
+            ->join('suppliers as s', 's.id', '=', 'ps.supplier_id')
+            ->whereIn('ps.product_id', $productIds)
+            ->orderBy('s.name')
+            ->get([
+                'ps.product_id',
+                's.id',
+                's.code',
+                's.name',
+                's.is_active',
+                's.default_payment_terms',
+            ])
+            ->groupBy('product_id')
+            ->map(fn ($rows) => $rows->map(fn ($supplier) => [
+                'id' => (int) $supplier->id,
+                'code' => $supplier->code,
+                'name' => $supplier->name,
+                'is_active' => (bool) $supplier->is_active,
+                'default_payment_terms' => $supplier->default_payment_terms,
+            ])->values()->all())
+            ->all();
     }
 
     private function totalStock(int $productId): float

@@ -4,10 +4,13 @@ namespace Tests\Feature;
 
 use App\Support\Ean13;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 use Tests\SeededTestCase;
 
 class ProductTest extends SeededTestCase
 {
+    private int $supplierSequence = 0;
+
     private function makeCategory(string $name = 'Minuman', bool $active = true): int
     {
         return DB::table('categories')->insertGetId([
@@ -23,13 +26,29 @@ class ProductTest extends SeededTestCase
         static $n = 0;
         $n++;
 
-        return $this->postJson('/api/products', $overrides + [
+        return $this->createProduct($overrides + [
             'sku' => "SKU-{$n}",
             'barcode' => sprintf('89990000%05d', $n),
             'name' => "Produk {$n}",
             'sell_price' => 5000,
             'unit_cost' => 2000,
         ])->assertCreated()->json('data.id');
+    }
+
+    /** @param array<string, mixed> $data */
+    private function createProduct(array $data): TestResponse
+    {
+        if (! array_key_exists('supplier_ids', $data)) {
+            $this->supplierSequence++;
+            $supplierId = DB::table('suppliers')->insertGetId([
+                'store_id' => $this->storeId(),
+                'code' => sprintf('SUP-P-%03d', $this->supplierSequence),
+                'name' => sprintf('Supplier Produk %03d', $this->supplierSequence),
+            ]);
+            $data['supplier_ids'] = [$supplierId];
+        }
+
+        return $this->postJson('/api/products', $data);
     }
 
     private function setStock(int $productId, string $qty): void
@@ -47,7 +66,7 @@ class ProductTest extends SeededTestCase
         $admin = $this->signIn('Admin');
         $categoryId = $this->makeCategory();
 
-        $response = $this->postJson('/api/products', [
+        $response = $this->createProduct([
             'sku' => 'AQ-600',
             'barcode' => '8999999000011',
             'name' => 'Air Mineral 600ml',
@@ -66,6 +85,7 @@ class ProductTest extends SeededTestCase
             ->assertJsonPath('data.unit_name', 'pcs')
             ->assertJsonPath('data.category_name', 'Minuman')
             ->assertJsonPath('data.stock_status', 'habis');
+        $response->assertJsonPath('data.suppliers.0.name', 'Supplier Produk 001');
 
         $id = $response->json('data.id');
         $this->assertDatabaseHas('price_history', ['product_id' => $id, 'new_price' => '3500.00', 'changed_by' => $admin->id]);
@@ -76,7 +96,7 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Admin');
 
-        $this->postJson('/api/products', ['name' => 'Tanpa Harga', 'unit_cost' => '1000'])
+        $this->createProduct(['name' => 'Tanpa Harga', 'unit_cost' => '1000'])
             ->assertCreated()
             ->assertJsonPath('data.status', 'pending_price')
             ->assertJsonPath('data.sell_price', null);
@@ -88,12 +108,44 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Admin');
 
-        $this->postJson('/api/products', ['name' => 'Tanpa Harga Modal'])
+        $this->createProduct(['name' => 'Tanpa Harga Modal'])
             ->assertUnprocessable()->assertJsonValidationErrors(['unit_cost']);
-        $this->postJson('/api/products', ['name' => 'Harga Modal Nol', 'unit_cost' => '0'])
+        $this->createProduct(['name' => 'Harga Modal Nol', 'unit_cost' => '0'])
             ->assertUnprocessable()->assertJsonValidationErrors(['unit_cost']);
-        $this->postJson('/api/products', ['name' => 'Presisi Harga Modal', 'unit_cost' => '1.23456'])
+        $this->createProduct(['name' => 'Presisi Harga Modal', 'unit_cost' => '1.23456'])
             ->assertUnprocessable()->assertJsonValidationErrors(['unit_cost']);
+    }
+
+    public function test_product_creation_requires_a_supplier(): void
+    {
+        $this->signIn('Admin');
+
+        $this->postJson('/api/products', ['name' => 'Tanpa Supplier', 'unit_cost' => '1000'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['supplier_ids']);
+    }
+
+    public function test_product_suppliers_can_be_changed_and_must_belong_to_the_store(): void
+    {
+        $this->signIn('Admin');
+        $id = $this->makeProduct();
+        $originalSupplierId = (int) DB::table('product_suppliers')->where('product_id', $id)->value('supplier_id');
+        $supplierId = DB::table('suppliers')->insertGetId([
+            'store_id' => $this->storeId(),
+            'code' => 'SUP-P-CHANGE',
+            'name' => 'Supplier Pengganti',
+        ]);
+
+        $this->patchJson("/api/products/{$id}", ['supplier_ids' => [$originalSupplierId, $supplierId]])
+            ->assertOk()
+            ->assertJsonCount(2, 'data.suppliers');
+        $this->assertDatabaseHas('product_suppliers', ['product_id' => $id, 'supplier_id' => $originalSupplierId]);
+        $this->assertDatabaseHas('product_suppliers', ['product_id' => $id, 'supplier_id' => $supplierId]);
+
+        $this->patchJson("/api/products/{$id}", ['supplier_ids' => [$supplierId]])
+            ->assertOk()
+            ->assertJsonPath('data.suppliers.0.id', $supplierId);
+        $this->assertDatabaseMissing('product_suppliers', ['product_id' => $id, 'supplier_id' => $originalSupplierId]);
     }
 
     public function test_admin_can_correct_unit_cost_and_audit_the_change(): void
@@ -115,7 +167,7 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Admin');
 
-        $response = $this->postJson('/api/products', [
+        $response = $this->createProduct([
             'name' => 'Stok Otomatis',
             'sell_price' => '5000',
             'unit_cost' => '2500.1234',
@@ -141,7 +193,7 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Admin');
 
-        $this->postJson('/api/products', [
+        $this->createProduct([
             'name' => 'Kuantitas Tidak Valid',
             'unit_cost' => '1000',
             'restock_quantity' => '1.2345',
@@ -152,8 +204,11 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Kasir');
 
-        $first = $this->postJson('/api/products', ['name' => 'Permen Baru', 'unit_cost' => '1000'])->assertCreated();
-        $second = $this->postJson('/api/products', ['name' => 'Permen Lain', 'unit_cost' => '1000'])->assertCreated();
+        $first = $this->createProduct(['name' => 'Permen Baru', 'unit_cost' => '1000'])->assertCreated();
+        $second = $this->createProduct(['name' => 'Permen Lain', 'unit_cost' => '1000'])->assertCreated();
+        $this->getJson('/api/suppliers?per_page=100')
+            ->assertOk()
+            ->assertJsonPath('data.0.name', 'Supplier Produk 001');
 
         $first->assertJsonPath('data.status', 'pending_price')->assertJsonPath('data.sell_price', null);
 
@@ -173,7 +228,7 @@ class ProductTest extends SeededTestCase
 
         $this->signIn('Kasir', 'kasir-uji');
 
-        $this->postJson('/api/products', ['name' => 'Coba Harga', 'sell_price' => 1000, 'unit_cost' => '1000'])->assertForbidden();
+        $this->createProduct(['name' => 'Coba Harga', 'sell_price' => 1000, 'unit_cost' => '1000'])->assertForbidden();
         $this->patchJson("/api/products/{$id}", ['name' => 'Ubah'])->assertForbidden();
         $this->patchJson("/api/products/{$id}", ['sell_price' => 1])->assertForbidden();
         $this->patchJson("/api/products/{$id}", ['unit_cost' => 1])->assertForbidden();
@@ -186,9 +241,9 @@ class ProductTest extends SeededTestCase
         $id = $this->makeProduct(['sku' => 'A-1', 'barcode' => '111111']);
         $this->patchJson("/api/products/{$id}", ['status' => 'inactive'])->assertOk();
 
-        $this->postJson('/api/products', ['name' => 'Baru', 'barcode' => '111111', 'unit_cost' => '1000'])
+        $this->createProduct(['name' => 'Baru', 'barcode' => '111111', 'unit_cost' => '1000'])
             ->assertStatus(422)->assertJsonValidationErrors('barcode');
-        $this->postJson('/api/products', ['name' => 'Baru', 'sku' => 'a-1', 'unit_cost' => '1000'])
+        $this->createProduct(['name' => 'Baru', 'sku' => 'a-1', 'unit_cost' => '1000'])
             ->assertStatus(422)->assertJsonValidationErrors('sku');
     }
 
@@ -222,7 +277,7 @@ class ProductTest extends SeededTestCase
     public function test_activation_requires_a_price(): void
     {
         $this->signIn('Kasir', 'kasir-uji');
-        $id = $this->postJson('/api/products', ['name' => 'Menunggu Harga', 'unit_cost' => '1000'])->json('data.id');
+        $id = $this->createProduct(['name' => 'Menunggu Harga', 'unit_cost' => '1000'])->json('data.id');
 
         $this->signIn('Admin', 'admin-uji');
 
@@ -258,7 +313,7 @@ class ProductTest extends SeededTestCase
     {
         $this->signIn('Admin');
 
-        $this->postJson('/api/products', ['name' => 'X', 'unit_cost' => '1000', 'min_stock' => 5, 'critical_stock' => 9])
+        $this->createProduct(['name' => 'X', 'unit_cost' => '1000', 'min_stock' => 5, 'critical_stock' => 9])
             ->assertStatus(422)->assertJsonValidationErrors('critical_stock');
 
         $id = $this->makeProduct(['min_stock' => 10, 'critical_stock' => 3]);
@@ -271,7 +326,7 @@ class ProductTest extends SeededTestCase
         $this->signIn('Admin');
         $inactive = $this->makeCategory('Lama', active: false);
 
-        $this->postJson('/api/products', ['name' => 'X', 'unit_cost' => '1000', 'category_id' => $inactive])
+        $this->createProduct(['name' => 'X', 'unit_cost' => '1000', 'category_id' => $inactive])
             ->assertStatus(422)->assertJsonValidationErrors('category_id');
     }
 
@@ -297,7 +352,7 @@ class ProductTest extends SeededTestCase
 
         $this->makeProduct(['sku' => 'AQ-600', 'barcode' => '8991111000011', 'name' => 'Air Mineral 600ml', 'category_id' => $categoryId]);
         $this->makeProduct(['sku' => 'TB-250', 'barcode' => '8992222000022', 'name' => 'Teh Botol 250ml']);
-        $this->postJson('/api/products', ['name' => 'Belum Berharga', 'unit_cost' => '1000']);
+        $this->createProduct(['name' => 'Belum Berharga', 'unit_cost' => '1000']);
 
         $this->getJson('/api/products')->assertOk()->assertJsonPath('total', 3);
         $this->getJson('/api/products?q=mineral')->assertOk()->assertJsonPath('total', 1);

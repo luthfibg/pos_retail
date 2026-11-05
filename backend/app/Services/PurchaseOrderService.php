@@ -184,7 +184,7 @@ class PurchaseOrderService
                 throw ValidationException::withMessages(['bank_account_id' => ['Rekening tidak ditemukan atau nonaktif.']]);
             }
 
-            $items = $this->normalizeItems($pr, $data['items'], null);
+            $items = $this->normalizeItems($pr, $data['items'], null, (int) $supplier->id);
             [$orderDate, $expectedDate] = $this->dates($data);
             $total = $this->sumTotal($items);
 
@@ -267,8 +267,22 @@ class PurchaseOrderService
                 $changes['expected_date'] = $expectedDate;
             }
 
-            if (isset($data['items'])) {
-                $items = $this->normalizeItems($pr, $data['items'], $id);
+            $supplierId = (int) ($changes['supplier_id'] ?? $po->supplier_id);
+            $itemsToNormalize = $data['items'] ?? null;
+            if ($itemsToNormalize === null && isset($data['supplier_id'])) {
+                $itemsToNormalize = DB::table('purchase_order_items')
+                    ->where('po_id', $id)
+                    ->get(['product_id', 'qty_ordered', 'unit_price'])
+                    ->map(fn ($item) => [
+                        'product_id' => (int) $item->product_id,
+                        'qty_ordered' => $item->qty_ordered,
+                        'unit_price' => $item->unit_price,
+                    ])
+                    ->all();
+            }
+
+            if ($itemsToNormalize !== null) {
+                $items = $this->normalizeItems($pr, $itemsToNormalize, $id, $supplierId);
 
                 DB::table('purchase_order_items')->where('po_id', $id)->delete();
                 $this->insertItems($id, $items);
@@ -553,10 +567,20 @@ class PurchaseOrderService
      * @param  list<array<string, mixed>>  $items
      * @return list<array<string, mixed>>
      */
-    private function normalizeItems(object $pr, array $items, ?int $exceptPoId): array
+    private function normalizeItems(object $pr, array $items, ?int $exceptPoId, int $supplierId): array
     {
         $prItems = DB::table('purchase_requisition_items')->where('pr_id', $pr->id)->get()->keyBy('product_id');
         $ordered = $this->requisitions->orderedByProduct((int) $pr->id, $exceptPoId);
+        $productIds = array_values(array_unique(array_map(fn ($item) => (int) $item['product_id'], $items)));
+        $supplierProductIds = DB::table('product_suppliers as ps')
+            ->join('suppliers as s', 's.id', '=', 'ps.supplier_id')
+            ->where('ps.supplier_id', $supplierId)
+            ->where('s.is_active', true)
+            ->whereIn('ps.product_id', $productIds)
+            ->pluck('ps.product_id')
+            ->map(fn ($productId) => (int) $productId)
+            ->all();
+        $supplierProducts = array_fill_keys($supplierProductIds, true);
 
         $errors = [];
         $seen = [];
@@ -567,6 +591,12 @@ class PurchaseOrderService
 
             if (! $prItems->has($productId)) {
                 $errors["items.{$i}.product_id"] = ['Produk ini tidak ada di PR.'];
+
+                continue;
+            }
+
+            if (! isset($supplierProducts[$productId])) {
+                $errors["items.{$i}.product_id"] = ['Supplier ini tidak terhubung ke produk.'];
 
                 continue;
             }

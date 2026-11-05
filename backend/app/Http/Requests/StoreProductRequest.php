@@ -22,6 +22,8 @@ class StoreProductRequest extends FormRequest
             'sku' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9._\-]+$/', Rule::unique('products', 'sku')->where('store_id', $storeId)],
             'barcode' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9\-]+$/', Rule::unique('products', 'barcode')],
             'name' => ['required', 'string', 'max:200'],
+            'supplier_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'supplier_ids.*' => ['required', 'integer', 'distinct', Rule::exists('suppliers', 'id')->where('store_id', $storeId)],
             'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')->where('store_id', $storeId)->where('is_active', 1)],
             'unit_name' => ['nullable', 'string', 'max:20'],
             'track_expiry' => ['nullable', 'boolean'],

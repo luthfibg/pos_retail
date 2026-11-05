@@ -23,6 +23,8 @@ class UpdateProductRequest extends FormRequest
             'sku' => ['prohibited'],
             'barcode' => ['prohibited'],
             'name' => ['sometimes', 'required', 'string', 'max:200'],
+            'supplier_ids' => ['sometimes', 'required', 'array', 'min:1', 'max:100'],
+            'supplier_ids.*' => ['required', 'integer', 'distinct', Rule::exists('suppliers', 'id')->where('store_id', $storeId)],
             'category_id' => ['sometimes', 'nullable', 'integer', Rule::exists('categories', 'id')->where('store_id', $storeId)->where('is_active', 1)],
             'unit_name' => ['sometimes', 'required', 'string', 'max:20'],
             'track_expiry' => ['sometimes', 'required', 'boolean'],

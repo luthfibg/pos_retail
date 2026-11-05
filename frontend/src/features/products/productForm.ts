@@ -19,12 +19,13 @@ export interface ProductFormValues {
   minStock: string;
   criticalStock: string;
   restockQuantity: string;
+  supplierIds: number[];
   status: ProductStatus;
   reason: string;
 }
 
 export type FormErrors = Partial<Record<
-  'sku' | 'barcode' | 'name' | 'category_id' | 'unit_name' | 'sell_price' | 'unit_cost' | 'min_stock' | 'critical_stock' | 'restock_quantity' | 'status',
+  'sku' | 'barcode' | 'name' | 'category_id' | 'unit_name' | 'sell_price' | 'unit_cost' | 'min_stock' | 'critical_stock' | 'restock_quantity' | 'supplier_ids' | 'status',
   string
 >>;
 
@@ -36,7 +37,7 @@ export type UpdatePayload = Partial<Omit<ProductInput, 'sku' | 'barcode'>> & {
 export function emptyValues(): ProductFormValues {
   return {
     sku: '', barcode: '', name: '', categoryId: '', unitName: 'pcs', trackExpiry: false,
-    sellPrice: '', unitCost: '', minStock: '0', criticalStock: '0', restockQuantity: '0', status: 'pending_price', reason: '',
+    sellPrice: '', unitCost: '', minStock: '0', criticalStock: '0', restockQuantity: '0', supplierIds: [], status: 'pending_price', reason: '',
   };
 }
 
@@ -53,6 +54,7 @@ export function valuesFromProduct(p: Product): ProductFormValues {
     minStock: p.min_stock,
     criticalStock: p.critical_stock,
     restockQuantity: p.restock_quantity,
+    supplierIds: p.suppliers.map((supplier) => supplier.id),
     status: p.status,
     reason: '',
   };
@@ -79,6 +81,7 @@ export function validateProduct(
 
   if (!v.unitName.trim()) e.unit_name = 'Satuan wajib diisi.';
   else if (v.unitName.trim().length > 20) e.unit_name = 'Maksimal 20 karakter.';
+  if (v.supplierIds.length === 0) e.supplier_ids = 'Pilih minimal satu supplier.';
 
   if (mode === 'create') {
     if (v.sku.trim() && !/^[A-Za-z0-9._-]{1,40}$/.test(v.sku.trim())) {
@@ -139,6 +142,7 @@ export function buildCreatePayload(v: ProductFormValues, caps: ProductCaps): Pro
     critical_stock: normalizeDecimal(v.criticalStock),
     restock_quantity: normalizeDecimal(v.restockQuantity),
     unit_cost: normalizeDecimal(v.unitCost),
+    supplier_ids: v.supplierIds,
   };
   if (v.sku.trim()) input.sku = v.sku.trim();
   if (v.barcode.trim()) input.barcode = v.barcode.trim();
@@ -173,6 +177,11 @@ export function buildUpdatePayload(
 
   const restock = normalizeDecimal(v.restockQuantity);
   if (!sameNumber(original.restock_quantity, restock)) p.restock_quantity = restock;
+  const supplierIds = [...v.supplierIds].sort((a, b) => a - b);
+  const originalSupplierIds = original.suppliers.map((supplier) => supplier.id).sort((a, b) => a - b);
+  if (supplierIds.length !== originalSupplierIds.length || supplierIds.some((id, index) => id !== originalSupplierIds[index])) {
+    p.supplier_ids = supplierIds;
+  }
 
   const unitCost = normalizeDecimal(v.unitCost);
   if (caps.canSetCost && !sameNumber(original.unit_cost, unitCost)) p.unit_cost = unitCost;
