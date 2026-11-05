@@ -7,7 +7,7 @@ Dokumen ini berdiri sendiri; dokumen kebutuhan lengkap (Claude Doc "POS Retail S
 
 ## 1. Ringkasan satu paragraf
 
-Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabrik. Pembeli adalah karyawan pabrik: penjualan utama **kredit karyawan** (struk keluar, tidak bayar saat itu; akhir periode dibuat **satu invoice gabungan ke HRD**, dibayar lewat potong gaji), plus opsi **tunai langsung**. Ada dua role: **Admin/Owner** dan **Kasir**, tetapi arsitektur izin mengikuti standar retail (Kasir, Finance, Purchasing, Accounting, Owner) lewat permission yang dapat didelegasikan. Sistem **tidak terhubung ke bank**; uang tetap di bank dan sistem hanya mencatat (kas kecil, kas besar, saldo pembelian, rekening bank, rekonsiliasi manual).
+Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabrik. Pembeli adalah karyawan pabrik: penjualan utama **kredit karyawan** (struk keluar, tidak bayar saat itu; akhir periode dibuat **satu invoice gabungan ke HRD**, dibayar lewat potong gaji), plus opsi **tunai langsung**. Ada dua role: **Admin/Owner** dan **Kasir**, tetapi arsitektur izin mengikuti standar retail (Kasir, Finance, Purchasing, Accounting, Owner) lewat permission yang dapat didelegasikan. Sistem **tidak terhubung ke bank**; data rekening hanya disimpan untuk dicantumkan pada PO, tanpa saldo, ledger, atau alokasi dana aktif.
 
 **Stack:** Laravel (REST API, Sanctum, modular monolith, 11+) · MySQL 8.0.16+ · React + TypeScript (**belum dimulai**). Pengguna mengembangkan di **Windows + PowerShell**; proyek di `D:\LUTHFI\Codecentral\post_retail`; database `pos_retail` (dev) dan `pos_retail_test` (test, via `.env.testing`).
 
@@ -116,9 +116,9 @@ php artisan test                                     # butuh .env.testing -> DB_
 - **PPN ditunda (R-04):** dihitung di invoice untuk kredit dan per transaksi untuk tunai, tetapi tarif, harga termasuk/tidak, dan status PKP **belum diketahui**. Default nonaktif; wajib selesai sebelum UAT.
 
 **Kas dan dana**
-- Empat akun dana: Kas Kecil (laci), Kas Besar, Rekening Bank (catatan), **Saldo Pembelian**.
+- Dana operasional kas kecil dan kas besar tetap dicatat di ledger; data rekening bank hanya berupa nama bank, pemilik, dan nomor rekening untuk PO (maksimal lima).
 - **Endapan:** setiap setoran wajib menyisakan endapan (nominal atau persen, basis penjualan tunai shift **atau** uang tunai di laci). Batas min/maks diatur Admin; Kasir boleh mengusulkan. **Pembulatan setoran ke bawah Rp1.000.** Endapan menjadi saldo awal shift berikutnya. **Setoran parsial** tengah shift boleh (shift tetap terbuka).
-- **Saldo Pembelian (Paket 2):** diisi otomatis **15% (konfigurasi)** dari uang yang benar-benar diterima di bank (setoran bank dari penjualan tunai + pembayaran HRD; bukan transfer internal/saldo awal). Alokasi manual boleh, **wajib persetujuan Owner**. Transfer ke supplier ≤ saldo tersedia, **satu transfer per PO**, sisa dikembalikan, wajib konfirmasi penggunaan + bukti.
+- Alur PO tidak memeriksa saldo rekening atau mengalokasikan dana. Ledger dan tabel alokasi PO lama dipertahankan hanya sebagai data historis dan tidak digunakan oleh alur aktif.
 - Pembayaran supplier bervariasi (`prepaid`/`credit`/`cod`) — disimpan per supplier dan per PO.
 - Write-off barang rusak/kadaluarsa hanya setelah retur supplier ditolak, **persetujuan Owner (re-auth)**.
 
@@ -147,7 +147,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 **Berkas penting** (di folder keluaran proyek): `schema_paket1.sql`, `erd_paket1.md`, zip migration, zip tahap1b (seeder/auth/RBAC), zip tahap1c (master data), `SETUP.md`, `SETUP_AUTH_RBAC.md`, `PANDUAN_MASTER_DATA.md`.
 
-**Tabel Paket 1 (55)** adalah baseline schema. Migration backend tambahan kini menyediakan `supplier_returns` dan `supplier_return_items`. **Belum dirancang:** `bank_accounts`, `bank_transactions`, `bank_deposits`, `bank_receipts`, `supplier_payments`, `purchase_fund_*`, `expenses`, `customer_returns`, `credit_notes`, rekonsiliasi.
+**Tabel Paket 1 (55)** adalah baseline schema. Migration backend tambahan kini menyediakan `supplier_returns`, `supplier_return_items`, dan `bank_accounts`; ledger rekening/alokasi pembelian historis tetap tersimpan tetapi tidak digunakan alur PO aktif. **Belum dirancang:** `bank_transactions`, `bank_deposits`, `bank_receipts`, `supplier_payments`, `expenses`, `customer_returns`, `credit_notes`, rekonsiliasi.
 
 ---
 

@@ -73,16 +73,6 @@ class PurchaseOrderController extends Controller
         return response()->json(['data' => $this->orders->submit($user, $this->stores->requireIdFor($user), $po)]);
     }
 
-    public function allocateFunds(Request $request, int $po): JsonResponse
-    {
-        $data = $request->validate(['bank_account_id' => ['required', 'integer', 'min:1']]);
-        $user = $request->user();
-
-        return response()->json(['data' => $this->orders->allocateFunds(
-            $user, $this->stores->requireIdFor($user), $po, (int) $data['bank_account_id'],
-        )], 201);
-    }
-
     public function confirm(ApprovalRequest $request, int $po): JsonResponse
     {
         $user = $request->user();

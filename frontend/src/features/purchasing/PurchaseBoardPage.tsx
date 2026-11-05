@@ -41,9 +41,7 @@ export function PurchasingEntryPage() {
   const manages = can('purchase_requisition.finance_check')
     || can('purchase_requisition.approve')
     || can('purchase_order.create')
-    || can('purchase_order.send')
-    || can('purchase_fund.view')
-    || can('purchase_fund.allocate');
+    || can('purchase_order.send');
   return manages ? <PurchaseBoardPage /> : <PurchaseRequisitionsPage />;
 }
 
@@ -54,8 +52,7 @@ export function PurchaseBoardPage() {
   const canApprove = can('purchase_requisition.approve');
   const canCreatePo = can('purchase_order.create');
   const canSendPo = can('purchase_order.send');
-  const canViewPurchaseFund = can('purchase_fund.view') || can('purchase_fund.allocate');
-  const canManagePo = canCreatePo || canSendPo || canApprove || canViewPurchaseFund;
+  const canManagePo = canCreatePo || canSendPo || canApprove;
 
   const [tab, setTab] = useState<FlowStage>('pr_review');
   const [search, setSearch] = useState('');
@@ -192,7 +189,7 @@ export function PurchaseBoardPage() {
 
   const actionable: Record<FlowStage, boolean> = {
     pr_review: canFinanceCheck,
-    po_prepare: canCreatePo && can('purchase_fund.allocate'),
+    po_prepare: canCreatePo,
     po_send: canSendPo,
   };
 
@@ -267,40 +264,22 @@ export function PurchaseBoardPage() {
           )}
 
           {tab === 'po_prepare' && (
-            <div className="space-y-5">
-              <div>
-                <h2 className="mb-2 text-sm font-semibold">Permintaan siap dibuat PO</h2>
-                <PrTable
-                  rows={board.pr_ready}
-                  stage="po_prepare"
-                  highlightId={highlight?.kind === 'pr' ? highlight.id : null}
-                  busyKey={busyKey}
-                  canAct={() => false}
-                  canCreatePo={canCreatePo && can('purchase_fund.allocate')}
-                  onOpen={openPr}
-                  onCreatePo={(pr) => void startCreatePo(pr.id)}
-                  onPrint={(pr) => void printPrById(pr.id)}
-                />
-              </div>
-              <div>
-                <h2 className="mb-2 text-sm font-semibold">PO legacy yang menunggu persiapan atau persetujuan</h2>
-                <PoTable
-                  rows={board.po_prepare}
-                  stage={tab}
-                  highlightId={highlight?.kind === 'po' ? highlight.id : null}
-                  busyKey={busyKey}
-                  canAct={canManagePo}
-                  onOpen={openPo}
-                  onPrint={(po) => void printPoById(po.id)}
-                />
-              </div>
-            </div>
+            <PrTable
+              rows={board.pr_ready}
+              stage="po_prepare"
+              highlightId={highlight?.kind === 'pr' ? highlight.id : null}
+              busyKey={busyKey}
+              canAct={() => false}
+              canCreatePo={canCreatePo}
+              onOpen={openPr}
+              onCreatePo={(pr) => void startCreatePo(pr.id)}
+              onPrint={(pr) => void printPrById(pr.id)}
+            />
           )}
 
           {tab === 'po_send' && (
             <PoTable
               rows={board.po_send}
-              stage={tab}
               highlightId={highlight?.kind === 'po' ? highlight.id : null}
               busyKey={busyKey}
               canAct={canSendPo}
@@ -318,7 +297,7 @@ export function PurchaseBoardPage() {
           canManagePr={canCreatePr}
           canCancel={canCreatePr}
           canFinanceCheck={canFinanceCheck}
-          canCreatePo={canCreatePo && can('purchase_fund.allocate')}
+          canCreatePo={canCreatePo}
           canManagePo={canManagePo}
           closeOnSuccess
           onPrint={(pr) => setPrintJob({ kind: 'pr', pr })}
@@ -368,7 +347,7 @@ function Empty({ text }: { text: string }) {
 
 const REQUEST_EMPTY: Record<FlowStage, string> = {
   pr_review: 'Tidak ada Permintaan baru yang menunggu pemeriksaan Finance.',
-  po_prepare: 'Tidak ada Permintaan siap PO atau PO yang menunggu persiapan/persetujuan.',
+  po_prepare: 'Tidak ada Permintaan yang siap dibuat PO.',
   po_send: 'Belum ada PO yang menunggu dicetak/dikirim atau sedang diterima.',
 };
 
@@ -415,7 +394,7 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
                   {isPrPrintable(pr.status) && <button type="button" disabled={busyKey === `pr-${pr.id}`} onClick={() => onPrint(pr)} className="font-medium text-slate-700 hover:underline disabled:opacity-50">Cetak</button>}
                   <button type="button" onClick={() => onOpen(pr)} className="font-medium text-blue-700 hover:underline">Detail</button>
                   {canAct(pr) && <button type="button" onClick={() => onOpen(pr)} className="rounded-md bg-slate-900 px-3 py-1.5 font-medium text-white">Periksa Permintaan</button>}
-                  {canCreatePo && stage === 'po_prepare' && <button type="button" disabled={busyKey === `pr-${pr.id}`} onClick={() => onCreatePo(pr)} className="rounded-md bg-blue-700 px-3 py-1.5 font-medium text-white disabled:opacity-60">{busyKey === `pr-${pr.id}` ? 'Memuat…' : 'Buat Permintaan'}</button>}
+                  {canCreatePo && stage === 'po_prepare' && <button type="button" disabled={busyKey === `pr-${pr.id}`} onClick={() => onCreatePo(pr)} className="rounded-md bg-blue-700 px-3 py-1.5 font-medium text-white disabled:opacity-60">{busyKey === `pr-${pr.id}` ? 'Memuat…' : 'Buat PO'}</button>}
                 </span>
               </td>
             </tr>
@@ -426,9 +405,8 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
   );
 }
 
-function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }: {
+function PoTable({ rows, highlightId, busyKey, canAct, onOpen, onPrint }: {
   rows: PurchaseOrderSummary[];
-  stage: FlowStage;
   highlightId: number | null;
   busyKey: string | null;
   canAct: boolean;
@@ -436,7 +414,7 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
   onPrint: (po: PurchaseOrderSummary) => void;
 }) {
   if (rows.length === 0) {
-    return <Empty text={stage === 'po_prepare' ? 'Tidak ada PO yang menunggu persiapan atau persetujuan.' : 'Belum ada PO yang menunggu dikirim ke supplier.'} />;
+    return <Empty text="Belum ada PO yang menunggu dicetak/dikirim atau sedang diterima." />;
   }
   return (
     <div className="overflow-x-auto">
@@ -450,7 +428,7 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
             <th className="px-3 py-2">Permintaan tiba</th>
             <th className="px-3 py-2 text-right">Total</th>
             <th className="px-3 py-2">Status</th>
-            {stage === 'po_send' && <th className="px-3 py-2">Penerimaan</th>}
+            <th className="px-3 py-2">Penerimaan</th>
             <th className="px-3 py-2" />
           </tr>
         </thead>
@@ -464,11 +442,11 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
               <td className="px-3 py-2">{formatDate(po.expected_date)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(po.total)}</td>
               <td className="px-3 py-2"><StatusChip text={ORDER_STATUS_LABEL[po.status]} tone={po.status === 'pending_confirmation' ? 'amber' : po.status === 'received' ? 'green' : 'slate'} /></td>
-              {stage === 'po_send' && <td className="px-3 py-2">{RECEIPT_LABEL[po.receipt_status]}</td>}
+              <td className="px-3 py-2">{RECEIPT_LABEL[po.receipt_status]}</td>
               <td className="whitespace-nowrap px-3 py-2 text-right">
                 <span className="inline-flex items-center gap-3">
                   {isPoPrintable(po.status) && <button type="button" disabled={busyKey === `po-${po.id}`} onClick={() => onPrint(po)} className="font-medium text-slate-700 hover:underline disabled:opacity-50">Cetak</button>}
-                  {canAct && (stage === 'po_prepare' || (stage === 'po_send' && po.status === 'approved'))
+                  {canAct && po.status === 'approved'
                     ? <button type="button" onClick={() => onOpen(po)} className="rounded-md bg-slate-900 px-3 py-1.5 font-medium text-white">{poNextAction(po.status)}</button>
                     : <button type="button" onClick={() => onOpen(po)} className="font-medium text-blue-700 hover:underline">Lihat</button>}
                 </span>

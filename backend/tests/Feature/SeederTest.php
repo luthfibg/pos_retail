@@ -33,7 +33,8 @@ class SeederTest extends TestCase
         $storeId = DB::table('stores')->where('code', 'SMK')->value('id');
         $this->assertNotNull($storeId);
 
-        $this->assertSame(3, DB::table('fund_accounts')->where('store_id', $storeId)->count());
+        $this->assertSame(2, DB::table('fund_accounts')->where('store_id', $storeId)->count());
+        $this->assertSame(0, DB::table('fund_accounts')->where('store_id', $storeId)->where('type', 'purchase_fund')->count());
         $this->assertSame(1, DB::table('registers')->where('store_id', $storeId)->count());
         $this->assertSame(0, (int) DB::table('locations')->where('type', 'warehouse')->value('is_active'));
         $this->assertSame('false', DB::table('settings')->where('setting_key', 'warehouse_enabled')->value('setting_value'));
@@ -60,7 +61,8 @@ class SeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $this->assertSame(1, DB::table('stores')->count());
-        $this->assertSame(3, DB::table('fund_accounts')->count());
+        $this->assertSame(2, DB::table('fund_accounts')->count());
+        $this->assertSame(0, DB::table('fund_accounts')->where('type', 'purchase_fund')->count());
         $this->assertSame(count(PermissionCatalog::roles()), DB::table('roles')->count());
         $this->assertSame(1, DB::table('users')->count());
         $this->assertSame('14', DB::table('settings')->where('setting_key', 'expiry_warning_days')->value('setting_value'));

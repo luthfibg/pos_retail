@@ -2,7 +2,7 @@
  * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
  * Izin hanya untuk tampilan; backend tetap penentu akhir.
  */
-export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'stock-authority' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
+export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'inventory-menus' | 'bank-accounts' | 'stock-authority' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
 export type GroupId = 'store' | 'sales' | 'cash' | 'accounts';
 
 export interface SettingsSection {
@@ -43,6 +43,16 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     id: 'stock-monitoring', group: 'store', title: 'Pemantauan stok', permission: 'settings.manage', defaultOpen: true,
     description: 'Atur ambang stok menipis untuk pembuatan Permintaan otomatis oleh sistem.',
     keywords: ['inventory', 'stok', 'minimum', 'menipis', 'pembelian', 'restock', 'isi ulang', 'permintaan otomatis'],
+  },
+  {
+    id: 'inventory-menus', group: 'store', title: 'Menu Inventory', permission: 'settings.manage', defaultOpen: false,
+    description: 'Tampilkan atau sembunyikan menu Stok Eksisting Toko dan Transfer Stok.',
+    keywords: ['inventory', 'stok eksisting', 'stok awal', 'transfer', 'menu'],
+  },
+  {
+    id: 'bank-accounts', group: 'store', title: 'Rekening bank', permission: 'settings.manage', defaultOpen: false,
+    description: 'Kelola hingga lima rekening bank untuk dicantumkan pada Purchase Order. Saldo tidak dicatat.',
+    keywords: ['bank', 'rekening', 'purchase order', 'pembelian', 'nomor rekening'],
   },
   {
     id: 'stock-authority', group: 'store', title: 'Kewenangan stok', permission: 'settings.manage', defaultOpen: false,

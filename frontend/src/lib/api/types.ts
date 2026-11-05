@@ -138,6 +138,11 @@ export interface WarehouseSetting {
   }>;
 }
 
+export interface InventoryMenuSetting {
+  show_opening_balance: boolean;
+  show_stock_transfer: boolean;
+}
+
 export interface ManagedUser {
   id: number;
   name: string;
@@ -1014,43 +1019,24 @@ export interface PurchaseOrderSummary {
   order_date: string;
   expected_date: string | null;
   total: Decimal | null;
-  fund_allocation?: PurchaseFundAllocation | null;
+  bank_account: BankAccountSummary | null;
   created_at: string;
 }
 
-export interface PurchaseFundAllocation {
+export interface BankAccountSummary {
   id: number;
-  bank_account_id: number;
   bank_name: string;
   account_name: string;
   account_number_masked: string;
-  amount: Decimal;
-  status: 'reserved';
-  created_at: string;
+  is_active: boolean;
 }
 
 export interface BankAccount {
   id: number;
   bank_name: string;
   account_name: string;
-  account_number_masked: string;
+  account_number: string;
   is_active: boolean;
-  balance: Decimal;
-  reserved_for_purchase_fund: Decimal;
-  available_balance: Decimal;
-}
-
-export interface PurchaseFundSummary {
-  balance: Decimal;
-  reserved_total: Decimal;
-  bank_accounts: BankAccount[];
-  allocations: Array<{
-    allocation_id: number;
-    purchase_order_id: number;
-    po_doc_number: string;
-    po_status: PurchaseOrderStatus;
-    amount: Decimal;
-  }>;
 }
 
 export interface PurchaseOrderItem {

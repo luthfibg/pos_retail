@@ -35,13 +35,10 @@ final class PermissionCatalog
             'customer.set_limit' => 'Menetapkan batas kredit karyawan',
             'customer.select' => 'Memilih karyawan di POS',
             'purchase_requisition.create' => 'Meneruskan PR stok otomatis',
-            'purchase_requisition.finance_check' => 'Memeriksa PR (saldo/kelayakan)',
+            'purchase_requisition.finance_check' => 'Memeriksa Permintaan Pembelian',
             'purchase_requisition.approve' => 'Menyetujui PR (autentikasi ulang Owner)',
             'purchase_order.create' => 'Membuat Purchase Order',
             'purchase_order.send' => 'Mengirim PO ke supplier',
-            'purchase_fund.view' => 'Melihat rekening bank dan Kas Pembelian',
-            'purchase_fund.allocate' => 'Mengalokasikan dana rekening ke Kas Pembelian untuk PO',
-            'bank_account.manage' => 'Mengelola rekening dan penyesuaian saldo bank',
             'goods_receipt.create' => 'Mencatat penerimaan barang',
             'goods_receipt.verify_documents' => 'Memverifikasi surat jalan dan faktur',
             'supplier_return.create' => 'Mengelola retur supplier (dikendalikan matriks kewenangan stok)',
@@ -124,7 +121,7 @@ final class PermissionCatalog
             'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve',
             'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
-            'shift.review', 'register.manage', 'float.configure', 'purchase_fund.view', 'reports.view', 'reports.profit.view',
+            'shift.review', 'register.manage', 'float.configure', 'reports.view', 'reports.profit.view',
         ];
     }
 
@@ -134,7 +131,7 @@ final class PermissionCatalog
         return [
             'inventory.view', 'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.finance_check', 'shift.review', 'float.propose', 'cash_deposit.receive',
-            'invoice.record_payment', 'purchase_fund.view', 'purchase_fund.allocate', 'bank_account.manage',
+            'invoice.record_payment',
             'receipt.reprint', 'reports.view', 'reports.profit.view',
         ];
     }

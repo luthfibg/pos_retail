@@ -187,7 +187,7 @@ export function PurchaseRequisitionsPage() {
         canManagePr={canCreatePr}
         canCancel={can('purchase_requisition.create')}
         canFinanceCheck={can('purchase_requisition.finance_check')}
-        canCreatePo={can('purchase_order.create') && can('purchase_fund.allocate')}
+        canCreatePo={can('purchase_order.create')}
         canManagePo={canManagePo}
         onClose={() => setSelectedId(null)}
         onEdit={() => { setEditId(selectedId); setSelectedId(null); }}

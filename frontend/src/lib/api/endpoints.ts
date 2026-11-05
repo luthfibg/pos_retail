@@ -10,10 +10,10 @@ import type {
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, ProfitReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
-  WarehouseSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting, StockMonitoringSetting,
+  WarehouseSetting, InventoryMenuSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting, StockMonitoringSetting,
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
   SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
-  BankAccount, PurchaseFundSummary,
+  BankAccount, BankAccountSummary,
   AvailableRegister, Register,
 } from './types';
 
@@ -226,22 +226,16 @@ export const purchaseOrderApi = {
     api<{ data: PurchaseOrder }>(`/purchase-orders/${id}/send`, { method: 'POST' }).then((r) => r.data),
 };
 
-export const purchaseFundApi = {
-  summary: () => api<{ data: PurchaseFundSummary }>('/purchase-fund').then((r) => r.data),
-  createBankAccount: (input: {
+export const bankAccountApi = {
+  list: () => api<{ data: BankAccountSummary[] }>('/bank-accounts').then((r) => r.data),
+  listForSettings: () => api<{ data: BankAccount[] }>('/settings/bank-accounts').then((r) => r.data),
+  create: (input: {
     bank_name: string;
     account_name: string;
     account_number: string;
-    opening_balance: string;
-    reason: string;
-  }) => api<{ data: BankAccount }>('/bank-accounts', { method: 'POST', body: input }).then((r) => r.data),
-  adjustBankAccount: (id: number, input: { direction: 'increase' | 'decrease'; amount: string; reason: string }) =>
-    api<{ data: BankAccount }>(`/bank-accounts/${id}/adjustments`, { method: 'POST', body: input }).then((r) => r.data),
-  allocate: (poId: number, bank_account_id: number) =>
-    api<{ data: PurchaseOrder }>(`/purchase-orders/${poId}/fund-allocation`, {
-      method: 'POST',
-      body: { bank_account_id },
-    }).then((r) => r.data),
+  }) => api<{ data: BankAccount }>('/settings/bank-accounts', { method: 'POST', body: input }).then((r) => r.data),
+  update: (id: number, input: Partial<Pick<BankAccount, 'bank_name' | 'account_name' | 'account_number' | 'is_active'>>) =>
+    api<{ data: BankAccount }>(`/settings/bank-accounts/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
 };
 
 export const goodsReceiptApi = {
@@ -510,6 +504,9 @@ export const discountApi = {
 };
 
 export const settingsApi = {
+  inventoryMenus: () => api<{ data: InventoryMenuSetting }>('/settings/inventory/menus').then((r) => r.data),
+  saveInventoryMenus: (input: InventoryMenuSetting) =>
+    api<{ data: InventoryMenuSetting }>('/settings/inventory/menus', { method: 'PUT', body: input }).then((r) => r.data),
   vat: () => api<{ data: VatSetting }>('/settings/vat').then((r) => r.data),
   saveVat: (input: VatInput) =>
     api<{ data: VatSetting }>('/settings/vat', { method: 'PUT', body: input }).then((r) => r.data),

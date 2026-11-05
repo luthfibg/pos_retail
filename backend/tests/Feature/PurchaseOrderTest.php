@@ -38,16 +38,14 @@ class PurchaseOrderTest extends SeededTestCase
         ];
     }
 
-    private function bankAccount(string $openingBalance = '1000000.00'): int
+    private function bankAccount(): int
     {
         $this->bankSequence++;
 
-        return $this->postJson('/api/bank-accounts', [
+        return $this->postJson('/api/settings/bank-accounts', [
             'bank_name' => 'Bank Uji',
             'account_name' => 'POS Retail',
             'account_number' => sprintf('123456%04d', $this->bankSequence),
-            'opening_balance' => $openingBalance,
-            'reason' => 'Saldo awal sesuai pencatatan manual',
         ])->assertCreated()->json('data.id');
     }
 
@@ -66,7 +64,8 @@ class PurchaseOrderTest extends SeededTestCase
             ->assertJsonPath('data.total', '24000.00')
             ->assertJsonPath('data.items.0.line_total', '24000.00')
             ->assertJsonPath('data.items.0.qty_remaining', '10.000')
-            ->assertJsonPath('data.fund_allocation.amount', '24000.00');
+            ->assertJsonPath('data.bank_account.account_number_masked', '••••0001')
+            ->assertJsonMissingPath('data.fund_allocation');
 
         $this->assertMatchesRegularExpression('/^PO-\d{6}-000001$/', $response->json('data.doc_number'));
         $this->assertSame('converted', DB::table('purchase_requisitions')->where('id', $pr)->value('status'));
@@ -128,7 +127,7 @@ class PurchaseOrderTest extends SeededTestCase
             ->assertOk()->assertJsonPath('data.items.0.qty_available', '10.000');
     }
 
-    public function test_po_creation_requires_one_owner_authorization_and_allocates_funds_atomically(): void
+    public function test_po_creation_requires_one_owner_authorization_and_keeps_bank_account_only_as_po_data(): void
     {
         $p = $this->product();
         $pr = $this->pr($this->cashier->id, [$p => ['10', '2500']]);
@@ -143,107 +142,77 @@ class PurchaseOrderTest extends SeededTestCase
             'approver_username' => 'admin',
             'approver_password' => 'salah-sekali',
         ]))->assertUnprocessable()->assertJsonValidationErrors(['approver_password']);
-        $this->assertDatabaseCount('purchase_fund_allocations', 0);
-
         $po = $this->postJson('/api/purchase-orders', $this->payload($pr, $supplier, $p, bankId: $bank))
             ->assertCreated()->assertJsonPath('data.status', 'approved')
-            ->assertJsonPath('data.fund_allocation.amount', '24000.00')->json('data.id');
+            ->assertJsonPath('data.bank_account.id', $bank)
+            ->assertJsonMissingPath('data.fund_allocation')
+            ->json('data.id');
         $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_order.create', 'entity_id' => $po]);
         $this->assertDatabaseMissing('purchase_orders', ['id' => $po, 'status' => 'draft']);
+        $this->assertDatabaseCount('bank_account_ledger_entries', 0);
+        $this->assertDatabaseCount('purchase_fund_allocations', 0);
     }
 
-    public function test_allocation_reserves_account_and_purchase_fund_balances_and_cancel_releases_them(): void
+    public function test_bank_account_settings_are_limited_to_five_and_mask_numbers_for_po_use(): void
+    {
+        $ids = [];
+        for ($i = 0; $i < 5; $i++) {
+            $ids[] = $this->bankAccount();
+        }
+        $this->postJson('/api/settings/bank-accounts', [
+            'bank_name' => 'Bank Keenam',
+            'account_name' => 'POS Retail',
+            'account_number' => '9999999999',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['bank_accounts']);
+
+        $this->getJson('/api/settings/bank-accounts')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $ids[0], 'account_number' => '1234560001']);
+        $this->getJson('/api/bank-accounts')
+            ->assertOk()
+            ->assertJsonPath('data.0.account_number_masked', '••••0001')
+            ->assertJsonMissingPath('data.0.account_number')
+            ->assertJsonMissingPath('data.0.balance');
+        $this->patchJson("/api/settings/bank-accounts/{$ids[0]}", ['is_active' => false])
+            ->assertOk()->assertJsonPath('data.is_active', false);
+        $this->getJson('/api/bank-accounts')->assertOk()->assertJsonCount(4, 'data');
+        $this->getJson('/api/purchase-fund')->assertNotFound();
+        $this->assertCount(5, $ids);
+    }
+
+    public function test_po_requires_an_active_bank_account(): void
     {
         $product = $this->product();
         $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
-        $bank = $this->bankAccount('50000');
-        $po = $this->postJson('/api/purchase-orders', $this->payload($pr, $this->supplier(), $product, bankId: $bank))
-            ->assertCreated()->json('data.id');
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => 'bank_account.create',
-            'reason' => 'Saldo awal sesuai pencatatan manual',
-        ]);
-
-        $this->getJson('/api/bank-accounts')
-            ->assertOk()->assertJsonPath('data.0.balance', '50000.00')
-            ->assertJsonPath('data.0.reserved_for_purchase_fund', '24000.00')
-            ->assertJsonPath('data.0.available_balance', '26000.00')
-            ->assertJsonPath('data.0.account_number_masked', '••••0001');
-        $this->getJson('/api/purchase-fund')
-            ->assertOk()->assertJsonPath('data.balance', '24000.00')
-            ->assertJsonPath('data.reserved_total', '24000.00');
-
-        $this->postJson("/api/purchase-orders/{$po}/cancel", ['reason' => 'PO tidak jadi'])
-            ->assertOk()->assertJsonPath('data.status', 'cancelled');
-        $this->getJson('/api/bank-accounts')
-            ->assertOk()->assertJsonPath('data.0.balance', '50000.00')
-            ->assertJsonPath('data.0.reserved_for_purchase_fund', '0.00')
-            ->assertJsonPath('data.0.available_balance', '50000.00');
-        $this->getJson('/api/purchase-fund')
-            ->assertOk()->assertJsonPath('data.balance', '0.00')
-            ->assertJsonPath('data.reserved_total', '0.00');
-    }
-
-    public function test_po_creation_rejects_insufficient_bank_balance_atomically(): void
-    {
-        $product = $this->product();
-        $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
-        $bank = $this->bankAccount('10000');
+        $bank = $this->bankAccount();
+        $this->patchJson("/api/settings/bank-accounts/{$bank}", ['is_active' => false])->assertOk();
 
         $this->postJson('/api/purchase-orders', $this->payload($pr, $this->supplier(), $product, bankId: $bank))
             ->assertUnprocessable()->assertJsonValidationErrors(['bank_account_id']);
         $this->assertDatabaseCount('purchase_orders', 0);
-        $this->assertDatabaseCount('purchase_fund_allocations', 0);
-    }
-
-    public function test_manual_bank_decrease_cannot_consume_reserved_purchase_funds(): void
-    {
-        $product = $this->product();
-        $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
-        $bank = $this->bankAccount('50000');
-        $po = $this->postJson('/api/purchase-orders', $this->payload($pr, $this->supplier(), $product, bankId: $bank))
-            ->assertCreated()->json('data.id');
-
-        $this->postJson("/api/bank-accounts/{$bank}/adjustments", [
-            'direction' => 'decrease',
-            'amount' => '30000',
-            'reason' => 'Koreksi saldo',
-        ])->assertUnprocessable()->assertJsonValidationErrors(['amount']);
-        $this->getJson('/api/bank-accounts')->assertOk()->assertJsonPath('data.0.balance', '50000.00');
     }
 
     public function test_po_creator_can_select_finance_account_and_owner_authorizes_once(): void
     {
         $product = $this->product();
         $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
-        $finance = $this->makeUser('Finance', 'finance-po');
-        Sanctum::actingAs($finance, ['*']);
-        $bank = $this->postJson('/api/bank-accounts', [
-            'bank_name' => 'Bank Finance',
-            'account_name' => 'Toko',
-            'account_number' => '9876543210',
-            'opening_balance' => '50000',
-            'reason' => 'Saldo awal sesuai rekening',
-        ])->assertCreated()->json('data.id');
-        $this->getJson('/api/purchase-fund')->assertOk();
-
+        $bank = $this->bankAccount();
+        Sanctum::actingAs($this->makeUser('Purchasing', 'purchasing-po'), ['*']);
+        $this->getJson('/api/bank-accounts')->assertOk()->assertJsonPath('data.0.id', $bank);
         $this->makeUser('Owner', 'owner-po');
         $this->actAsAdmin();
         $po = $this->postJson('/api/purchase-orders', $this->payload($pr, $this->supplier(), $product, bankId: $bank, credentials: [
             'approver_username' => 'owner-po',
             'approver_password' => 'rahasia-12345',
         ]))->assertCreated()->assertJsonPath('data.status', 'approved')
-            ->assertJsonPath('data.fund_allocation.bank_account_id', $bank)->json('data.id');
+            ->assertJsonPath('data.bank_account.id', $bank)->json('data.id');
 
         Sanctum::actingAs(User::where('username', 'owner-po')->firstOrFail(), ['*']);
-        $this->getJson('/api/purchase-fund')->assertOk();
-        $this->postJson('/api/bank-accounts', [
-            'bank_name' => 'Tidak boleh',
+        $this->postJson('/api/settings/bank-accounts', [
+            'bank_name' => 'Bank Owner',
             'account_name' => 'Toko',
             'account_number' => '1111111111',
-            'opening_balance' => '0',
-            'reason' => 'Rekening tanpa saldo awal',
-        ])->assertForbidden();
+        ])->assertCreated();
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'purchase_order.create',
             'entity_id' => $po,
@@ -389,8 +358,6 @@ class PurchaseOrderTest extends SeededTestCase
         $this->patchJson("/api/purchase-orders/{$po}", ['items' => [['product_id' => $p, 'qty_ordered' => '11', 'unit_price' => '1']]])
             ->assertUnprocessable()->assertJsonValidationErrors(['items.0.qty_ordered']);
 
-        $this->postJson("/api/purchase-orders/{$po}/fund-allocation", ['bank_account_id' => $this->bankAccount()])
-            ->assertCreated();
         $this->postJson("/api/purchase-orders/{$po}/submit")->assertOk()->assertJsonPath('data.status', 'pending_confirmation');
         $this->postJson("/api/purchase-orders/{$po}/confirm", $this->adminCreds())->assertOk();
         $this->postJson("/api/purchase-orders/{$po}/send")->assertOk();

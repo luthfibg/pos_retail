@@ -1,4 +1,5 @@
 import { SETTINGS_PERMISSIONS } from '@/features/settings/settingsSections';
+import type { InventoryMenuSetting } from '@/lib/api/types';
 
 export interface NavItem {
   to: string;
@@ -96,9 +97,15 @@ export const NAV_GROUPS: NavGroup[] = [
  * Menu yang terlihat untuk pengguna ini. Grup yang hanya punya satu menu bagi pengguna tersebut ditandai `standalone`
  * dan ditampilkan sebagai satu tautan langsung (label = nama menunya), bukan dropdown berisi satu item.
  */
-export function getVisibleNavGroups(can: (permission: string) => boolean, isAdmin: boolean): NavGroup[] {
+export function getVisibleNavGroups(
+  can: (permission: string) => boolean,
+  isAdmin: boolean,
+  inventoryMenus: InventoryMenuSetting = { show_opening_balance: false, show_stock_transfer: false },
+): NavGroup[] {
   return NAV_GROUPS.flatMap((group) => {
     const items = group.items.filter((item) => {
+      if (item.to === '/inventory/opening' && !inventoryMenus.show_opening_balance) return false;
+      if (item.to === '/inventory/transfers' && !inventoryMenus.show_stock_transfer) return false;
       if (isAdmin && item.cashierOnly) return false;
       return Array.isArray(item.permission) ? item.permission.some(can) : can(item.permission);
     });

@@ -4,10 +4,10 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
-import { purchaseFundApi, purchaseOrderApi, purchaseRequisitionApi, supplierApi } from '@/lib/api/endpoints';
+import { bankAccountApi, purchaseOrderApi, purchaseRequisitionApi, supplierApi } from '@/lib/api/endpoints';
 import type { ApprovalAuthMode, PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
-import { centsToMoney, compareMoney, lineCents, moneyToCents, qtyToMilli } from '@/lib/money';
+import { centsToMoney, lineCents, moneyToCents, qtyToMilli } from '@/lib/money';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { PurchaseStageTracker } from './PurchaseStageTracker';
 import { isPoPrintable, poStage } from './purchaseFlow';
@@ -40,16 +40,15 @@ export function PurchaseOrderCreateDialog({
   onClose: () => void;
   onCreated: (po: PurchaseOrder) => void;
 }) {
-  const { can, me } = useAuth();
+  const { me } = useAuth();
   const approvalMode: ApprovalAuthMode = me?.approval_auth_mode ?? 'password';
   const suppliers = useQuery({
     queryKey: ['suppliers', 'active-for-purchase-order'],
     queryFn: () => supplierApi.list({ active_only: true, per_page: 100 }),
   });
-  const fund = useQuery({
-    queryKey: ['purchase-fund'],
-    queryFn: purchaseFundApi.summary,
-    enabled: can('purchase_fund.allocate'),
+  const bankAccountsQuery = useQuery({
+    queryKey: ['bank-accounts', 'purchase-order'],
+    queryFn: bankAccountApi.list,
   });
   const availability = useQuery({
     queryKey: ['purchase-requisition', pr.id, 'purchase-order-items'],
@@ -87,9 +86,8 @@ export function PurchaseOrderCreateDialog({
     return qtyToMilli(line.qty) === null || moneyToCents(line.price) === null;
   });
   const orderTotal = centsToMoney(totalCents);
-  const bankAccounts = fund.data?.bank_accounts.filter((account) => account.is_active) ?? [];
+  const bankAccounts = bankAccountsQuery.data ?? [];
   const selectedBank = bankAccounts.find((account) => String(account.id) === bankAccountId);
-  const selectedBankCanCover = selectedBank !== undefined && compareMoney(selectedBank.available_balance, orderTotal) !== -1;
   const create = useMutation({
     mutationFn: () => purchaseOrderApi.create({
       pr_id: pr.id,
@@ -134,10 +132,10 @@ export function PurchaseOrderCreateDialog({
   return (
     <Modal title={`Buat PO dari Permintaan ${pr.doc_number}`} onClose={() => !create.isPending && onClose()}>
       <form className="space-y-4 p-5" onSubmit={submit}>
-        <p className="text-sm text-slate-600">Pilih barang, sumber dana, lalu otorisasi Owner. PO langsung dibuat dan disetujui tanpa draft atau tahap persetujuan Owner terpisah.</p>
+        <p className="text-sm text-slate-600">Pilih barang dan rekening yang dicantumkan pada PO, lalu otorisasi Owner. Rekening tidak terhubung ke saldo; PO langsung dibuat dan disetujui.</p>
         <ErrorNotice error={suppliers.error} />
         <ErrorNotice error={availability.error} />
-        <ErrorNotice error={fund.error} />
+        <ErrorNotice error={bankAccountsQuery.error} />
         <ErrorNotice error={create.error} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Supplier">
@@ -193,33 +191,27 @@ export function PurchaseOrderCreateDialog({
 
         <section className="space-y-3 rounded-md border border-blue-200 bg-blue-50 p-3">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <h3 className="font-semibold">Rekening sumber dana</h3>
+            <h3 className="font-semibold">Rekening pada PO</h3>
             <span className="font-medium tabular-nums">Total PO: {formatRupiah(orderTotal)}</span>
           </div>
-          <p className="text-xs text-slate-600">Seluruh total PO dicadangkan dari rekening terpilih setelah Owner mengesahkan. Pencadangan ini bukan transfer bank.</p>
-          <Field label="Pilih rekening dengan saldo tersedia yang cukup">
-            <select className={inputCls} required value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)} disabled={fund.isLoading || fund.isError}>
-              <option value="">{fund.isLoading ? 'Memuat rekening…' : 'Pilih rekening'}</option>
-              {bankAccounts.map((account) => {
-                const enough = compareMoney(account.available_balance, orderTotal) !== -1;
-                return (
-                  <option key={account.id} value={account.id} disabled={!enough}>
-                    {account.bank_name} · {account.account_name} ({account.account_number_masked}) · tersedia {formatRupiah(account.available_balance)}{enough ? '' : ' · tidak cukup'}
-                  </option>
-                );
-              })}
+          <p className="text-xs text-slate-600">Pilih rekening yang akan dicantumkan pada dokumen PO. Sistem tidak menyimpan atau memeriksa saldo rekening.</p>
+          <Field label="Pilih rekening">
+            <select className={inputCls} required value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)} disabled={bankAccountsQuery.isLoading || bankAccountsQuery.isError}>
+              <option value="">{bankAccountsQuery.isLoading ? 'Memuat rekening…' : 'Pilih rekening'}</option>
+              {bankAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.bank_name} · {account.account_name} ({account.account_number_masked})
+                </option>
+              ))}
             </select>
           </Field>
-          {fund.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif, sehingga PO belum dapat dibuat.</p>}
-          {fund.data && bankAccounts.length > 0 && !bankAccounts.some((account) => compareMoney(account.available_balance, orderTotal) !== -1) && (
-            <p className="text-xs text-amber-800">Saldo tersedia semua rekening aktif belum mencukupi total PO.</p>
-          )}
+          {bankAccountsQuery.data && bankAccounts.length === 0 && <p className="text-xs text-amber-800">Belum ada rekening aktif. Tambahkan rekening dari menu Pengaturan sebelum membuat PO.</p>}
         </section>
 
         <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
           <div>
             <h3 className="text-sm font-semibold">Persetujuan Owner</h3>
-            <p className="mt-1 text-xs text-slate-600">Otorisasi ini sekaligus mengesahkan supplier, jumlah, harga, dan rekening sumber dana.</p>
+            <p className="mt-1 text-xs text-slate-600">Otorisasi ini sekaligus mengesahkan supplier, jumlah, harga, dan rekening yang dicantumkan pada PO.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Username Owner">
@@ -236,7 +228,7 @@ export function PurchaseOrderCreateDialog({
 
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
           <button type="button" disabled={create.isPending} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || fund.isLoading || fund.isError || selectedLineCount === 0 || hasInvalidSelectedLine || !selectedBankCanCover} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || bankAccountsQuery.isLoading || bankAccountsQuery.isError || !selectedBank || selectedLineCount === 0 || hasInvalidSelectedLine} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
             {create.isPending ? 'Membuat PO…' : 'Setujui & buat PO'}
           </button>
         </div>
@@ -263,22 +255,14 @@ export function PurchaseOrderManageDialog({
   const approvalMode: ApprovalAuthMode = me?.approval_auth_mode ?? 'password';
   const [credentials, setCredentials] = useState<Credentials>({ approver_username: '', approver_password: '', approver_key: '' });
   const order = useQuery({ queryKey: ['purchase-order', poId], queryFn: () => purchaseOrderApi.get(poId) });
-  const fund = useQuery({
-    queryKey: ['purchase-fund'],
-    queryFn: purchaseFundApi.summary,
-    enabled: poId > 0 && can('purchase_fund.allocate'),
-  });
-  const [bankAccountId, setBankAccountId] = useState('');
   const refresh = async () => {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['purchase-order', poId] }),
       qc.invalidateQueries({ queryKey: ['purchase-requisitions'] }),
-      qc.invalidateQueries({ queryKey: ['purchase-fund'] }),
     ]);
     onChanged();
   };
   const submit = useMutation({ mutationFn: () => purchaseOrderApi.submit(poId), onSuccess: refresh });
-  const allocate = useMutation({ mutationFn: () => purchaseFundApi.allocate(poId, Number(bankAccountId)), onSuccess: refresh });
   const confirm = useMutation({
     mutationFn: () => purchaseOrderApi.confirm(poId, {
       approver_username: credentials.approver_username.trim(),
@@ -289,7 +273,7 @@ export function PurchaseOrderManageDialog({
   });
   const send = useMutation({ mutationFn: () => purchaseOrderApi.send(poId), onSuccess: refresh });
   const po = order.data;
-  const busy = submit.isPending || confirm.isPending || send.isPending || allocate.isPending;
+  const busy = submit.isPending || confirm.isPending || send.isPending;
 
   return (
     <Modal title="Kelola Purchase Order" onClose={() => !busy && onClose()}>
@@ -297,7 +281,7 @@ export function PurchaseOrderManageDialog({
         <div className="space-y-3 p-5"><ErrorNotice error={order.error} /></div>
       ) : po ? (
         <div className="space-y-4 p-5">
-          <ErrorNotice error={submit.error ?? confirm.error ?? send.error ?? allocate.error ?? fund.error} />
+          <ErrorNotice error={submit.error ?? confirm.error ?? send.error} />
           <PurchaseStageTracker current={poStage(po.status)} archivedNote="PO ini dibatalkan dan tidak lagi berjalan di alur pembelian." />
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <div><div className="text-xs text-slate-500">Nomor PO</div><div className="font-mono font-medium">{po.doc_number}</div></div>
@@ -324,43 +308,12 @@ export function PurchaseOrderManageDialog({
               ))}</tbody>
             </table>
           </div>
-          {po.fund_allocation && (
+          {po.bank_account && (
             <section className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
-              <div className="font-semibold">Dana PO sudah dialokasikan</div>
-              <div className="mt-1">
-                {po.fund_allocation.bank_name} · {po.fund_allocation.account_name} ({po.fund_allocation.account_number_masked})
-                {' · '}{formatRupiah(po.fund_allocation.amount)}
-              </div>
-              <p className="mt-1 text-xs">Pencatatan ini hanya mencadangkan dana di sistem, bukan bukti transfer bank.</p>
+              <div className="font-semibold">Rekening pada PO</div>
+              <div className="mt-1">{po.bank_account.bank_name} · {po.bank_account.account_name} ({po.bank_account.account_number_masked})</div>
             </section>
           )}
-          {po.status === 'draft' && can('purchase_fund.allocate') && !po.fund_allocation && (
-            <section className="space-y-3 rounded-md border border-blue-200 bg-blue-50 p-3">
-              <div>
-                <h3 className="text-sm font-semibold">Alokasi Kas Pembelian</h3>
-                <p className="mt-1 text-xs text-slate-600">Kebutuhan dana dihitung otomatis dari total PO sebesar {formatRupiah(po.total)}. Pilih rekening dengan saldo tersedia yang cukup; alokasi hanya pencadangan sistem, bukan transfer bank.</p>
-              </div>
-              <Field label="Rekening sumber">
-                <select className={inputCls} value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)} disabled={fund.isLoading}>
-                  <option value="">{fund.isLoading ? 'Memuat rekening…' : 'Pilih rekening'}</option>
-                  {fund.data?.bank_accounts.filter((account) => account.is_active).map((account) => {
-                    const enough = compareMoney(account.available_balance, po.total ?? '0') !== -1;
-                    return (
-                      <option key={account.id} value={account.id} disabled={!enough}>
-                        {account.bank_name} · {account.account_name} ({account.account_number_masked}) · tersedia {formatRupiah(account.available_balance)}{enough ? '' : ' · tidak cukup'}
-                      </option>
-                    );
-                  })}
-                </select>
-              </Field>
-              <button type="button" disabled={busy || !bankAccountId} onClick={() => allocate.mutate()} className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-                {allocate.isPending ? 'Mengalokasikan…' : 'Alokasikan dana PO'}
-              </button>
-            </section>
-          )}
-          {po.status === 'draft' && can('purchase_fund.allocate') && !po.fund_allocation
-            && fund.data?.bank_accounts.every((account) => !account.is_active || compareMoney(account.available_balance, po.total ?? '0') === -1)
-            && <p className="text-xs text-amber-800">Tidak ada rekening aktif dengan saldo tersedia yang cukup untuk total PO ini.</p>}
           {po.status === 'pending_confirmation' && can('purchase_requisition.approve') && (
             <section className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
               <p className="text-sm">PO memerlukan konfirmasi Owner. Masukkan kredensial pemberi persetujuan untuk autentikasi ulang.</p>
@@ -371,7 +324,7 @@ export function PurchaseOrderManageDialog({
               </div>
             </section>
           )}
-          {po.status === 'draft' && (can('purchase_order.create') || can('purchase_fund.allocate')) && (
+          {po.status === 'draft' && can('purchase_order.create') && (
             <button type="button" disabled={busy} onClick={() => submit.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
               {submit.isPending ? 'Mengajukan…' : 'Ajukan PO'}
             </button>

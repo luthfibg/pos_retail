@@ -37,7 +37,6 @@ class TenantProvisioner
 
         foreach ([
             ['type' => 'main_cash', 'name' => 'Kas Besar', 'register_id' => null],
-            ['type' => 'purchase_fund', 'name' => 'Saldo Pembelian', 'register_id' => null],
         ] as $account) {
             if (! DB::table('fund_accounts')->where('store_id', $storeId)->where('type', $account['type'])->exists()) {
                 DB::table('fund_accounts')->insert($account + ['store_id' => $storeId, 'is_active' => 1]);
@@ -66,8 +65,9 @@ class TenantProvisioner
             'credit_requires_verified_customer' => true,
             'credit_blocked_without_limit' => true,
             'float_rounding_unit' => 1000,
-            'purchase_fund_percent' => 15,
             'inventory_low_stock_threshold' => 3,
+            'show_opening_balance' => false,
+            'show_stock_transfer' => false,
         ] as $key => $value) {
             DB::table('settings')->insertOrIgnore([
                 'store_id' => $storeId,

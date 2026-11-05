@@ -86,13 +86,12 @@ export function poNextAction(status: PurchaseOrderStatus): string {
 export interface FlowBoard {
   pr_review: PurchaseRequisitionSummary[];
   pr_ready: PurchaseRequisitionSummary[];
-  po_prepare: PurchaseOrderSummary[];
   po_send: PurchaseOrderSummary[];
 }
 
-/** Hanya dokumen yang masih berjalan di alur; dokumen di luar alur (`'archive'`) dibuang dari papan. */
+/** Tab persiapan PO hanya menampilkan Permintaan siap pesan; PO legacy tidak masuk papan. */
 export function buildBoard(prs: PurchaseRequisitionSummary[], pos: PurchaseOrderSummary[]): FlowBoard {
-  const board: FlowBoard = { pr_review: [], pr_ready: [], po_prepare: [], po_send: [] };
+  const board: FlowBoard = { pr_review: [], pr_ready: [], po_send: [] };
   for (const pr of prs) {
     const stage = prStage(pr.status);
     if (stage === 'pr_review') board.pr_review.push(pr);
@@ -100,13 +99,13 @@ export function buildBoard(prs: PurchaseRequisitionSummary[], pos: PurchaseOrder
   }
   for (const po of pos) {
     const stage = poStage(po.status);
-    if (stage === 'po_prepare' || stage === 'po_send') board[stage].push(po);
+    if (stage === 'po_send') board.po_send.push(po);
   }
   return board;
 }
 
 export function tabCount(board: FlowBoard, tab: FlowStage): number {
-  if (tab === 'po_prepare') return board.pr_ready.length + board.po_prepare.length;
+  if (tab === 'po_prepare') return board.pr_ready.length;
   if (tab === 'po_send') return board.po_send.length;
   return board[tab].length;
 }

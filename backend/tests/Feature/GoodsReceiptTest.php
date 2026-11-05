@@ -413,22 +413,16 @@ class GoodsReceiptTest extends SeededTestCase
         // Admin memeriksa, menyetujui, membuat PO, mengirim
         $this->actAsAdmin();
         $this->postJson("/api/purchase-requisitions/{$pr}/finance-check", ['decision' => 'pass'])->assertOk();
-        $this->postJson("/api/purchase-requisitions/{$pr}/approve", $this->adminCreds())->assertOk()->assertJsonPath('data.status', 'approved');
-        $po = $this->postJson('/api/purchase-orders', [
-            'pr_id' => $pr, 'supplier_id' => $supplier,
-            'items' => [['product_id' => $p, 'qty_ordered' => '12', 'unit_price' => '2400']],
-        ])->assertCreated()->json('data.id');
-        $bank = $this->postJson('/api/bank-accounts', [
+        $bank = $this->postJson('/api/settings/bank-accounts', [
             'bank_name' => 'Bank Uji',
             'account_name' => 'POS Retail',
             'account_number' => '1234567890',
-            'opening_balance' => '50000',
-            'reason' => 'Saldo awal sesuai rekening',
         ])->assertCreated()->json('data.id');
-        $this->postJson("/api/purchase-orders/{$po}/fund-allocation", ['bank_account_id' => $bank])->assertCreated();
-        $this->postJson("/api/purchase-orders/{$po}/submit")->assertOk()->assertJsonPath('data.status', 'pending_confirmation');
-        $this->postJson("/api/purchase-orders/{$po}/confirm", $this->adminCreds())
-            ->assertOk()->assertJsonPath('data.status', 'approved');
+        $po = $this->postJson('/api/purchase-orders', [
+            'pr_id' => $pr, 'supplier_id' => $supplier, 'bank_account_id' => $bank,
+            ...$this->adminCreds(),
+            'items' => [['product_id' => $p, 'qty_ordered' => '12', 'unit_price' => '2400']],
+        ])->assertCreated()->json('data.id');
         $this->postJson("/api/purchase-orders/{$po}/send")->assertOk()->assertJsonPath('data.status', 'sent');
 
         // Kasir menerima barang

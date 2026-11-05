@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\AdminModelController;
+use App\Http\Controllers\BankAccountController;
 use App\Http\Controllers\DiscountController;
+use App\Http\Controllers\InventoryMenuSettingController;
 use App\Http\Controllers\StockAuthorityController;
 use App\Http\Controllers\StockMonitoringSettingController;
 use App\Http\Controllers\StoreNameSettingController;
@@ -14,6 +16,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Pengguna Retail hanya dapat mengubah nama toko; CRUD tenant tetap khusus operator platform.
     Route::patch('settings/store-name', [StoreNameSettingController::class, 'update'])
         ->middleware('can:settings.manage');
+    Route::get('settings/bank-accounts', [BankAccountController::class, 'settingsIndex'])->middleware('can:settings.manage');
+    Route::post('settings/bank-accounts', [BankAccountController::class, 'store'])->middleware('can:settings.manage');
+    Route::patch('settings/bank-accounts/{account}', [BankAccountController::class, 'update'])
+        ->whereNumber('account')->middleware('can:settings.manage');
+    Route::get('settings/inventory/menus', [InventoryMenuSettingController::class, 'show']);
+    Route::put('settings/inventory/menus', [InventoryMenuSettingController::class, 'update'])->middleware('can:settings.manage');
 
     Route::get('discounts', [DiscountController::class, 'index'])->middleware('can:discount.manage');
     Route::post('discounts', [DiscountController::class, 'store'])->middleware('can:discount.manage');

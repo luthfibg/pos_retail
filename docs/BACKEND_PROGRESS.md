@@ -408,7 +408,7 @@ Pengecualian berhasil → `over_limit: true` pada struk (label "melebihi batas" 
 
 ## 6. Pembelian: PR → PO → Penerimaan barang ✅
 
-Alur bisnis terbaru: **Kasir** mengajukan PR → **Finance** memeriksa → **Admin/Purchasing** memilih supplier, item, dan rekening serta mengautentikasi **Owner satu kali** saat membuat PO langsung berstatus disetujui → PO dicetak lalu dikonfirmasi terkirim ke supplier → **Kasir** menerima barang (surat jalan) → **posting** menambah stok → Admin memverifikasi surat jalan/faktur. PO baru tidak lagi memiliki tahap draft/alokasi/persetujuan Owner terpisah. Paket 1: saldo rekening dicatat manual; alokasi mencadangkan saldo ke Kas Pembelian.
+Alur bisnis terbaru: **Kasir** meneruskan PR otomatis → **Finance** memeriksa → **Admin/Purchasing** memilih supplier, item, dan rekening serta mengautentikasi **Owner satu kali** saat membuat PO langsung berstatus disetujui → PO dicetak lalu dikonfirmasi terkirim ke supplier → **Kasir** menerima barang (surat jalan) → **posting** menambah stok → Admin memverifikasi surat jalan/faktur. Rekening hanya menjadi data pada PO (nama bank, pemilik, nomor); sistem tidak menyimpan saldo atau mengalokasikan dana. Pengaturan mengelola maksimal lima rekening dan visibilitas menu Inventory.
 
 > Status: ✅ lulus test (24 Okt 2026). Uang/qty tetap string desimal. Waktu UTC. Format sukses `{ "data": ... }`.
 
@@ -447,14 +447,13 @@ Daftar supplier dapat dibaca oleh pemegang `supplier.manage` atau `purchase_orde
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
-| GET | `/api/purchase-orders` | Salah satu: `purchase_order.create`, `purchase_order.send`, `purchase_requisition.approve`, `purchase_fund.view`, `purchase_fund.allocate`, `goods_receipt.create` | Daftar. Pengelola PO: semua; **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
-| GET | `/api/purchase-orders/{po}` | Sama dengan izin daftar | Detail + item + daftar penerimaan dan alokasi aktif; pembatasan status untuk Kasir tetap berlaku |
-| POST | `/api/purchase-orders` | `purchase_order.create` + `purchase_fund.allocate` | Buat PO langsung `approved` secara atomik dari PR lolos Finance; request mewajibkan `bank_account_id`, item, dan autentikasi Owner (`approver_username` + `approver_password` atau `approver_key` sesuai mode). Alokasi mencadangkan total PO dari rekening ke Kas Pembelian |
+| GET | `/api/purchase-orders` | Salah satu: `purchase_order.create`, `purchase_order.send`, `purchase_requisition.approve`, `goods_receipt.create` | Daftar. Pengelola PO: semua; **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
+| GET | `/api/purchase-orders/{po}` | Sama dengan izin daftar | Detail + item, rekening tersamarkan, dan daftar penerimaan; pembatasan status untuk Kasir tetap berlaku |
+| POST | `/api/purchase-orders` | `purchase_order.create` | Buat PO langsung `approved` secara atomik dari PR lolos Finance; request mewajibkan rekening aktif (`bank_account_id`), item, dan autentikasi Owner (`approver_username` + `approver_password` atau `approver_key` sesuai mode). Tidak memeriksa saldo atau membuat alokasi |
 | PATCH | `/api/purchase-orders/{po}` | `purchase_order.create` | Ubah hanya PO `draft` lama (`pr_id` tidak dapat diubah); PO baru tidak memiliki tahap draft |
-| POST | `/api/purchase-orders/{po}/fund-allocation` | `purchase_fund.allocate` | Endpoint kompatibilitas untuk PO draft lama; `{ "bank_account_id": 1 }` mencadangkan seluruh total PO, tidak mengirim transfer bank |
-| POST | `/api/purchase-orders/{po}/submit` | Salah satu: `purchase_order.create`, `purchase_fund.allocate` | Endpoint kompatibilitas untuk PO draft lama; setelah alokasi penuh status menjadi `pending_confirmation` |
+| POST | `/api/purchase-orders/{po}/submit` | `purchase_order.create` | Endpoint kompatibilitas untuk PO draft lama; draft menjadi `pending_confirmation` tanpa alokasi dana |
 | POST | `/api/purchase-orders/{po}/confirm` | `purchase_requisition.approve` | Endpoint kompatibilitas untuk PO lama berstatus `pending_confirmation`; PO baru sudah disetujui saat dibuat |
-| POST | `/api/purchase-orders/{po}/send` | `purchase_order.send` | `approved` → `sent`; alokasi harus tetap aktif |
+| POST | `/api/purchase-orders/{po}/send` | `purchase_order.send` | `approved` → `sent` |
 | POST | `/api/purchase-orders/{po}/cancel` | `purchase_order.create` | `{ "reason" }` wajib; sebelum ada penerimaan |
 | POST | `/api/purchase-orders/{po}/close` | `purchase_order.create` | `{ "reason" }` wajib; tutup manual PO yang sebagian diterima |
 
@@ -470,18 +469,20 @@ Status PO baru: `approved` → `sent` → `partially_received` → `received`; c
 
 Aturan: PO **wajib dari PR `approved`**; satu PR boleh dipecah ke beberapa PO (per supplier); qty per produk **kumulatif** tidak boleh melebihi qty PR (422 `errors["items.N.qty_ordered"]` memuat sisa); PR otomatis menjadi `converted` bila semua item sudah tercakup dan kembali `approved` bila PO dibatalkan.
 
-Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_status, payment_terms, pr_id, pr_doc_number, supplier_id, supplier_name, order_date, expected_date, total, fund_allocation|null, created_by_name`, `fund_allocation` (`id, bank_account_id, bank_name, account_name, account_number_masked, amount, status, created_at`), `items[]` (`id` = **`po_item_id`** untuk penerimaan, `product_id, sku, name, unit_name, qty_ordered, qty_received, qty_remaining, unit_price, line_total`), `receipts[]` (`id, doc_number, status, document_status, posted_at`).
+Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_status, payment_terms, pr_id, pr_doc_number, supplier_id, supplier_name, order_date, expected_date, total, bank_account|null, created_by_name`, `bank_account` (`id, bank_name, account_name, account_number_masked`), `items[]` (`id` = **`po_item_id`** untuk penerimaan, `product_id, sku, name, unit_name, qty_ordered, qty_received, qty_remaining, unit_price, line_total`), `receipts[]` (`id, doc_number, status, document_status, posted_at`). `bank_account` dapat `null` pada PO lama yang tidak memiliki catatan rekening.
 
-### 6.2.1 Rekening bank dan Kas Pembelian
+### 6.2.1 Rekening bank dan pengaturan menu Inventory
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
-| GET | `/api/bank-accounts` | Salah satu: `purchase_fund.view`, `purchase_fund.allocate` | Saldo rekening tercatat manual, saldo yang dicadangkan untuk PO, dan saldo tersedia untuk alokasi. Nomor rekening dimasking kecuali 4 digit terakhir |
-| POST | `/api/bank-accounts` | `bank_account.manage` | `{ "bank_name", "account_name", "account_number", "opening_balance", "reason" }`; buat rekening + catat saldo awal manual beserta alasan; nomor rekening unik per toko |
-| POST | `/api/bank-accounts/{account}/adjustments` | `bank_account.manage` | `{ "direction": "increase|decrease", "amount": "100000", "reason": "..." }`; ledger dan audit, saldo tidak boleh di bawah pencadangan aktif |
-| GET | `/api/purchase-fund` | Salah satu: `purchase_fund.view`, `purchase_fund.allocate` | Saldo Kas Pembelian, total pencadangan, rekening, dan daftar alokasi aktif |
+| GET | `/api/bank-accounts` | `purchase_order.create` | Daftar rekening aktif untuk PO; nomor rekening dimasking. Tidak ada data saldo |
+| GET | `/api/settings/bank-accounts` | `settings.manage` | Daftar rekening untuk Pengaturan, termasuk nomor penuh dan status aktif |
+| POST | `/api/settings/bank-accounts` | `settings.manage` | `{ "bank_name", "account_name", "account_number" }`; buat rekening, nomor unik per toko dan maksimal lima rekening |
+| PATCH | `/api/settings/bank-accounts/{account}` | `settings.manage` | Ubah nama bank, pemilik, nomor, atau status aktif. Rekening nonaktif tidak bisa dipilih untuk PO |
+| GET | `/api/settings/inventory/menus` | Pengguna terautentikasi | Nilai `show_opening_balance` dan `show_stock_transfer`, default `false` |
+| PUT | `/api/settings/inventory/menus` | `settings.manage` | Simpan kedua boolean visibilitas menu |
 
-Saldo bank adalah catatan manual dan tidak tersambung ke bank. Alokasi hanya memindahkan nilai secara internal ke ledger Kas Pembelian serta mencadangkan saldo tersedia; tidak melakukan debit atau transfer aktual. Saat PO diedit nilainya, dibatalkan, atau alokasinya dilepas, ledger Kas Pembelian dan pencadangan rekening disesuaikan atomik. Permission `purchase_fund.view` diberikan kepada Owner dan Finance; `purchase_fund.allocate` serta `bank_account.manage` kepada Finance; Admin mewarisi seluruh permission.
+Ledger rekening dan tabel alokasi lama tetap disimpan sebagai riwayat database, tetapi tidak lagi dibaca atau ditulis oleh alur PO. Permission lama `purchase_fund.view`, `purchase_fund.allocate`, dan `bank_account.manage` tidak lagi dipakai oleh katalog peran maupun endpoint aktif.
 
 ### 6.3 Penerimaan barang (Goods Receipt)
 

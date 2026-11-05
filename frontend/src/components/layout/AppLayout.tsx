@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { ChangePasswordDialog } from '@/features/users/ChangePasswordDialog';
+import { settingsApi } from '@/lib/api/endpoints';
 import { getVisibleNavGroups } from './nav';
 
 export function AppLayout() {
   const { me, can, logout } = useAuth();
   const location = useLocation();
   const isAdmin = can('shift.review');
-  const groups = getVisibleNavGroups(can, isAdmin);
+  const inventoryMenus = useQuery({
+    queryKey: ['settings', 'inventory-menus'],
+    queryFn: settingsApi.inventoryMenus,
+  });
+  const groups = getVisibleNavGroups(can, isAdmin, inventoryMenus.data);
   // Hanya grup dropdown yang bisa terbuka; menu tunggal (standalone) adalah tautan langsung.
   const dropdowns = groups.filter((group) => !group.standalone);
   const activeGroup = dropdowns.find((group) =>
@@ -101,6 +108,7 @@ export function AppLayout() {
         </div>
       </aside>
       <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+        {inventoryMenus.error && <div className="px-4 pt-4"><ErrorNotice error={inventoryMenus.error} /></div>}
         <Outlet />
       </main>
       {changePasswordOpen && <ChangePasswordDialog onClose={() => setChangePasswordOpen(false)} />}

@@ -5,7 +5,8 @@ import { getVisibleNavGroups, type NavGroup } from './nav';
  * Menu yang dilihat tiap role pada model standar retail.
  * Matriks izin di bawah MENCERMINKAN `PermissionCatalog::roles()` di backend (ASUMSI, menunggu konfirmasi klien).
  * Izin stok (stok awal, penerimaan, transfer, ajuan/persetujuan adjustment) sebenarnya diturunkan dari matriks Kewenangan Stok;
- * daftar di bawah memakai DEFAULT model standar retail.
+ * daftar di bawah memakai DEFAULT model standar retail. Menu Stok Eksisting Toko dan Transfer Stok
+ * disembunyikan sampai dikonfigurasi aktif pada Pengaturan.
  * Bila matriks backend berubah, perbarui bagian ini bersamaan agar perubahan menu terlihat saat review.
  */
 const PERMISSIONS: Record<string, string[]> = {
@@ -44,7 +45,7 @@ function menuFor(role: string): string[] {
 describe('menu per role (model standar retail)', () => {
   it('Kasir melihat menu operasional toko', () => {
     expect(menuFor('Kasir')).toEqual([
-      '/customers', '/dashboard', '/goods-receipts', '/inventory/adjustments', '/inventory/movements', '/inventory/transfers',
+      '/customers', '/dashboard', '/goods-receipts', '/inventory/adjustments', '/inventory/movements',
       '/pos', '/products', '/purchase-requisitions', '/sales', '/shift', '/supplier-returns',
     ]);
   });
@@ -69,7 +70,7 @@ describe('menu per role (model standar retail)', () => {
   it('Owner melihat persetujuan, kebijakan, pengaturan, dan model administrasi', () => {
     const owner = menuFor('Owner');
     expect(owner).toContain('/settings');
-    expect(owner).toContain('/inventory/opening');
+    expect(owner).not.toContain('/inventory/opening');
     expect(owner).toContain('/purchase-requisitions');
     expect(owner).toContain('/supplier-returns');
     expect(owner).not.toContain('/users');
@@ -101,7 +102,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Kasir ?? [])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Penerimaan Barang, Retur Supplier, Transfer Stok, Adjustment & Opname, Riwayat Stok',
+      'Inventory > Penerimaan Barang, Retur Supplier, Adjustment & Opname, Riwayat Stok',
       'Penjualan > Kasir Jaga Saya, Kasir, Penjualan',
       'Data Master > Produk, Karyawan',
     ]);
@@ -139,7 +140,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Owner ?? [])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Retur Supplier, Stok Eksisting Toko, Adjustment & Opname, Riwayat Stok',
+      'Inventory > Retur Supplier, Adjustment & Opname, Riwayat Stok',
       'Laporan Kasir Jaga',
       'Data Master > Produk, Karyawan',
       'Pengaturan',
@@ -150,7 +151,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor('all', true)).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Penerimaan Barang, Retur Supplier, Stok Eksisting Toko, Transfer Stok, Adjustment & Opname, Riwayat Stok',
+      'Inventory > Penerimaan Barang, Retur Supplier, Adjustment & Opname, Riwayat Stok',
       'Penjualan',
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
       'Data Master > Kategori, Produk, Supplier, Karyawan',

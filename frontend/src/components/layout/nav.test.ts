@@ -67,6 +67,18 @@ describe('sidebar navigation', () => {
     const inventory = groups.find((group) => group.label === 'Inventory');
     expect(inventory?.items.map((item) => item.to)).toContain('/goods-receipts');
     expect(inventory?.items.map((item) => item.to)).toContain('/supplier-returns');
-    expect(paths.indexOf('/inventory/opening')).toBeLessThan(paths.indexOf('/inventory/movements'));
+    expect(paths).not.toContain('/inventory/opening');
+    expect(paths).not.toContain('/inventory/transfers');
+  });
+
+  it('menampilkan menu stok eksisting dan transfer hanya saat pengaturannya aktif', () => {
+    const groups = getVisibleNavGroups(() => true, false, {
+      show_opening_balance: true,
+      show_stock_transfer: true,
+    });
+    const paths = groups.flatMap((group) => group.items.map((item) => item.to));
+    expect(paths.indexOf('/inventory/opening')).toBeLessThan(paths.indexOf('/inventory/transfers'));
+    expect(paths).toContain('/inventory/opening');
+    expect(paths).toContain('/inventory/transfers');
   });
 });

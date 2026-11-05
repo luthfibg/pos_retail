@@ -27,7 +27,7 @@ function po(id: number, status: PurchaseOrderSummary['status']): PurchaseOrderSu
   return {
     id, doc_number: `PO-${id}`, status, receipt_status: 'none', payment_status: 'unpaid', payment_terms: 'cod',
     pr_id: 1, pr_doc_number: 'PR-1', supplier_id: 1, supplier_name: 'CV Maju', order_date: '2026-10-27',
-    expected_date: null, total: '1000', created_at: '2026-10-27 00:00:00',
+    expected_date: null, total: '1000', bank_account: null, created_at: '2026-10-27 00:00:00',
   };
 }
 
@@ -47,7 +47,7 @@ describe('purchaseFlow', () => {
     expect(poStage('cancelled')).toBe('archive');
   });
 
-  it('meringkas antrean menjadi tiga tahap dan menghitung seluruh dokumen', () => {
+  it('meringkas antrean tanpa menampilkan PO legacy pada tab persiapan', () => {
     const board = buildBoard(
       [pr(1, 'submitted'), pr(2, 'submitted'), pr(3, 'finance_checked'), pr(4, 'approved'), pr(5, 'rejected')],
       [po(1, 'draft'), po(2, 'pending_confirmation'), po(3, 'approved'), po(4, 'sent'), po(5, 'received'), po(6, 'cancelled')],
@@ -55,21 +55,20 @@ describe('purchaseFlow', () => {
     expect(FLOW_STAGES).toHaveLength(3);
     expect(board.pr_review.map((item) => item.id)).toEqual([1, 2]);
     expect(board.pr_ready.map((item) => item.id)).toEqual([3, 4]);
-    expect(board.po_prepare.map((item) => item.id)).toEqual([1, 2]);
     expect(board.po_send.map((item) => item.id)).toEqual([3, 4, 5]);
     expect(tabCount(board, 'pr_review')).toBe(2);
-    expect(tabCount(board, 'po_prepare')).toBe(4);
+    expect(tabCount(board, 'po_prepare')).toBe(2);
     expect(tabCount(board, 'po_send')).toBe(3);
   });
 
-  it('dokumen di luar alur tidak masuk papan (tidak ada tab riwayat)', () => {
+  it('Permintaan dan PO legacy tidak masuk antrean aktif', () => {
     const board = buildBoard(
       [pr(1, 'submitted'), pr(2, 'rejected'), pr(3, 'returned'), pr(4, 'cancelled'), pr(5, 'converted'), pr(6, 'draft')],
       [po(1, 'approved'), po(2, 'cancelled')],
     );
-    const shown = [...board.pr_review, ...board.pr_ready, ...board.po_prepare, ...board.po_send];
+    const shown = [...board.pr_review, ...board.pr_ready, ...board.po_send];
     expect(shown.map((item) => item.doc_number)).toEqual(['PR-1', 'PO-1']);
-    expect(Object.keys(board)).toEqual(['pr_review', 'pr_ready', 'po_prepare', 'po_send']);
+    expect(Object.keys(board)).toEqual(['pr_review', 'pr_ready', 'po_send']);
   });
 
   it('pelacak Permintaan converted mengikuti posisi PO-nya', () => {

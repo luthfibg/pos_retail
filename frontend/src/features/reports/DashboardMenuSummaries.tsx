@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { getVisibleNavGroups } from '@/components/layout/nav';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { billingApi, inventoryApi, shiftApi, supplierReturnApi } from '@/lib/api/endpoints';
+import { billingApi, inventoryApi, settingsApi, shiftApi, supplierReturnApi } from '@/lib/api/endpoints';
 import type { BillingPeriod, Movement, Shift } from '@/lib/api/types';
 import { formatQty, formatRupiah } from '@/lib/format';
 import { milliToQty } from '@/lib/money';
@@ -112,9 +112,13 @@ function SummaryCardView({
 export function DashboardMenuSummaries({ applied }: DashboardMenuSummariesProps) {
   const { can } = useAuth();
   const isAdmin = can('shift.review');
+  const inventoryMenus = useQuery({
+    queryKey: ['settings', 'inventory-menus'],
+    queryFn: settingsApi.inventoryMenus,
+  });
   const visibleRoutes = useMemo(
-    () => new Set(getVisibleNavGroups(can, isAdmin).flatMap((group) => group.items.map((item) => item.to))),
-    [can, isAdmin],
+    () => new Set(getVisibleNavGroups(can, isAdmin, inventoryMenus.data).flatMap((group) => group.items.map((item) => item.to))),
+    [can, isAdmin, inventoryMenus.data],
   );
   const canViewBilling = visibleRoutes.has('/billing');
   const { year, month } = getLocalYearMonth();

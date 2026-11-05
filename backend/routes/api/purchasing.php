@@ -1,20 +1,14 @@
 <?php
 
+use App\Http\Controllers\BankAccountController;
 use App\Http\Controllers\GoodsReceiptController;
-use App\Http\Controllers\PurchaseFundController;
 use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\PurchaseRequisitionController;
 use Illuminate\Support\Facades\Route;
 
 // Pembelian (WS-C): PR -> PO -> penerimaan barang. Dimuat dari routes/api.php (prefix /api sudah terpasang).
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('bank-accounts', [PurchaseFundController::class, 'bankAccounts'])
-        ->middleware('can.any:purchase_fund.view,purchase_fund.allocate');
-    Route::post('bank-accounts', [PurchaseFundController::class, 'createBankAccount'])->middleware('can:bank_account.manage');
-    Route::post('bank-accounts/{account}/adjustments', [PurchaseFundController::class, 'adjustBankAccount'])
-        ->whereNumber('account')->middleware('can:bank_account.manage');
-    Route::get('purchase-fund', [PurchaseFundController::class, 'summary'])
-        ->middleware('can.any:purchase_fund.view,purchase_fund.allocate');
+    Route::get('bank-accounts', [BankAccountController::class, 'index'])->middleware('can:purchase_order.create');
 
     // Purchase Requisition. Kasir hanya melihat/mengelola PR miliknya (dicek di service).
     Route::get('purchase-requisitions', [PurchaseRequisitionController::class, 'index']);
@@ -31,12 +25,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Purchase Order. Daftar/detail juga untuk Kasir penerima barang (PO yang dapat diterima, tanpa harga): izin dicek di service.
     Route::get('purchase-orders', [PurchaseOrderController::class, 'index']);
     Route::get('purchase-orders/{po}', [PurchaseOrderController::class, 'show'])->whereNumber('po');
-    Route::post('purchase-orders', [PurchaseOrderController::class, 'store'])
-        ->middleware(['can:purchase_order.create', 'can:purchase_fund.allocate']);
+    Route::post('purchase-orders', [PurchaseOrderController::class, 'store'])->middleware('can:purchase_order.create');
     Route::patch('purchase-orders/{po}', [PurchaseOrderController::class, 'update'])->whereNumber('po')->middleware('can:purchase_order.create');
-    Route::post('purchase-orders/{po}/fund-allocation', [PurchaseOrderController::class, 'allocateFunds'])
-        ->whereNumber('po')->middleware('can:purchase_fund.allocate');
-    Route::post('purchase-orders/{po}/submit', [PurchaseOrderController::class, 'submit'])->whereNumber('po')->middleware('can.any:purchase_order.create,purchase_fund.allocate');
+    Route::post('purchase-orders/{po}/submit', [PurchaseOrderController::class, 'submit'])->whereNumber('po')->middleware('can:purchase_order.create');
     Route::post('purchase-orders/{po}/confirm', [PurchaseOrderController::class, 'confirm'])->whereNumber('po')->middleware('can:purchase_requisition.approve');
     Route::post('purchase-orders/{po}/send', [PurchaseOrderController::class, 'send'])->whereNumber('po')->middleware('can:purchase_order.send');
     Route::post('purchase-orders/{po}/cancel', [PurchaseOrderController::class, 'cancel'])->whereNumber('po')->middleware('can:purchase_order.create');
