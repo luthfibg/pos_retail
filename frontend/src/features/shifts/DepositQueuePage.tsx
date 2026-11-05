@@ -50,7 +50,6 @@ export function DepositQueuePage() {
     <div className="space-y-5 p-6">
       <div>
         <h1 className="text-xl font-semibold">Setoran Masuk</h1>
-        <p className="mt-1 text-sm text-slate-600">Terima setoran dari Kasir, catat selisih, dan pantau saldo dana.</p>
       </div>
 
       <FundBalances funds={funds.data ?? []} loading={funds.isLoading} error={funds.error} />
@@ -59,7 +58,6 @@ export function DepositQueuePage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="font-semibold">Antrean setoran</h2>
-            <p className="mt-1 text-sm text-slate-600">Setoran masuk diproses setelah Kasir menyerahkan uang secara fisik.</p>
           </div>
           <Field label="Status">
             <select
@@ -126,22 +124,23 @@ export function DepositQueuePage() {
 }
 
 function FundBalances({ funds, loading, error }: { funds: FundAccount[]; loading: boolean; error: unknown }) {
+  const visibleFunds = funds.filter((fund) => fund.name !== 'Saldo Pembelian');
+
   return (
     <section className="space-y-3">
-      <h2 className="font-semibold">Saldo dana</h2>
       <ErrorNotice error={error} />
       {loading ? (
         <p className="text-sm text-slate-500">Memuat saldo dana…</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {funds.map((fund) => (
+          {visibleFunds.map((fund) => (
             <div key={fund.id} className="rounded-lg border border-slate-200 bg-white p-4">
-              <p className="text-sm text-slate-600">{fund.name === 'Saldo Pembelian' ? 'Modal PO' : fund.name}</p>
+              <p className="text-sm text-slate-600">{fund.name}</p>
               <p className="mt-1 text-lg font-semibold tabular-nums">{formatRupiah(fund.balance)}</p>
               <p className="mt-1 text-xs text-slate-500">{fund.type === 'petty_cash' ? 'Kas Kecil' : 'Kas Besar'}</p>
             </div>
           ))}
-          {!funds.length && !error && <p className="text-sm text-slate-500">Belum ada akun dana aktif.</p>}
+          {!visibleFunds.length && !error && <p className="text-sm text-slate-500">Belum ada akun dana aktif.</p>}
         </div>
       )}
     </section>

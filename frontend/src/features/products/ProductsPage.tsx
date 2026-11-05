@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { categoryApi, productApi } from '@/lib/api/endpoints';
 import type { ProductStatus } from '@/lib/api/types';
@@ -10,6 +11,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import type { Product } from '@/lib/api/types';
 import { ProductFormDialog } from './ProductFormDialog';
 import { ProductStockDialog } from '@/features/inventory/ProductStockDialog';
+import { sharedActiveSuppliers } from './productForm';
 
 const STATUS_LABEL: Record<ProductStatus, string> = {
   active: 'Aktif',
@@ -27,7 +29,10 @@ export function ProductsPage() {
   const [dialog, setDialog] = useState<{ product?: Product } | null>(null);
   const canEdit = can('product.update');
   const canViewCost = can('inventory.adjust.approve');
+  const canCreateReturn = can('supplier_return.create');
+  const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
   const [stockOf, setStockOf] = useState<Product | null>(null);
+  const navigate = useNavigate();
 
   const categories = useQuery({ queryKey: ['categories', 'all'], queryFn: () => categoryApi.list() });
 
@@ -44,6 +49,14 @@ export function ProductsPage() {
   });
 
   const rows = products.data?.data ?? [];
+  const sharedSuppliers = sharedActiveSuppliers(selectedProducts);
+
+  function canSelectForReturn(product: Product): boolean {
+    if (!canCreateReturn || product.suppliers.every((supplier) => !supplier.is_active)) return false;
+    if (selectedProducts.some((selected) => selected.id === product.id)) return true;
+    return selectedProducts.length === 0
+      || product.suppliers.some((supplier) => supplier.is_active && sharedSuppliers.some((shared) => shared.id === supplier.id));
+  }
 
   return (
     <div className="space-y-4 p-6">
@@ -83,6 +96,16 @@ export function ProductsPage() {
           <option value="">Semua status</option>
           {(Object.keys(STATUS_LABEL) as ProductStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
+        {canCreateReturn && (
+          <button
+            type="button"
+            disabled={selectedProducts.length === 0}
+            onClick={() => navigate(`/supplier-returns?create=1&products=${selectedProducts.map((product) => product.id).join(',')}`)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-50"
+          >
+            Retur{selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}
+          </button>
+        )}
       </div>
 
       <ErrorNotice error={products.error} />
@@ -91,12 +114,13 @@ export function ProductsPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
+              <th className="w-10 px-3 py-2" />
               <th className="px-3 py-2">SKU</th>
               <th className="px-3 py-2">Nama</th>
               <th className="px-3 py-2">Kategori</th>
               <th className="px-3 py-2">Supplier</th>
+              {canViewCost && <th className="px-3 py-2 text-right">Harga Modal Satuan</th>}
               <th className="px-3 py-2 text-right">Harga jual</th>
-              {canViewCost && <th className="px-3 py-2 text-right">Harga Modal</th>}
               <th className="px-3 py-2 text-right">Stok</th>
               <th className="px-3 py-2 text-right">Isi ulang</th>
               <th className="px-3 py-2">Kondisi stok</th>
@@ -107,6 +131,20 @@ export function ProductsPage() {
           <tbody className="divide-y divide-slate-100">
             {rows.map((p) => (
               <tr key={p.id}>
+                <td className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedProducts.some((selected) => selected.id === p.id)}
+                    disabled={!canSelectForReturn(p)}
+                    onChange={(event) => {
+                      setSelectedProducts((current) => event.target.checked
+                        ? [...current, p]
+                        : current.filter((selected) => selected.id !== p.id));
+                    }}
+                    title={!canSelectForReturn(p) ? 'Pilih produk yang memiliki supplier sama dengan pilihan saat ini.' : undefined}
+                    aria-label={`Pilih ${p.name} untuk retur`}
+                  />
+                </td>
                 <td className="px-3 py-2 font-mono text-xs">
                   {p.sku}
                   <div className="text-slate-400">{p.barcode}</div>
@@ -114,8 +152,8 @@ export function ProductsPage() {
                 <td className="px-3 py-2">{p.name}</td>
                 <td className="px-3 py-2 text-slate-600">{p.category_name ?? '—'}</td>
                 <td className="px-3 py-2 text-slate-600">{p.suppliers.map((supplier) => supplier.name).join(', ') || '—'}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.sell_price)}</td>
                 {canViewCost && <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.unit_cost)}</td>}
+                <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.sell_price)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.stock_sellable)} {p.unit_name}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.restock_quantity)} {p.unit_name}</td>
                 <td className="px-3 py-2"><StockBadge status={p.stock_status} /></td>
@@ -129,10 +167,10 @@ export function ProductsPage() {
               </tr>
             ))}
             {!products.isLoading && rows.length === 0 && (
-              <tr><td colSpan={canViewCost ? 11 : 10} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
+              <tr><td colSpan={canViewCost ? 12 : 11} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
             )}
             {products.isLoading && (
-              <tr><td colSpan={canViewCost ? 11 : 10} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
+              <tr><td colSpan={canViewCost ? 12 : 11} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
             )}
           </tbody>
         </table>

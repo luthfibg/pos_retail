@@ -1,4 +1,4 @@
-import type { Product, ProductInput, ProductStatus } from '@/lib/api/types';
+import type { Product, ProductInput, ProductStatus, ProductSupplier } from '@/lib/api/types';
 
 /** Kemampuan pengguna yang memengaruhi form. Diturunkan dari permission; backend tetap memvalidasi. */
 export interface ProductCaps {
@@ -22,6 +22,16 @@ export interface ProductFormValues {
   supplierIds: number[];
   status: ProductStatus;
   reason: string;
+}
+
+export function sharedActiveSuppliers(products: Array<{ suppliers: ProductSupplier[] }>): ProductSupplier[] {
+  if (products.length === 0) return [];
+  const firstProductSuppliers = products[0]!.suppliers.filter((supplier) => supplier.is_active);
+  const sharedIds = products.slice(1).reduce(
+    (ids, product) => ids.filter((id) => product.suppliers.some((supplier) => supplier.is_active && supplier.id === id)),
+    firstProductSuppliers.map((supplier) => supplier.id),
+  );
+  return firstProductSuppliers.filter((supplier) => sharedIds.includes(supplier.id));
 }
 
 export type FormErrors = Partial<Record<

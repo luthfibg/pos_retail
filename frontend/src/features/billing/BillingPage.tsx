@@ -154,7 +154,6 @@ export function BillingPage() {
       <div className="billing-screen no-print space-y-6 p-4 sm:p-6">
         <header>
           <h1 className="text-2xl font-semibold">Laporan Piutang</h1>
-          <p className="mt-1 text-sm text-slate-600">Laporan piutang, penerbitan invoice, dan penerimaan pembayaran.</p>
         </header>
 
         {(canViewPeriods || canGenerateInvoice) && (

@@ -13,8 +13,15 @@ import { buildGoodsReceiptItems, validateGoodsReceiptLines, type GoodsReceiptLin
 const STATUS_LABEL: Record<GoodsReceiptStatus, string> = {
   draft: 'Draft',
   checked: 'Diperiksa',
-  posted: 'Terposting',
+  posted: 'Sudah Masuk Stok',
   cancelled: 'Dibatalkan',
+};
+
+const STATUS_TEXT_CLASS: Record<GoodsReceiptStatus, string> = {
+  draft: 'text-amber-700',
+  checked: 'text-blue-700',
+  posted: 'text-green-700',
+  cancelled: 'text-slate-500',
 };
 
 function todayWib(): string {
@@ -161,7 +168,7 @@ export function GoodsReceiptsPage() {
                     <tr key={receipt.id}>
                       <td className="px-3 py-2">{receipt.po_doc_number}<div className="text-xs text-slate-500">{receipt.supplier_name}</div></td>
                       <td className="px-3 py-2 font-mono font-medium">{receipt.doc_number}</td>
-                      <td className="px-3 py-2">{STATUS_LABEL[receipt.status]}</td>
+                      <td className={`px-3 py-2 font-medium ${STATUS_TEXT_CLASS[receipt.status]}`}>{STATUS_LABEL[receipt.status]}</td>
                       <td className="px-3 py-2">{receipt.received_by_name}</td>
                       <td className="px-3 py-2"><button type="button" onClick={() => setSelectedReceiptId(receipt.id)} className="font-medium text-blue-700 hover:underline">Periksa Dokumen</button></td>
                     </tr>

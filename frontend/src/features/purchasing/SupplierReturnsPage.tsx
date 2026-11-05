@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
@@ -16,12 +17,22 @@ import {
 } from '@/lib/api/endpoints';
 import type {
   ApprovalAuthMode,
+  ProductStock,
+  ProductSupplier,
   SupplierReturn,
   SupplierReturnBucket,
   SupplierReturnStatus,
 } from '@/lib/api/types';
 import { formatDate, formatDateTime, formatQty, formatRupiah } from '@/lib/format';
 import { availableReturnBalances, buildSupplierReturnInput, validateSupplierReturn, type SupplierReturnLine } from './supplierReturnForm';
+import { sharedActiveSuppliers } from '@/features/products/productForm';
+
+type InitialReturnProduct = ProductOption & { suppliers: ProductSupplier[] };
+type InitialReturnDraft = {
+  sourceBucket: SupplierReturnBucket;
+  balanceId: number | null;
+  qty: string;
+};
 
 const STATUS_LABEL: Record<SupplierReturnStatus, string> = {
   draft: 'Draft',
@@ -32,29 +43,90 @@ const STATUS_LABEL: Record<SupplierReturnStatus, string> = {
   written_off: 'Sudah write-off',
   cancelled: 'Dibatalkan',
 };
-const STATUSES = Object.keys(STATUS_LABEL) as SupplierReturnStatus[];
+const INCOMING_STATUSES: SupplierReturnStatus[] = ['draft', 'submitted', 'rejected', 'written_off', 'cancelled'];
+const OUTGOING_STATUSES: SupplierReturnStatus[] = ['accepted', 'replacement_received'];
 let lineSequence = 0;
 
 export function SupplierReturnsPage() {
   const { can } = useAuth();
   const canCreate = can('supplier_return.create');
   const canWriteOff = can('inventory.adjust.approve');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [initialProductIds] = useState(() => [...new Set(
+    (searchParams.get('products') ?? '')
+      .split(',')
+      .map((id) => Number(id))
+      .filter((id) => Number.isSafeInteger(id) && id > 0),
+  )]);
+  const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [queryInput, setQueryInput] = useState('');
   const [queryText, setQueryText] = useState('');
   const [status, setStatus] = useState<SupplierReturnStatus | ''>('');
   const [page, setPage] = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(() => canCreate && searchParams.get('create') === '1' && initialProductIds.length > 0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  const returns = useQuery({
-    queryKey: ['supplier-returns', { queryText, status, page }],
-    queryFn: () => supplierReturnApi.list({
-      q: queryText || undefined,
-      status: status || undefined,
-      page,
-      per_page: 25,
-    }),
+  const initialProductQueries = useQueries({
+    queries: initialProductIds.map((id) => ({
+      queryKey: ['products', 'detail', id],
+      queryFn: () => productApi.get(id),
+      enabled: createOpen,
+    })),
   });
+  const initialProducts = initialProductQueries.flatMap((query) => query.data
+    ? [{
+      id: query.data.id,
+      sku: query.data.sku,
+      name: query.data.name,
+      unit_name: query.data.unit_name,
+      track_expiry: query.data.track_expiry,
+      suppliers: query.data.suppliers,
+    }]
+    : []);
+  const initialProductSuppliers = sharedActiveSuppliers(initialProducts);
+  const initialProductsError = initialProductQueries.find((query) => query.error)?.error;
+  const initialProductsLoading = initialProductQueries.some((query) => query.isLoading);
+  const initialProductsIncomplete = initialProductIds.length > 0
+    && (initialProductsLoading || initialProducts.length !== initialProductIds.length);
+
+  useEffect(() => {
+    if (initialProductIds.length > 0 && (searchParams.has('create') || searchParams.has('products'))) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [initialProductIds.length, searchParams, setSearchParams]);
+
+  const tabStatuses = activeTab === 'incoming' ? INCOMING_STATUSES : OUTGOING_STATUSES;
+  const returns = useQuery({
+    queryKey: ['supplier-returns', { queryText, status, activeTab }],
+    queryFn: async () => {
+      const requestedStatuses = status ? [status] : tabStatuses;
+      const groups = await Promise.all(requestedStatuses.map(async (returnStatus) => {
+        const firstPage = await supplierReturnApi.list({
+          q: queryText || undefined,
+          status: returnStatus,
+          page: 1,
+          per_page: 100,
+        });
+        const otherPages = await Promise.all(Array.from(
+          { length: firstPage.last_page - 1 },
+          (_, index) => supplierReturnApi.list({
+            q: queryText || undefined,
+            status: returnStatus,
+            page: index + 2,
+            per_page: 100,
+          }),
+        ));
+        return [...firstPage.data, ...otherPages.flatMap((result) => result.data)];
+      }));
+
+      return groups.flat().sort((a, b) => (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || b.id - a.id
+      ));
+    },
+  });
+  const returnItems = returns.data ?? [];
+  const lastPage = Math.max(1, Math.ceil(returnItems.length / 25));
+  const pageItems = returnItems.slice((page - 1) * 25, page * 25);
 
   function search(event: FormEvent) {
     event.preventDefault();
@@ -62,23 +134,47 @@ export function SupplierReturnsPage() {
     setPage(1);
   }
 
+  function selectTab(nextTab: 'incoming' | 'outgoing') {
+    setActiveTab(nextTab);
+    setStatus('');
+    setPage(1);
+  }
+
   return (
     <div className="space-y-5 p-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Retur Supplier</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Ajukan retur stok kepada supplier. Barang masuk karantina setelah draft diajukan dan tidak dapat dijual selama menunggu keputusan.
-          </p>
+          <h1 className="text-xl font-semibold">Retur Barang</h1>
         </div>
         {canCreate && (
-          <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">
+          <button type="button" onClick={() => { selectTab('incoming'); setCreateOpen(true); }} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">
             Buat retur
           </button>
         )}
       </header>
 
-      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+      <div role="tablist" aria-label="Jenis retur barang" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'incoming'}
+          onClick={() => selectTab('incoming')}
+          className={`flex-1 border-b-2 px-4 py-3 text-sm ${activeTab === 'incoming' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}
+        >
+          Retur Masuk
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'outgoing'}
+          onClick={() => selectTab('outgoing')}
+          className={`flex-1 border-b-2 px-4 py-3 text-sm ${activeTab === 'outgoing' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}
+        >
+          Retur Keluar
+        </button>
+      </div>
+
+      <section role="tabpanel" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <form onSubmit={search} className="flex flex-wrap items-end gap-3">
           <Field label="Nomor dokumen">
             <input className={`${inputCls} w-52`} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="RET-…" />
@@ -86,7 +182,7 @@ export function SupplierReturnsPage() {
           <Field label="Status">
             <select className={`${inputCls} w-56`} value={status} onChange={(event) => { setStatus(event.target.value as SupplierReturnStatus | ''); setPage(1); }}>
               <option value="">Semua status</option>
-              {STATUSES.map((value) => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
+              {tabStatuses.map((value) => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
             </select>
           </Field>
           <button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm">Terapkan</button>
@@ -94,8 +190,8 @@ export function SupplierReturnsPage() {
 
         <ErrorNotice error={returns.error} />
         {returns.isLoading && <p className="text-sm text-slate-500">Memuat retur supplier…</p>}
-        {returns.data?.data.length === 0 && <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada dokumen yang cocok.</p>}
-        {returns.data && returns.data.data.length > 0 && (
+        {returns.data && returnItems.length === 0 && <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada dokumen yang cocok.</p>}
+        {returns.data && returnItems.length > 0 && (
           <>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
@@ -111,7 +207,7 @@ export function SupplierReturnsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {returns.data.data.map((item) => (
+                  {pageItems.map((item) => (
                     <tr key={item.id}>
                       <td className="px-3 py-2 font-mono font-medium">{item.doc_number}</td>
                       <td className="px-3 py-2">{item.supplier_name}</td>
@@ -128,11 +224,11 @@ export function SupplierReturnsPage() {
               </table>
             </div>
             <Pagination
-              page={returns.data.current_page}
-              lastPage={returns.data.last_page}
-              from={returns.data.from}
-              to={returns.data.to}
-              total={returns.data.total}
+              page={page}
+              lastPage={lastPage}
+              from={returnItems.length === 0 ? null : (page - 1) * 25 + 1}
+              to={Math.min(page * 25, returnItems.length)}
+              total={returnItems.length}
               onPage={setPage}
             />
           </>
@@ -141,6 +237,12 @@ export function SupplierReturnsPage() {
 
       {createOpen && (
         <SupplierReturnCreateDialog
+          initialProducts={initialProducts}
+          initialProductSuppliers={initialProductSuppliers}
+          hasInitialSelection={initialProductIds.length > 0}
+          initialProductsLoading={initialProductsLoading}
+          initialProductsError={initialProductsError}
+          initialProductsIncomplete={initialProductsIncomplete}
           onClose={() => setCreateOpen(false)}
           onCreated={(created) => {
             setCreateOpen(false);
@@ -163,9 +265,21 @@ export function SupplierReturnsPage() {
 }
 
 function SupplierReturnCreateDialog({
+  initialProducts,
+  initialProductSuppliers,
+  hasInitialSelection,
+  initialProductsLoading,
+  initialProductsError,
+  initialProductsIncomplete,
   onClose,
   onCreated,
 }: {
+  initialProducts: InitialReturnProduct[];
+  initialProductSuppliers: ProductSupplier[];
+  hasInitialSelection: boolean;
+  initialProductsLoading: boolean;
+  initialProductsError: unknown;
+  initialProductsIncomplete: boolean;
   onClose: () => void;
   onCreated: (created: SupplierReturn) => void;
 }) {
@@ -177,20 +291,37 @@ function SupplierReturnCreateDialog({
   const [balanceId, setBalanceId] = useState<number | null>(null);
   const [qty, setQty] = useState('');
   const [rows, setRows] = useState<SupplierReturnLine[]>([]);
+  const [initialDrafts, setInitialDrafts] = useState<Record<number, InitialReturnDraft>>({});
+  const [initialRowErrors, setInitialRowErrors] = useState<Record<number, string>>({});
+  const [initialSupplierApplied, setInitialSupplierApplied] = useState(false);
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<{ general?: string; rows: Record<number, string> }>({ rows: {} });
 
   const suppliers = useQuery({
     queryKey: ['suppliers', 'return-picker', supplierSearch],
     queryFn: () => supplierApi.list({ q: supplierSearch || undefined, active_only: true, per_page: 50 }),
+    enabled: !hasInitialSelection,
   });
   const stock = useQuery({
     queryKey: ['inventory', 'product-stock', product?.id],
     queryFn: () => inventoryApi.productStock(product!.id),
-    enabled: product !== null,
+    enabled: product !== null && !hasInitialSelection,
+  });
+  const initialStockQueries = useQueries({
+    queries: initialProducts.map((initialProduct) => ({
+      queryKey: ['inventory', 'product-stock', initialProduct.id],
+      queryFn: () => inventoryApi.productStock(initialProduct.id),
+    })),
   });
   const balances = stock.data ? availableReturnBalances(stock.data, sourceBucket) : [];
   const selectedBalance = balances.find((item) => item.balance_id === balanceId) ?? null;
+
+  useEffect(() => {
+    if (!initialSupplierApplied && !initialProductsLoading) {
+      setInitialSupplierApplied(true);
+      if (initialProductSuppliers.length === 1) setSupplierId(initialProductSuppliers[0]!.id);
+    }
+  }, [initialProductSuppliers, initialProductsLoading, initialSupplierApplied]);
 
   const create = useMutation({
     mutationFn: () => {
@@ -229,13 +360,59 @@ function SupplierReturnCreateDialog({
     }
     setRows(nextRows);
     setErrors({ rows: {} });
-    setProduct(null);
     setBalanceId(null);
     setQty('');
   }
 
+  function initialDraft(productId: number): InitialReturnDraft {
+    return initialDrafts[productId] ?? { sourceBucket: 'sellable', balanceId: null, qty: '' };
+  }
+
+  function updateInitialDraft(productId: number, patch: Partial<InitialReturnDraft>) {
+    setInitialDrafts((current) => ({
+      ...current,
+      [productId]: { ...initialDraft(productId), ...patch },
+    }));
+  }
+
+  function addInitialLine(initialProduct: InitialReturnProduct, selectedStock: ProductStock | undefined, draft: InitialReturnDraft) {
+    if (!selectedStock || draft.balanceId === null || !draft.qty.trim()) return;
+    const selectedBalances = availableReturnBalances(selectedStock, draft.sourceBucket);
+    const selectedProductBalance = selectedBalances.find((item) => item.balance_id === draft.balanceId);
+    if (!selectedProductBalance) return;
+
+    const nextRows = [...rows, {
+      key: ++lineSequence,
+      product: initialProduct,
+      balance: selectedProductBalance,
+      sourceBucket: draft.sourceBucket,
+      qty: draft.qty.trim(),
+    }];
+    const validation = validateSupplierReturn(supplierId ?? 1, nextRows, note);
+    const error = validation.rows[nextRows.length - 1];
+    if (error) {
+      setInitialRowErrors((current) => ({ ...current, [initialProduct.id]: error }));
+      return;
+    }
+
+    setRows(nextRows);
+    setErrors({ rows: {} });
+    setInitialRowErrors((current) => {
+      const { [initialProduct.id]: _removed, ...remaining } = current;
+      return remaining;
+    });
+    updateInitialDraft(initialProduct.id, { balanceId: null, qty: '' });
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault();
+    const missingProduct = hasInitialSelection
+      ? initialProducts.find((initialProduct) => !rows.some((row) => row.product.id === initialProduct.id))
+      : undefined;
+    if (missingProduct) {
+      setErrors({ general: `Tambahkan ${missingProduct.name} ke barang retur.`, rows: {} });
+      return;
+    }
     const validation = validateSupplierReturn(supplierId, rows, note);
     setErrors(validation);
     if (!validation.general && Object.keys(validation.rows).length === 0) create.mutate();
@@ -246,58 +423,162 @@ function SupplierReturnCreateDialog({
   return (
     <Modal title="Buat Draft Retur Supplier" onClose={close}>
       <form onSubmit={submit} className="space-y-4 p-5">
-        <p className="text-sm text-slate-600">Draft belum mengubah stok. Stok baru dipindahkan ke karantina saat retur diajukan.</p>
-        <ErrorNotice error={suppliers.error ?? stock.error ?? create.error} />
+        <ErrorNotice error={initialProductsError ?? suppliers.error ?? stock.error ?? create.error} />
         {errors.general && <p role="alert" className="text-sm text-red-700">{errors.general}</p>}
+        {initialProductsIncomplete && !initialProductsLoading && !initialProductsError && (
+          <p role="alert" className="text-sm text-red-700">Data produk retur tidak lengkap. Kembali ke master produk dan pilih ulang.</p>
+        )}
+        {initialProducts.length > 0 && initialProductSuppliers.length === 0 && (
+          <p role="alert" className="text-sm text-red-700">Produk yang dipilih tidak memiliki supplier aktif yang sama.</p>
+        )}
 
-        <Field label="Cari supplier">
-          <input className={inputCls} value={supplierSearch} onChange={(event) => { setSupplierSearch(event.target.value); setSupplierId(null); }} placeholder="Nama atau kode supplier" />
-        </Field>
-        <Field label="Supplier" error={errors.general && !supplierId ? errors.general : undefined}>
-          <select className={inputCls} value={supplierId ?? ''} onChange={(event) => setSupplierId(event.target.value ? Number(event.target.value) : null)} required>
-            <option value="">Pilih supplier aktif</option>
-            {(suppliers.data?.data ?? []).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} — {supplier.name}</option>)}
-          </select>
-        </Field>
-
-        <div className="space-y-3 rounded-md border border-slate-200 p-3">
-          <Field label="Produk">
-            <ProductPicker value={product} onChange={(value) => { setProduct(value); setBalanceId(null); }} />
+        {hasInitialSelection ? (
+          <Field label="Supplier" error={errors.general && !supplierId ? errors.general : undefined}>
+            <select
+              className={inputCls}
+              value={supplierId ?? ''}
+              onChange={(event) => setSupplierId(event.target.value ? Number(event.target.value) : null)}
+              disabled={initialProductSuppliers.length === 0 || initialProductSuppliers.length === 1}
+              required
+            >
+              <option value="">{initialProductsLoading ? 'Memuat supplier produk…' : 'Pilih supplier produk'}</option>
+              {initialProductSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} — {supplier.name}</option>)}
+            </select>
           </Field>
-          {product && (
-            <>
-              <ErrorNotice error={stock.error} />
-              <Field label="Bucket stok yang diretur">
-                <select className={inputCls} value={sourceBucket} onChange={(event) => { setSourceBucket(event.target.value as SupplierReturnBucket); setBalanceId(null); }}>
-                  <option value="sellable">Sellable</option>
-                  <option value="damaged">Rusak (damaged)</option>
-                </select>
-              </Field>
-              {stock.isLoading && <p className="text-xs text-slate-500">Memuat saldo stok…</p>}
-              {stock.data && (
-                <Field label="Lokasi / batch / posisi">
-                  <select className={inputCls} value={balanceId ?? ''} onChange={(event) => setBalanceId(event.target.value ? Number(event.target.value) : null)}>
-                    <option value="">Pilih saldo stok</option>
-                    {balances.map((balance) => (
-                      <option key={balance.balance_id} value={balance.balance_id}>
-                        {balance.location_id} — {balance.batch_code ?? 'Tanpa batch'}{balance.expiry_date ? ` / exp ${formatDate(balance.expiry_date)}` : ''}
-                        {balance.shelf_position_id ? ` / posisi ${balance.shelf_position_id}` : ''} — tersedia {formatQty(sourceBucket === 'sellable' ? balance.qty_sellable : balance.qty_damaged)}
-                      </option>
-                    ))}
+        ) : (
+          <>
+            <Field label="Cari supplier">
+              <input className={inputCls} value={supplierSearch} onChange={(event) => { setSupplierSearch(event.target.value); setSupplierId(null); }} placeholder="Nama atau kode supplier" />
+            </Field>
+            <Field label="Supplier" error={errors.general && !supplierId ? errors.general : undefined}>
+              <select className={inputCls} value={supplierId ?? ''} onChange={(event) => setSupplierId(event.target.value ? Number(event.target.value) : null)} required>
+                <option value="">Pilih supplier aktif</option>
+                {(suppliers.data?.data ?? []).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} — {supplier.name}</option>)}
+              </select>
+            </Field>
+          </>
+        )}
+
+        {hasInitialSelection ? (
+          <div className="space-y-3">
+            {initialProductsLoading && <p className="text-sm text-slate-500">Memuat produk pilihan…</p>}
+            {initialProducts.map((initialProduct, index) => {
+              const productStock = initialStockQueries[index];
+              const draft = initialDraft(initialProduct.id);
+              const productBalances = productStock?.data
+                ? availableReturnBalances(productStock.data, draft.sourceBucket)
+                : [];
+              const productBalance = productBalances.find((item) => item.balance_id === draft.balanceId) ?? null;
+
+              return (
+                <section key={initialProduct.id} className="space-y-3 rounded-md border border-slate-200 p-3">
+                  <div>
+                    <p className="font-medium">{initialProduct.name}</p>
+                    <p className="font-mono text-xs text-slate-500">{initialProduct.sku}</p>
+                  </div>
+                  <ErrorNotice error={productStock?.error} />
+                  {productStock?.isLoading && <p className="text-xs text-slate-500">Memuat saldo stok…</p>}
+                  {productStock?.data && (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Bucket stok yang diretur">
+                          <select
+                            className={inputCls}
+                            value={draft.sourceBucket}
+                            onChange={(event) => updateInitialDraft(initialProduct.id, {
+                              sourceBucket: event.target.value as SupplierReturnBucket,
+                              balanceId: null,
+                            })}
+                          >
+                            <option value="sellable">Sellable</option>
+                            <option value="damaged">Rusak (damaged)</option>
+                          </select>
+                        </Field>
+                        <Field label="Lokasi / batch / posisi">
+                          <select
+                            className={inputCls}
+                            value={draft.balanceId ?? ''}
+                            onChange={(event) => updateInitialDraft(initialProduct.id, {
+                              balanceId: event.target.value ? Number(event.target.value) : null,
+                            })}
+                          >
+                            <option value="">Pilih saldo stok</option>
+                            {productBalances.map((balance) => (
+                              <option key={balance.balance_id} value={balance.balance_id}>
+                                {balance.location_id} — {balance.batch_code ?? 'Tanpa batch'}{balance.expiry_date ? ` / exp ${formatDate(balance.expiry_date)}` : ''}
+                                {balance.shelf_position_id ? ` / posisi ${balance.shelf_position_id}` : ''} — tersedia {formatQty(draft.sourceBucket === 'sellable' ? balance.qty_sellable : balance.qty_damaged)}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                      </div>
+                      {productBalances.length === 0 && <p className="text-xs text-amber-800">Tidak ada saldo positif pada bucket ini.</p>}
+                      <div className="flex flex-wrap items-end gap-2">
+                        <Field label={`Qty ${productBalance ? `(tersedia ${formatQty(draft.sourceBucket === 'sellable' ? productBalance.qty_sellable : productBalance.qty_damaged)})` : ''}`}>
+                          <LocalDecimalInput
+                            className={`${inputCls} w-36`}
+                            kind="quantity"
+                            value={draft.qty}
+                            onChange={(value) => updateInitialDraft(initialProduct.id, { qty: value })}
+                            placeholder="Contoh: 20"
+                          />
+                        </Field>
+                        <button
+                          type="button"
+                          onClick={() => addInitialLine(initialProduct, productStock.data, draft)}
+                          disabled={!productBalance || !draft.qty.trim()}
+                          className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+                        >
+                          Tambah barang
+                        </button>
+                      </div>
+                      {initialRowErrors[initialProduct.id] && <p role="alert" className="text-xs text-red-700">{initialRowErrors[initialProduct.id]}</p>}
+                    </>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="space-y-3 rounded-md border border-slate-200 p-3">
+            <Field label="Produk">
+              <ProductPicker value={product} onChange={(value) => { setProduct(value); setBalanceId(null); }} />
+            </Field>
+            {product && (
+              <>
+                <ErrorNotice error={stock.error} />
+                <Field label="Bucket stok yang diretur">
+                  <select className={inputCls} value={sourceBucket} onChange={(event) => { setSourceBucket(event.target.value as SupplierReturnBucket); setBalanceId(null); }}>
+                    <option value="sellable">Sellable</option>
+                    <option value="damaged">Rusak (damaged)</option>
                   </select>
                 </Field>
-              )}
-              {balances.length === 0 && stock.data && <p className="text-xs text-amber-800">Tidak ada saldo positif pada bucket ini.</p>}
-              <div className="flex flex-wrap items-end gap-2">
-                <Field label={`Qty ${selectedBalance ? `(tersedia ${formatQty(sourceBucket === 'sellable' ? selectedBalance.qty_sellable : selectedBalance.qty_damaged)})` : ''}`} hint="Gunakan koma untuk pecahan, misalnya 1,5.">
-                  <LocalDecimalInput className={`${inputCls} w-36`} kind="quantity" value={qty} onChange={setQty} placeholder="Contoh: 20" />
-                </Field>
-                <button type="button" onClick={addLine} disabled={!product || !selectedBalance || !qty.trim()} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">Tambah barang</button>
-              </div>
-              {errors.rows[rows.length] && <p role="alert" className="text-xs text-red-700">{errors.rows[rows.length]}</p>}
-            </>
-          )}
-        </div>
+                {stock.isLoading && <p className="text-xs text-slate-500">Memuat saldo stok…</p>}
+                {stock.data && (
+                  <Field label="Lokasi / batch / posisi">
+                    <select className={inputCls} value={balanceId ?? ''} onChange={(event) => setBalanceId(event.target.value ? Number(event.target.value) : null)}>
+                      <option value="">Pilih saldo stok</option>
+                      {balances.map((balance) => (
+                        <option key={balance.balance_id} value={balance.balance_id}>
+                          {balance.location_id} — {balance.batch_code ?? 'Tanpa batch'}{balance.expiry_date ? ` / exp ${formatDate(balance.expiry_date)}` : ''}
+                          {balance.shelf_position_id ? ` / posisi ${balance.shelf_position_id}` : ''} — tersedia {formatQty(sourceBucket === 'sellable' ? balance.qty_sellable : balance.qty_damaged)}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+                {balances.length === 0 && stock.data && <p className="text-xs text-amber-800">Tidak ada saldo positif pada bucket ini.</p>}
+                <div className="flex flex-wrap items-end gap-2">
+                  <Field label={`Qty ${selectedBalance ? `(tersedia ${formatQty(sourceBucket === 'sellable' ? selectedBalance.qty_sellable : selectedBalance.qty_damaged)})` : ''}`} hint="Gunakan koma untuk pecahan, misalnya 1,5.">
+                    <LocalDecimalInput className={`${inputCls} w-36`} kind="quantity" value={qty} onChange={setQty} placeholder="Contoh: 20" />
+                  </Field>
+                  <button type="button" onClick={addLine} disabled={!product || !selectedBalance || !qty.trim()} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">Tambah barang</button>
+                </div>
+                {errors.rows[rows.length] && <p role="alert" className="text-xs text-red-700">{errors.rows[rows.length]}</p>}
+              </>
+            )}
+          </div>
+        )}
 
         {rows.length > 0 && (
           <div className="space-y-2">
@@ -319,7 +600,13 @@ function SupplierReturnCreateDialog({
         </Field>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
           <button type="button" onClick={close} disabled={create.isPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-          <button type="submit" disabled={create.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{create.isPending ? 'Menyimpan…' : 'Simpan Draft'}</button>
+          <button
+            type="submit"
+            disabled={create.isPending || initialProductsLoading || Boolean(initialProductsError) || initialProductsIncomplete || (hasInitialSelection && initialProductSuppliers.length === 0)}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {create.isPending ? 'Menyimpan…' : 'Simpan Draft'}
+          </button>
         </div>
       </form>
     </Modal>

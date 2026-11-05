@@ -31,7 +31,6 @@ export function ShiftsAdminPage() {
     <div className="space-y-4 p-6">
       <div>
         <h1 className="text-xl font-semibold">Laporan Kasir Jaga</h1>
-        <p className="mt-1 text-sm text-slate-600">Kasir jaga yang sudah ditutup menunggu pemeriksaan Admin. Selisih kas ditampilkan sebagai status dan nominal.</p>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

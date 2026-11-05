@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/lib/api/types';
 import {
-  buildCreatePayload, buildUpdatePayload, emptyValues, validateProduct, valuesFromProduct,
+  buildCreatePayload, buildUpdatePayload, emptyValues, sharedActiveSuppliers, validateProduct, valuesFromProduct,
 } from './productForm';
 
 const admin = { canSetPrice: true, canSetCost: true, canActivate: true };
@@ -44,6 +44,25 @@ describe('validateProduct', () => {
     const noPrice = { ...product, sell_price: null, status: 'pending_price' as const };
     const v = { ...valuesFromProduct(noPrice), status: 'active' as const };
     expect(validateProduct(v, 'edit', admin, noPrice).status).toBeTruthy();
+  });
+});
+
+describe('sharedActiveSuppliers', () => {
+  const supplierA = { id: 8, code: 'SUP-8', name: 'Supplier Teh', is_active: true, default_payment_terms: 'cod' as const };
+  const supplierB = { id: 9, code: 'SUP-9', name: 'Supplier B', is_active: true, default_payment_terms: 'cod' as const };
+
+  it('returns only suppliers shared by every selected product', () => {
+    expect(sharedActiveSuppliers([
+      { suppliers: [supplierA, supplierB] },
+      { suppliers: [supplierA] },
+    ])).toEqual([supplierA]);
+  });
+
+  it('excludes inactive suppliers and returns none when products have different suppliers', () => {
+    expect(sharedActiveSuppliers([
+      { suppliers: [{ ...supplierA, is_active: false }] },
+      { suppliers: [supplierB] },
+    ])).toEqual([]);
   });
 });
 

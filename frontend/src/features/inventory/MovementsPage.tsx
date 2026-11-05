@@ -69,7 +69,7 @@ export function MovementsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <h1 className="text-xl font-semibold">Riwayat Stok</h1>
+      <h1 className="text-xl font-semibold">Pergerakan Stok</h1>
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-72">
