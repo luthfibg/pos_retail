@@ -34,6 +34,21 @@ export const STATUS_LABEL: Record<PurchaseRequisitionStatus, string> = {
   cancelled: 'Dibatalkan',
 };
 
+const STATUS_TEXT_COLOR: Record<PurchaseRequisitionStatus, string> = {
+  draft: 'text-slate-600',
+  submitted: 'text-orange-700',
+  finance_checked: 'text-blue-700',
+  approved: 'text-emerald-700',
+  rejected: 'text-red-700',
+  returned: 'text-amber-700',
+  converted: 'text-green-700',
+  cancelled: 'text-slate-500',
+};
+
+export function PurchaseRequisitionStatusText({ status }: { status: PurchaseRequisitionStatus }) {
+  return <span className={`font-medium ${STATUS_TEXT_COLOR[status]}`}>{STATUS_LABEL[status]}</span>;
+}
+
 const FILTER_STATUSES: PurchaseRequisitionStatus[] = [
   'draft', 'submitted', 'finance_checked', 'returned', 'approved', 'rejected', 'converted', 'cancelled',
 ];
@@ -153,7 +168,7 @@ export function PurchaseRequisitionsPage() {
                       <td className="max-w-xs truncate px-3 py-2">{pr.reason || '—'}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{pr.items_count}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(pr.est_total)}</td>
-                      <td className="px-3 py-2">{STATUS_LABEL[pr.status]}</td>
+                      <td className="px-3 py-2"><PurchaseRequisitionStatusText status={pr.status} /></td>
                       <td className="px-3 py-2">{formatDateTime(pr.submitted_at)}</td>
                       <td className="px-3 py-2"><button type="button" onClick={() => setSelectedId(pr.id)} className="font-medium text-blue-700 hover:underline">Detail</button></td>
                     </tr>
@@ -396,7 +411,10 @@ export function PurchaseRequisitionDetailDialog({
           {!pr.is_auto_generated && <PurchaseStageTracker current={trackerStageForPr(pr)} archivedNote={`Status: ${STATUS_LABEL[pr.status]}. Permintaan ini tidak lagi berjalan di alur pembelian.`} />}
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <Detail label="Nomor Permintaan" value={pr.doc_number} />
-            <Detail label="Status" value={STATUS_LABEL[pr.status]} />
+            <div>
+              <div className="text-xs text-slate-500">Status</div>
+              <div><PurchaseRequisitionStatusText status={pr.status} /></div>
+            </div>
             {!pr.is_auto_generated && <Detail label="Pemohon" value={pr.requester_name} />}
             <Detail label="Dibuat" value={formatDateTime(pr.created_at)} />
             <Detail label="Diajukan" value={formatDateTime(pr.submitted_at)} />

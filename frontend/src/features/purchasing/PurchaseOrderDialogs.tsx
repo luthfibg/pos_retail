@@ -18,7 +18,7 @@ export const ORDER_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
   approved: 'Disetujui',
   sent: 'Dikirim ke supplier',
   partially_received: 'Diterima sebagian',
-  received: 'Diterima lengkap',
+  received: 'Sukses',
   cancelled: 'Dibatalkan',
 };
 
@@ -301,7 +301,10 @@ export function PurchaseOrderManageDialog({
           <PurchaseStageTracker current={poStage(po.status)} archivedNote="PO ini dibatalkan dan tidak lagi berjalan di alur pembelian." />
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <div><div className="text-xs text-slate-500">Nomor PO</div><div className="font-mono font-medium">{po.doc_number}</div></div>
-            <div><div className="text-xs text-slate-500">Status</div><div className="font-medium">{ORDER_STATUS_LABEL[po.status]}</div></div>
+            <div>
+              <div className="text-xs text-slate-500">Status</div>
+              <div className={`font-medium ${po.status === 'received' ? 'text-emerald-700' : ''}`}>{ORDER_STATUS_LABEL[po.status]}</div>
+            </div>
             <div><div className="text-xs text-slate-500">Supplier</div><div className="font-medium">{po.supplier_name}</div></div>
             <div><div className="text-xs text-slate-500">Total</div><div className="font-medium">{formatRupiah(po.total)}</div></div>
             <div><div className="text-xs text-slate-500">Tanggal PO</div><div>{po.order_date}</div></div>

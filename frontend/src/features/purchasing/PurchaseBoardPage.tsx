@@ -8,7 +8,6 @@ import type { PurchaseOrder, PurchaseOrderSummary, PurchaseRequisition, Purchase
 import { formatDate, formatDateTime, formatRupiah } from '@/lib/format';
 import { ORDER_STATUS_LABEL, PurchaseOrderCreateDialog, PurchaseOrderManageDialog } from './PurchaseOrderDialogs';
 import { PurchasePrintSheet, type PrintJob } from './PurchasePrint';
-import { PurchaseFundBalance } from './PurchaseFundBalance';
 import {
   PurchaseRequisitionDetailDialog,
   PurchaseRequisitionForm,
@@ -205,12 +204,8 @@ export function PurchaseBoardPage() {
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">Permintaan Pembelian</h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-600">
-              Proses pembelian dalam tiga tahap: periksa Permintaan, siapkan dan setujui PO sekali, lalu cetak dan konfirmasi pengiriman.
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {canViewPurchaseFund && <PurchaseFundBalance />}
             <input
               className={`${inputCls} w-64`}
               placeholder="Cari nomor, pemohon, atau supplier"
@@ -452,8 +447,8 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
       <table className="w-full min-w-[820px] text-left text-sm">
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
-            <th className="px-3 py-2">Nomor PO</th>
             <th className="px-3 py-2">Dari Permintaan</th>
+            <th className="px-3 py-2">Nomor PO</th>
             <th className="px-3 py-2">Supplier</th>
             <th className="px-3 py-2">Tanggal PO</th>
             <th className="px-3 py-2">Permintaan tiba</th>
@@ -466,8 +461,8 @@ function PoTable({ rows, stage, highlightId, busyKey, canAct, onOpen, onPrint }:
         <tbody className="divide-y divide-slate-100">
           {rows.map((po) => (
             <tr key={po.id} className={highlightId === po.id ? 'bg-amber-50' : undefined}>
-              <td className="px-3 py-2 font-mono font-medium">{po.doc_number}</td>
               <td className="px-3 py-2 font-mono">{po.pr_doc_number}</td>
+              <td className="px-3 py-2 font-mono font-medium">{po.doc_number}</td>
               <td className="px-3 py-2">{po.supplier_name}</td>
               <td className="px-3 py-2">{formatDate(po.order_date)}</td>
               <td className="px-3 py-2">{formatDate(po.expected_date)}</td>

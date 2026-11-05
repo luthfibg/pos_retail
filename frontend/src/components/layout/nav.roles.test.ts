@@ -97,11 +97,11 @@ function sidebarFor(permissions: string[] | 'all', isAdmin?: boolean): string[] 
 }
 
 describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
-  it('Kasir melihat Dashboard, Pembelian, Inventory, Penjualan, dan Data Master', () => {
+  it('Kasir melihat Penerimaan Barang dan Retur Supplier di dropdown Inventory', () => {
     expect(sidebarFor(PERMISSIONS.Kasir ?? [])).toEqual([
       'Dashboard',
-      'Pembelian > Permintaan Pembelian, Penerimaan Barang, Retur Supplier',
-      'Inventory > Transfer Stok, Adjustment & Opname, Riwayat Stok',
+      'Permintaan Pembelian',
+      'Inventory > Penerimaan Barang, Retur Supplier, Transfer Stok, Adjustment & Opname, Riwayat Stok',
       'Penjualan > Kasir Jaga Saya, Kasir, Penjualan',
       'Data Master > Produk, Karyawan',
     ]);
@@ -138,8 +138,8 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
   it('Owner', () => {
     expect(sidebarFor(PERMISSIONS.Owner ?? [])).toEqual([
       'Dashboard',
-      'Pembelian > Permintaan Pembelian, Retur Supplier',
-      'Inventory > Stok Eksisting Toko, Adjustment & Opname, Riwayat Stok',
+      'Permintaan Pembelian',
+      'Inventory > Retur Supplier, Stok Eksisting Toko, Adjustment & Opname, Riwayat Stok',
       'Laporan Kasir Jaga',
       'Data Master > Produk, Karyawan',
       'Pengaturan',
@@ -149,8 +149,8 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
   it('Admin (model simple) memegang semua izin dan tidak melihat menu khusus kasir', () => {
     expect(sidebarFor('all', true)).toEqual([
       'Dashboard',
-      'Pembelian > Permintaan Pembelian, Penerimaan Barang, Retur Supplier',
-      'Inventory > Stok Eksisting Toko, Transfer Stok, Adjustment & Opname, Riwayat Stok',
+      'Permintaan Pembelian',
+      'Inventory > Penerimaan Barang, Retur Supplier, Stok Eksisting Toko, Transfer Stok, Adjustment & Opname, Riwayat Stok',
       'Penjualan',
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
       'Data Master > Kategori, Produk, Supplier, Karyawan',

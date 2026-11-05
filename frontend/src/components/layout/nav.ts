@@ -18,8 +18,8 @@ export interface NavGroup {
  * Satu sumber menu, disusun mengikuti alur operasional toko:
  *
  *  1. Dashboard      beranda: ringkasan penjualan, kas, dan stok
- *  2. Pembelian      Permintaan -> pemeriksaan Finance -> otorisasi Owner saat PO -> PO -> terima barang/retur supplier
- *  3. Inventory      stok eksisting toko -> transfer/putaway -> adjustment & opname -> riwayat stok
+ *  2. Pembelian      Permintaan -> pemeriksaan Finance -> otorisasi Owner saat PO
+ *  3. Inventory      penerimaan/retur -> stok eksisting toko -> transfer/putaway -> adjustment & opname -> riwayat stok
  *  4. Penjualan      buka kasir jaga -> jual di kasir -> koreksi/cetak ulang struk
  *  5. Keuangan       periksa kasir jaga -> terima setoran -> tagih HRD
  *  6. Data Master    kategori -> produk -> supplier -> karyawan (pembeli kredit)
@@ -47,13 +47,13 @@ export const NAV_GROUPS: NavGroup[] = [
           'purchase_order.send',
         ],
       },
-      { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create' },
-      { to: '/supplier-returns', label: 'Retur Supplier', permission: ['supplier_return.create', 'inventory.adjust.approve'] },
     ],
   },
   {
     label: 'Inventory',
     items: [
+      { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create' },
+      { to: '/supplier-returns', label: 'Retur Supplier', permission: ['supplier_return.create', 'inventory.adjust.approve'] },
       { to: '/inventory/opening', label: 'Stok Eksisting Toko', permission: 'inventory.opening_balance' },
       { to: '/inventory/transfers', label: 'Transfer Stok', permission: 'stock_transfer.create' },
       { to: '/inventory/adjustments', label: 'Adjustment & Opname', permission: ['inventory.adjust.request', 'inventory.adjust.approve'] },

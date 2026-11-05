@@ -55,15 +55,18 @@ describe('sidebar navigation', () => {
   it('urutan grup mengikuti alur kerja', () => {
     const groups = getVisibleNavGroups(() => true, true);
     expect(groups.map((group) => group.label)).toEqual([
-      'Dashboard', 'Penjualan', 'Keuangan', 'Pembelian', 'Inventory', 'Data Master', 'Pengaturan',
+      'Dashboard', 'Pembelian', 'Inventory', 'Penjualan', 'Keuangan', 'Data Master', 'Pengaturan',
     ]);
   });
 
-  it('shift dibuka sebelum kasir dipakai, dan penerimaan barang mengikuti permintaan pembelian', () => {
-    const paths = getVisibleNavGroups(() => true, false).flatMap((group) => group.items.map((item) => item.to));
+  it('shift dibuka sebelum kasir dipakai dan penerimaan serta retur berada di grup Inventory', () => {
+    const groups = getVisibleNavGroups(() => true, false);
+    const paths = groups.flatMap((group) => group.items.map((item) => item.to));
     expect(paths.indexOf('/shift')).toBeLessThan(paths.indexOf('/pos'));
     expect(paths.indexOf('/pos')).toBeLessThan(paths.indexOf('/sales'));
-    expect(paths.indexOf('/purchase-requisitions')).toBeLessThan(paths.indexOf('/goods-receipts'));
+    const inventory = groups.find((group) => group.label === 'Inventory');
+    expect(inventory?.items.map((item) => item.to)).toContain('/goods-receipts');
+    expect(inventory?.items.map((item) => item.to)).toContain('/supplier-returns');
     expect(paths.indexOf('/inventory/opening')).toBeLessThan(paths.indexOf('/inventory/movements'));
   });
 });
