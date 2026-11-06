@@ -106,48 +106,53 @@ class SupplierReturnService
                         continue;
                     }
 
-                    $sourceBucket = $item['source_bucket'] ?? 'sellable';
-                    $column = $sourceBucket === 'sellable' ? 'qty_sellable' : 'qty_damaged';
                     $remainingQty = Decimal::qty((string) $item['qty']);
-                    $balances = DB::table('inventory_balances as ib')
-                        ->where('ib.product_id', $productId)
-                        ->where("ib.{$column}", '>', 0)
-                        ->orderBy('ib.location_id')
-                        ->orderBy('ib.batch_id')
-                        ->orderBy('ib.id')
-                        ->lockForUpdate()
-                        ->get(['ib.batch_id', 'ib.location_id', 'ib.shelf_position_id', "ib.{$column} as available"]);
+                    $sourceBuckets = isset($item['source_bucket'])
+                        ? [$item['source_bucket']]
+                        : ['damaged', 'sellable'];
 
-                    foreach ($balances as $balance) {
-                        if ($remainingQty <= 0) {
-                            break;
+                    foreach ($sourceBuckets as $sourceBucket) {
+                        $column = $sourceBucket === 'sellable' ? 'qty_sellable' : 'qty_damaged';
+                        $balances = DB::table('inventory_balances as ib')
+                            ->where('ib.product_id', $productId)
+                            ->where("ib.{$column}", '>', 0)
+                            ->orderBy('ib.location_id')
+                            ->orderBy('ib.batch_id')
+                            ->orderBy('ib.id')
+                            ->lockForUpdate()
+                            ->get(['ib.batch_id', 'ib.location_id', 'ib.shelf_position_id', "ib.{$column} as available"]);
+
+                        foreach ($balances as $balance) {
+                            if ($remainingQty <= 0) {
+                                break;
+                            }
+                            $locationId = (int) $balance->location_id;
+                            StockAuthorityPolicy::assertScope($actor, $storeId, 'supplier_return', $locationId);
+                            $batchId = $balance->batch_id === null ? null : (int) $balance->batch_id;
+                            if ((bool) $product->track_expiry && $batchId === null) {
+                                continue;
+                            }
+                            $allocated = min($remainingQty, Decimal::qty((string) $balance->available));
+                            $sourcePoItemId = $batchId === null ? null : DB::table('product_batches as b')
+                                ->join('goods_receipt_items as gri', 'gri.id', '=', 'b.goods_receipt_item_id')
+                                ->where('b.id', $batchId)
+                                ->value('gri.po_item_id');
+                            $normalized[] = [
+                                'product_id' => $productId,
+                                'batch_id' => $batchId,
+                                'location_id' => $locationId,
+                                'shelf_position_id' => $balance->shelf_position_id === null ? null : (int) $balance->shelf_position_id,
+                                'source_bucket' => $sourceBucket,
+                                'qty' => Decimal::qtyString($allocated),
+                                'unit_cost' => $product->unit_cost,
+                                'source_po_item_id' => $sourcePoItemId === null ? null : (int) $sourcePoItemId,
+                            ];
+                            $remainingQty -= $allocated;
                         }
-                        $locationId = (int) $balance->location_id;
-                        StockAuthorityPolicy::assertScope($actor, $storeId, 'supplier_return', $locationId);
-                        $batchId = $balance->batch_id === null ? null : (int) $balance->batch_id;
-                        if ((bool) $product->track_expiry && $batchId === null) {
-                            continue;
-                        }
-                        $allocated = min($remainingQty, Decimal::qty((string) $balance->available));
-                        $sourcePoItemId = $batchId === null ? null : DB::table('product_batches as b')
-                            ->join('goods_receipt_items as gri', 'gri.id', '=', 'b.goods_receipt_item_id')
-                            ->where('b.id', $batchId)
-                            ->value('gri.po_item_id');
-                        $normalized[] = [
-                            'product_id' => $productId,
-                            'batch_id' => $batchId,
-                            'location_id' => $locationId,
-                            'shelf_position_id' => $balance->shelf_position_id === null ? null : (int) $balance->shelf_position_id,
-                            'source_bucket' => $sourceBucket,
-                            'qty' => Decimal::qtyString($allocated),
-                            'unit_cost' => $product->unit_cost,
-                            'source_po_item_id' => $sourcePoItemId === null ? null : (int) $sourcePoItemId,
-                        ];
-                        $remainingQty -= $allocated;
                     }
 
                     if ($remainingQty > 0) {
-                        $errors["items.{$index}.qty"] = ["Stok {$product->name} pada bucket yang dipilih tidak mencukupi."];
+                        $errors["items.{$index}.qty"] = ["Stok {$product->name} tidak mencukupi untuk jumlah retur."];
                     }
 
                     continue;
@@ -233,6 +238,150 @@ class SupplierReturnService
             );
 
             return $id;
+        });
+
+        return $this->load($storeId, $id) ?? [];
+    }
+
+    /**
+     * Menambahkan produk ke draft retur keluar dan mengalokasikan stok secara atomik.
+     *
+     * @param  list<array{product_id: int, qty: string|int|float}>  $items
+     * @return array<string, mixed>
+     */
+    public function merge(User $actor, int $storeId, int $id, array $items): array
+    {
+        $this->assertCanCreate($actor, $storeId);
+
+        DB::transaction(function () use ($actor, $storeId, $id, $items) {
+            $return = DB::table('supplier_returns')
+                ->where('store_id', $storeId)
+                ->where('id', $id)
+                ->lockForUpdate()
+                ->first();
+            if ($return === null) {
+                abort(404, 'Draft retur tidak ditemukan.');
+            }
+            if ($return->return_type !== 'outgoing' || $return->status !== 'draft') {
+                throw ValidationException::withMessages([
+                    'status' => ['Barang hanya dapat digabungkan ke draft Retur Keluar.'],
+                ]);
+            }
+
+            $productIds = collect($items)->pluck('product_id')->map(fn ($productId) => (int) $productId)->all();
+            if (count($productIds) !== count(array_unique($productIds))) {
+                throw ValidationException::withMessages([
+                    'items' => ['Setiap produk hanya boleh ditambahkan satu kali dalam proses penggabungan.'],
+                ]);
+            }
+
+            $existingItemCount = DB::table('supplier_return_items')
+                ->where('supplier_return_id', $id)
+                ->count();
+            if ($existingItemCount + count($items) > 200) {
+                throw ValidationException::withMessages([
+                    'items' => ['Draft retur maksimal memuat 200 baris barang.'],
+                ]);
+            }
+
+            $products = DB::table('products')
+                ->where('store_id', $storeId)
+                ->whereIn('id', $productIds)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id', 'name', 'status', 'track_expiry', 'unit_cost'])
+                ->keyBy('id');
+            $normalized = [];
+            $errors = [];
+
+            foreach ($items as $index => $item) {
+                $productId = (int) $item['product_id'];
+                $product = $products->get($productId);
+                if ($product === null || $product->status === 'inactive') {
+                    $errors["items.{$index}.product_id"] = ['Produk tidak ditemukan atau nonaktif pada toko ini.'];
+
+                    continue;
+                }
+                if (! DB::table('product_suppliers')
+                    ->where('product_id', $productId)
+                    ->where('supplier_id', $return->supplier_id)
+                    ->exists()) {
+                    $errors["items.{$index}.product_id"] = ['Produk tidak terkait dengan supplier draft retur.'];
+
+                    continue;
+                }
+
+                $remainingQty = Decimal::qty((string) $item['qty']);
+                foreach (['damaged' => 'qty_damaged', 'sellable' => 'qty_sellable'] as $sourceBucket => $column) {
+                    $balances = DB::table('inventory_balances as ib')
+                        ->where('ib.product_id', $productId)
+                        ->where("ib.{$column}", '>', 0)
+                        ->orderBy('ib.location_id')
+                        ->orderBy('ib.batch_id')
+                        ->orderBy('ib.id')
+                        ->lockForUpdate()
+                        ->get(['ib.batch_id', 'ib.location_id', 'ib.shelf_position_id', "ib.{$column} as available"]);
+
+                    foreach ($balances as $balance) {
+                        if ($remainingQty <= 0) {
+                            break;
+                        }
+                        $locationId = (int) $balance->location_id;
+                        StockAuthorityPolicy::assertScope($actor, $storeId, 'supplier_return', $locationId);
+                        $batchId = $balance->batch_id === null ? null : (int) $balance->batch_id;
+                        if ((bool) $product->track_expiry && $batchId === null) {
+                            continue;
+                        }
+
+                        $allocated = min($remainingQty, Decimal::qty((string) $balance->available));
+                        $sourcePoItemId = $batchId === null ? null : DB::table('product_batches as b')
+                            ->join('goods_receipt_items as gri', 'gri.id', '=', 'b.goods_receipt_item_id')
+                            ->where('b.id', $batchId)
+                            ->value('gri.po_item_id');
+                        $normalized[] = [
+                            'product_id' => $productId,
+                            'batch_id' => $batchId,
+                            'location_id' => $locationId,
+                            'shelf_position_id' => $balance->shelf_position_id === null ? null : (int) $balance->shelf_position_id,
+                            'source_bucket' => $sourceBucket,
+                            'qty' => Decimal::qtyString($allocated),
+                            'unit_cost' => $product->unit_cost,
+                            'source_po_item_id' => $sourcePoItemId === null ? null : (int) $sourcePoItemId,
+                        ];
+                        $remainingQty -= $allocated;
+                    }
+                }
+
+                if ($remainingQty > 0) {
+                    $errors["items.{$index}.qty"] = ["Stok {$product->name} tidak mencukupi untuk jumlah retur."];
+                }
+            }
+
+            if ($errors !== []) {
+                throw ValidationException::withMessages($errors);
+            }
+            if ($existingItemCount + count($normalized) > 200) {
+                throw ValidationException::withMessages([
+                    'items' => ['Draft retur maksimal memuat 200 baris alokasi stok. Kurangi kuantitas atau buat retur baru.'],
+                ]);
+            }
+
+            foreach ($normalized as $item) {
+                DB::table('supplier_return_items')->insert($item + [
+                    'supplier_return_id' => $id,
+                ]);
+            }
+            DB::table('supplier_returns')->where('id', $id)->update(['updated_at' => $this->nowUtc()]);
+
+            $this->audit->log(
+                'supplier_return.merge',
+                'supplier_return',
+                $id,
+                before: ['items_count' => $existingItemCount],
+                after: ['items_count' => $existingItemCount + count($normalized), 'added_items_count' => count($normalized)],
+                actorId: $actor->id,
+                storeId: $storeId,
+            );
         });
 
         return $this->load($storeId, $id) ?? [];

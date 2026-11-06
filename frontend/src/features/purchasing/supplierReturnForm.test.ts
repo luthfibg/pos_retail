@@ -32,21 +32,19 @@ const product = { id: 12, sku: 'SKU-12', name: 'Produk', unit_name: 'pcs', track
 const line: SupplierReturnLine = {
   key: 1,
   product,
-  sourceBucket: 'damaged',
   qty: '1.500',
-  available: '2.000',
+  available: '7.000',
 };
 
 describe('supplierReturnForm', () => {
-  it('aggregates available stock while excluding unbatched balances for expiry-tracked products', () => {
-    expect(availableReturnQty(stock, 'sellable')).toBe('5.000');
-    expect(availableReturnQty(stock, 'damaged')).toBe('2.000');
+  it('aggregates sellable and damaged stock while excluding unbatched balances for expiry-tracked products', () => {
+    expect(availableReturnQty(stock)).toBe('7.000');
   });
 
   it('validates required data, positive quantities, balance limits, and duplicate product buckets', () => {
     expect(validateSupplierReturn(4, [line], '').rows).toEqual({});
     expect(validateSupplierReturn(null, [line], '').general).toBe('Pilih supplier.');
-    expect(validateSupplierReturn(4, [{ ...line, qty: '2.001' }], '').rows[0]).toContain('melebihi saldo');
+    expect(validateSupplierReturn(4, [{ ...line, qty: '7.001' }], '').rows[0]).toContain('stok tersedia');
     expect(validateSupplierReturn(4, [{ ...line, qty: '0' }], '').rows[0]).toContain('lebih dari 0');
     expect(validateSupplierReturn(4, [line, { ...line, key: 2 }], '').rows[1]).toContain('dua kali');
   });
@@ -58,7 +56,6 @@ describe('supplierReturnForm', () => {
       note: 'Rusak',
       items: [{
         product_id: 12,
-        source_bucket: 'damaged',
         qty: '1.500',
       }],
     });

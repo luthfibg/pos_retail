@@ -13,6 +13,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('supplierReturn')->middleware('can.any:supplier_return.create,inventory.adjust.approve');
     Route::post('supplier-returns/{supplierReturn}/submit', [SupplierReturnController::class, 'submit'])
         ->whereNumber('supplierReturn')->middleware('can:supplier_return.create');
+    Route::post('supplier-returns/{supplierReturn}/merge', [SupplierReturnController::class, 'merge'])
+        ->whereNumber('supplierReturn')->middleware('can:supplier_return.create');
     Route::post('supplier-returns/{supplierReturn}/supplier-decision', [SupplierReturnController::class, 'supplierDecision'])
         ->whereNumber('supplierReturn')->middleware('can:supplier_return.create');
     Route::post('supplier-returns/{supplierReturn}/replacement-receipt', [SupplierReturnController::class, 'receiveReplacement'])

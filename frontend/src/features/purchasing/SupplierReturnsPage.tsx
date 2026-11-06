@@ -7,31 +7,26 @@ import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { ProductPicker } from '@/features/products/ProductPicker';
 import type { ProductOption } from '@/features/inventory/openingForm';
 import {
   goodsReceiptApi,
   inventoryApi,
   productApi,
-  supplierApi,
   supplierReturnApi,
 } from '@/lib/api/endpoints';
 import type {
   ApprovalAuthMode,
-  ProductStock,
   ProductSupplier,
   GoodsReceipt,
   SupplierReturn,
-  SupplierReturnBucket,
   SupplierReturnStatus,
 } from '@/lib/api/types';
 import { formatDate, formatDateTime, formatQty, formatRupiah } from '@/lib/format';
-import { availableReturnQty, buildSupplierReturnInput, validateSupplierReturn, type SupplierReturnLine } from './supplierReturnForm';
+import { availableReturnQty, buildSupplierReturnInput, buildSupplierReturnItems, validateSupplierReturn, type SupplierReturnLine } from './supplierReturnForm';
 import { sharedActiveSuppliers } from '@/features/products/productForm';
 
 type InitialReturnProduct = ProductOption & { suppliers: ProductSupplier[] };
 type InitialReturnDraft = {
-  sourceBucket: SupplierReturnBucket;
   qty: string;
 };
 
@@ -53,7 +48,6 @@ function sumQty(left: string | null, right: string | null): string {
 }
 const INCOMING_STATUSES: SupplierReturnStatus[] = ['draft', 'submitted', 'cancelled'];
 const OUTGOING_STATUSES: SupplierReturnStatus[] = ['draft', 'submitted', 'accepted', 'rejected', 'replacement_received', 'written_off', 'cancelled'];
-let lineSequence = 0;
 
 export function SupplierReturnsPage() {
   const { can } = useAuth();
@@ -161,7 +155,8 @@ export function SupplierReturnsPage() {
   }
 
   return (
-    <div className="space-y-5 p-6">
+    <>
+      <div className="no-print space-y-5 p-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Retur Barang</h1>
@@ -254,6 +249,7 @@ export function SupplierReturnsPage() {
           </>
         )}
       </section>
+      </div>
 
       {createOpen && (
         <SupplierReturnCreateDialog
@@ -284,7 +280,7 @@ export function SupplierReturnsPage() {
           onChanged={() => { void returns.refetch(); }}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -316,37 +312,53 @@ function SupplierReturnCreateDialog({
   onCreated: (created: SupplierReturn) => void;
 }) {
   const queryClient = useQueryClient();
-  const [supplierSearch, setSupplierSearch] = useState('');
+  const navigate = useNavigate();
   const [supplierId, setSupplierId] = useState<number | null>(null);
-  const [product, setProduct] = useState<ProductOption | null>(null);
-  const [sourceBucket, setSourceBucket] = useState<SupplierReturnBucket>('sellable');
-  const [qty, setQty] = useState('');
-  const [rows, setRows] = useState<SupplierReturnLine[]>([]);
   const [initialDrafts, setInitialDrafts] = useState<Record<number, InitialReturnDraft>>({});
-  const [initialRowErrors, setInitialRowErrors] = useState<Record<number, string>>({});
   const [initialSupplierApplied, setInitialSupplierApplied] = useState(false);
+  const [mergeReturnId, setMergeReturnId] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const [invoiceNo, setInvoiceNo] = useState('');
   const [incomingDispositions, setIncomingDispositions] = useState<Record<number, 'direct_return' | 'quarantine'>>({});
   const [errors, setErrors] = useState<{ general?: string; rows: Record<number, string> }>({ rows: {} });
 
-  const suppliers = useQuery({
-    queryKey: ['suppliers', 'return-picker', supplierSearch],
-    queryFn: () => supplierApi.list({ q: supplierSearch || undefined, active_only: true, per_page: 50 }),
-    enabled: !hasInitialSelection,
-  });
-  const stock = useQuery({
-    queryKey: ['inventory', 'product-stock', product?.id],
-    queryFn: () => inventoryApi.productStock(product!.id),
-    enabled: product !== null && !hasInitialSelection,
-  });
   const initialStockQueries = useQueries({
     queries: initialProducts.map((initialProduct) => ({
       queryKey: ['inventory', 'product-stock', initialProduct.id],
       queryFn: () => inventoryApi.productStock(initialProduct.id),
     })),
   });
-  const availableQty = stock.data ? availableReturnQty(stock.data, sourceBucket) : '0.000';
+  const outgoingRows: SupplierReturnLine[] = initialProducts.map((selectedProduct, index) => ({
+    key: selectedProduct.id,
+    product: selectedProduct,
+    qty: initialDrafts[selectedProduct.id]?.qty ?? '',
+    available: initialStockQueries[index]?.data ? availableReturnQty(initialStockQueries[index]!.data!) : '0.000',
+  }));
+  const mergeCandidates = useQuery({
+    queryKey: ['supplier-returns', 'merge-candidates', supplierId],
+    queryFn: async () => {
+      const filters = {
+        return_type: 'outgoing' as const,
+        status: 'draft' as const,
+        supplier_id: supplierId!,
+        per_page: 100,
+      };
+      const firstPage = await supplierReturnApi.list({ ...filters, page: 1 });
+      const otherPages = await Promise.all(Array.from(
+        { length: firstPage.last_page - 1 },
+        (_, index) => supplierReturnApi.list({ ...filters, page: index + 2 }),
+      ));
+
+      return [...firstPage.data, ...otherPages.flatMap((page) => page.data)];
+    },
+    enabled: supplierId !== null && hasInitialSelection,
+  });
+  const validation = validateSupplierReturn(supplierId, outgoingRows, note);
+  const outgoingReady = supplierId !== null
+    && outgoingRows.length > 0
+    && outgoingRows.every((row) => row.qty.trim() !== '')
+    && !validation.general
+    && Object.keys(validation.rows).length === 0;
 
   useEffect(() => {
     if (incomingReceipt) {
@@ -364,6 +376,10 @@ function SupplierReturnCreateDialog({
       if (initialProductSuppliers.length === 1) setSupplierId(initialProductSuppliers[0]!.id);
     }
   }, [initialProductSuppliers, initialProductsLoading, initialSupplierApplied]);
+
+  useEffect(() => {
+    setMergeReturnId(null);
+  }, [supplierId]);
 
   const create = useMutation({
     mutationFn: () => {
@@ -384,12 +400,8 @@ function SupplierReturnCreateDialog({
         });
       }
       const selectedSupplier = supplierId;
-      const validation = validateSupplierReturn(selectedSupplier, rows, note);
-      setErrors(validation);
-      if (validation.general || Object.keys(validation.rows).length > 0 || selectedSupplier === null) {
-        throw new Error(validation.general ?? 'Periksa kembali baris retur.');
-      }
-      return supplierReturnApi.create(buildSupplierReturnInput(selectedSupplier, rows, note));
+      if (selectedSupplier === null) throw new Error('Supplier produk belum dipilih.');
+      return supplierReturnApi.create(buildSupplierReturnInput(selectedSupplier, outgoingRows, note));
     },
     onSuccess: async (created) => {
       await Promise.all([
@@ -401,28 +413,23 @@ function SupplierReturnCreateDialog({
     },
   });
 
-  function addLine() {
-    if (!product || !stock.data || !qty.trim()) return;
-    const row: SupplierReturnLine = {
-      key: ++lineSequence,
-      product,
-      sourceBucket,
-      qty: qty.trim(),
-      available: availableQty,
-    };
-    const nextRows = [...rows, row];
-    const validation = validateSupplierReturn(supplierId ?? 1, nextRows, note);
-    if (validation.rows[nextRows.length - 1]) {
-      setErrors({ rows: { [nextRows.length - 1]: validation.rows[nextRows.length - 1]! } });
-      return;
-    }
-    setRows(nextRows);
-    setErrors({ rows: {} });
-    setQty('');
-  }
+  const merge = useMutation({
+    mutationFn: () => {
+      if (mergeReturnId === null || supplierId === null) throw new Error('Pilih draft retur yang akan digabung.');
+      return supplierReturnApi.merge(mergeReturnId, buildSupplierReturnItems(outgoingRows));
+    },
+    onSuccess: async (updated) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['supplier-returns'] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+        queryClient.invalidateQueries({ queryKey: ['products'] }),
+      ]);
+      onCreated(updated);
+    },
+  });
 
   function initialDraft(productId: number): InitialReturnDraft {
-    return initialDrafts[productId] ?? { sourceBucket: 'sellable', qty: '' };
+    return initialDrafts[productId] ?? { qty: '' };
   }
 
   function updateInitialDraft(productId: number, patch: Partial<InitialReturnDraft>) {
@@ -432,51 +439,17 @@ function SupplierReturnCreateDialog({
     }));
   }
 
-  function addInitialLine(initialProduct: InitialReturnProduct, selectedStock: ProductStock | undefined, draft: InitialReturnDraft) {
-    if (!selectedStock || !draft.qty.trim()) return;
-
-    const nextRows = [...rows, {
-      key: ++lineSequence,
-      product: initialProduct,
-      sourceBucket: draft.sourceBucket,
-      qty: draft.qty.trim(),
-      available: availableReturnQty(selectedStock, draft.sourceBucket),
-    }];
-    const validation = validateSupplierReturn(supplierId ?? 1, nextRows, note);
-    const error = validation.rows[nextRows.length - 1];
-    if (error) {
-      setInitialRowErrors((current) => ({ ...current, [initialProduct.id]: error }));
-      return;
-    }
-
-    setRows(nextRows);
-    setErrors({ rows: {} });
-    setInitialRowErrors((current) => {
-      const { [initialProduct.id]: _removed, ...remaining } = current;
-      return remaining;
-    });
-    updateInitialDraft(initialProduct.id, { qty: '' });
-  }
-
   function submit(event: FormEvent) {
     event.preventDefault();
     if (incomingReceipt) {
       create.mutate();
       return;
     }
-    const missingProduct = hasInitialSelection
-      ? initialProducts.find((initialProduct) => !rows.some((row) => row.product.id === initialProduct.id))
-      : undefined;
-    if (missingProduct) {
-      setErrors({ general: `Tambahkan ${missingProduct.name} ke barang retur.`, rows: {} });
-      return;
-    }
-    const validation = validateSupplierReturn(supplierId, rows, note);
     setErrors(validation);
-    if (!validation.general && Object.keys(validation.rows).length === 0) create.mutate();
+    if (outgoingReady) create.mutate();
   }
 
-  const close = () => { if (!create.isPending) onClose(); };
+  const close = () => { if (!create.isPending && !merge.isPending) onClose(); };
 
   return (
     <Modal title={incomingReceipt ? 'Buat Retur Masuk' : 'Buat Draft Retur Supplier'} onClose={close}>
@@ -535,16 +508,24 @@ function SupplierReturnCreateDialog({
       )}
       {!incomingReceipt && incomingReceiptId === null && (
       <form onSubmit={submit} className="space-y-4 p-5">
-        <ErrorNotice error={initialProductsError ?? suppliers.error ?? stock.error ?? create.error} />
+        <ErrorNotice error={initialProductsError ?? mergeCandidates.error ?? create.error ?? merge.error} />
         {errors.general && <p role="alert" className="text-sm text-red-700">{errors.general}</p>}
         {initialProductsIncomplete && !initialProductsLoading && !initialProductsError && (
           <p role="alert" className="text-sm text-red-700">Data produk retur tidak lengkap. Kembali ke master produk dan pilih ulang.</p>
+        )}
+        {!hasInitialSelection && (
+          <div className="space-y-3 rounded-md bg-slate-50 p-4 text-sm">
+            <p>Pilih barang yang akan diretur melalui checkbox di master Produk.</p>
+            <button type="button" onClick={() => { onClose(); navigate('/products'); }} className="rounded-md border border-slate-300 px-3 py-2 font-medium">
+              Pilih barang
+            </button>
+          </div>
         )}
         {initialProducts.length > 0 && initialProductSuppliers.length === 0 && (
           <p role="alert" className="text-sm text-red-700">Produk yang dipilih tidak memiliki supplier aktif yang sama.</p>
         )}
 
-        {hasInitialSelection ? (
+        {hasInitialSelection && (
           <Field label="Supplier" error={errors.general && !supplierId ? errors.general : undefined}>
             <select
               className={inputCls}
@@ -557,29 +538,15 @@ function SupplierReturnCreateDialog({
               {initialProductSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} — {supplier.name}</option>)}
             </select>
           </Field>
-        ) : (
-          <>
-            <Field label="Cari supplier">
-              <input className={inputCls} value={supplierSearch} onChange={(event) => { setSupplierSearch(event.target.value); setSupplierId(null); }} placeholder="Nama atau kode supplier" />
-            </Field>
-            <Field label="Supplier" error={errors.general && !supplierId ? errors.general : undefined}>
-              <select className={inputCls} value={supplierId ?? ''} onChange={(event) => setSupplierId(event.target.value ? Number(event.target.value) : null)} required>
-                <option value="">Pilih supplier aktif</option>
-                {(suppliers.data?.data ?? []).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} — {supplier.name}</option>)}
-              </select>
-            </Field>
-          </>
         )}
 
-        {hasInitialSelection ? (
+        {hasInitialSelection && (
           <div className="space-y-3">
             {initialProductsLoading && <p className="text-sm text-slate-500">Memuat produk pilihan…</p>}
             {initialProducts.map((initialProduct, index) => {
               const productStock = initialStockQueries[index];
               const draft = initialDraft(initialProduct.id);
-              const productAvailable = productStock?.data
-                ? availableReturnQty(productStock.data, draft.sourceBucket)
-                : '0.000';
+              const rowError = draft.qty.trim() ? validation.rows[index] : undefined;
 
               return (
                 <section key={initialProduct.id} className="space-y-3 rounded-md border border-slate-200 p-3">
@@ -589,105 +556,66 @@ function SupplierReturnCreateDialog({
                   </div>
                   <ErrorNotice error={productStock?.error} />
                   {productStock?.isLoading && <p className="text-xs text-slate-500">Memuat saldo stok…</p>}
-                  {productStock?.data && (
-                    <>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Field label="Bucket stok yang diretur">
-                          <select
-                            className={inputCls}
-                            value={draft.sourceBucket}
-                            onChange={(event) => updateInitialDraft(initialProduct.id, { sourceBucket: event.target.value as SupplierReturnBucket })}
-                          >
-                            <option value="sellable">Sellable</option>
-                            <option value="damaged">Rusak (damaged)</option>
-                          </select>
-                        </Field>
-                      </div>
-                      <div className="flex flex-wrap items-end gap-2">
-                        <Field label={`Jumlah barang (tersedia ${formatQty(productAvailable)})`}>
-                          <LocalDecimalInput
-                            className={`${inputCls} w-36`}
-                            kind="quantity"
-                            value={draft.qty}
-                            onChange={(value) => updateInitialDraft(initialProduct.id, { qty: value })}
-                            placeholder="Contoh: 20"
-                          />
-                        </Field>
-                        <button
-                          type="button"
-                          onClick={() => addInitialLine(initialProduct, productStock.data, draft)}
-                          disabled={productAvailable === '0.000' || !draft.qty.trim()}
-                          className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
-                        >
-                          Tambah barang
-                        </button>
-                      </div>
-                      {initialRowErrors[initialProduct.id] && <p role="alert" className="text-xs text-red-700">{initialRowErrors[initialProduct.id]}</p>}
-                    </>
-                  )}
+                  <Field
+                    label={`Jumlah barang (tersedia ${formatQty(outgoingRows[index]?.available ?? '0')})`}
+                    error={rowError}
+                    hint="Gunakan koma untuk pecahan, misalnya 1,5."
+                  >
+                    <LocalDecimalInput
+                      className={`${inputCls} w-36`}
+                      kind="quantity"
+                      value={draft.qty}
+                      onChange={(value) => updateInitialDraft(initialProduct.id, { qty: value })}
+                      placeholder="Contoh: 20"
+                      disabled={!productStock?.data || productStock.isLoading}
+                    />
+                  </Field>
                 </section>
               );
             })}
-          </div>
-        ) : (
-          <div className="space-y-3 rounded-md border border-slate-200 p-3">
-            <Field label="Produk">
-              <ProductPicker value={product} onChange={setProduct} />
-            </Field>
-            {product && (
-              <>
-                <ErrorNotice error={stock.error} />
-                <Field label="Bucket stok yang diretur">
-                  <select className={inputCls} value={sourceBucket} onChange={(event) => setSourceBucket(event.target.value as SupplierReturnBucket)}>
-                    <option value="sellable">Sellable</option>
-                    <option value="damaged">Rusak (damaged)</option>
-                  </select>
-                </Field>
-                {stock.isLoading && <p className="text-xs text-slate-500">Memuat saldo stok…</p>}
-                {stock.data && (
-                  <p className="text-xs text-slate-600">Stok tersedia pada bucket {sourceBucket}: {formatQty(availableQty)}</p>
-                )}
-                {availableQty === '0.000' && stock.data && <p className="text-xs text-amber-800">Tidak ada saldo positif pada bucket ini.</p>}
-                <div className="flex flex-wrap items-end gap-2">
-                  <Field label="Jumlah barang" hint="Gunakan koma untuk pecahan, misalnya 1,5.">
-                    <LocalDecimalInput className={`${inputCls} w-36`} kind="quantity" value={qty} onChange={setQty} placeholder="Contoh: 20" />
-                  </Field>
-                  <button type="button" onClick={addLine} disabled={!product || availableQty === '0.000' || !qty.trim()} className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50">Tambah barang</button>
-                </div>
-                {errors.rows[rows.length] && <p role="alert" className="text-xs text-red-700">{errors.rows[rows.length]}</p>}
-              </>
+            {mergeCandidates.data && mergeCandidates.data.length > 0 && (
+              <Field label="Gabungkan ke draft retur yang sudah ada">
+                <select
+                  className={inputCls}
+                  value={mergeReturnId ?? ''}
+                  onChange={(event) => setMergeReturnId(event.target.value ? Number(event.target.value) : null)}
+                >
+                  <option value="">Pilih draft retur</option>
+                  {mergeCandidates.data.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.doc_number} · {formatDateTime(candidate.created_at)}</option>
+                  ))}
+                </select>
+              </Field>
             )}
           </div>
         )}
-
-        {rows.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Barang retur</h3>
-            {rows.map((row, index) => (
-              <div key={row.key} className="flex items-start justify-between gap-3 rounded-md bg-slate-50 p-3 text-sm">
-                <div className="min-w-0">
-                  <p className="font-medium">{row.product.name} <span className="font-mono text-xs text-slate-500">{row.product.sku}</span></p>
-                  <p className="text-xs text-slate-600">{row.sourceBucket} · {formatQty(row.qty)} {row.product.unit_name} (tersedia {formatQty(row.available)})</p>
-                  {errors.rows[index] && <p role="alert" className="text-xs text-red-700">{errors.rows[index]}</p>}
-                </div>
-                <button type="button" onClick={() => setRows((current) => current.filter((item) => item.key !== row.key))} className="text-xs text-red-700 underline">Hapus</button>
-              </div>
-            ))}
-          </div>
+        {hasInitialSelection && (
+          <>
+            <Field label="Catatan" hint="Maksimal 500 karakter">
+              <textarea className={inputCls} rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
+            </Field>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+              <button type="button" onClick={close} disabled={create.isPending || merge.isPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
+              <button
+                type="submit"
+                disabled={!outgoingReady || create.isPending || merge.isPending || initialProductsLoading || Boolean(initialProductsError) || initialProductsIncomplete || initialProductSuppliers.length === 0}
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {create.isPending ? 'Menyimpan…' : 'Simpan Draft Baru'}
+              </button>
+              {mergeCandidates.data && mergeCandidates.data.length > 0 && (
+                <button
+                  type="button"
+                  disabled={!outgoingReady || mergeReturnId === null || merge.isPending || create.isPending || initialProductsLoading || Boolean(initialProductsError) || initialProductsIncomplete}
+                  onClick={() => merge.mutate()}
+                  className="rounded-md border border-blue-700 px-3 py-2 text-sm font-medium text-blue-700 disabled:opacity-50"
+                >
+                  {merge.isPending ? 'Menggabungkan…' : 'Gabungkan retur'}
+                </button>
+              )}
+            </div>
+          </>
         )}
-        <Field label="Catatan" hint="Maksimal 500 karakter">
-          <textarea className={inputCls} rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
-        </Field>
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-          <button type="button" onClick={close} disabled={create.isPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-          <button
-            type="submit"
-            disabled={create.isPending || initialProductsLoading || Boolean(initialProductsError) || initialProductsIncomplete || (hasInitialSelection && initialProductSuppliers.length === 0)}
-            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
-            {create.isPending ? 'Menyimpan…' : 'Simpan Draft'}
-          </button>
-        </div>
       </form>
       )}
     </Modal>
@@ -818,7 +746,8 @@ function SupplierReturnDetailDialog({
   }) ?? false;
 
   return (
-    <Modal title={returnDoc ? `Retur ${returnDoc.doc_number}` : 'Detail retur supplier'} onClose={close}>
+    <>
+      <Modal title={returnDoc ? `Retur ${returnDoc.doc_number}` : 'Detail retur supplier'} onClose={close}>
       <div className="space-y-4 p-5">
         <ErrorNotice error={detail.error ?? actionError} />
         {detail.isLoading && <p className="text-sm text-slate-500">Memuat detail retur…</p>}
@@ -872,46 +801,16 @@ function SupplierReturnDetailDialog({
               </table>
             </div>
 
-            {(
-              <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-                <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak retur</button>
-                {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'draft' && (
-                  <button type="button" disabled={anyPending} onClick={() => {
-                    if (window.confirm('Tandai retur masuk ini sudah dicetak dan dikirim ke supplier?')) submitReturn.mutate();
-                  }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-                    {submitReturn.isPending ? 'Menyimpan…' : 'Tandai sudah dikirim'}
-                  </button>
-                )}
-              </div>
-            )}
-            {(
-              <>
-                <style>{`@media print { body * { visibility: hidden !important; } #supplier-return-print, #supplier-return-print * { visibility: visible !important; } #supplier-return-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 24px; color: #111; background: white; } }`}</style>
-                <div id="supplier-return-print" className="hidden text-sm">
-                  <h1 className="text-xl font-bold">{returnDoc.return_type === 'incoming' ? 'Retur Masuk' : 'Retur Keluar'} {returnDoc.doc_number}</h1>
-                  <p>Supplier: {returnDoc.supplier_name}</p>
-                  <p>PO: {returnDoc.items.map((item) => item.source_po_doc_number).filter(Boolean).join(', ') || '—'}</p>
-                  <p>GR: {returnDoc.goods_receipt_doc_number ?? '—'}</p>
-                  <p>Faktur supplier: {returnDoc.invoice_no ?? '—'}</p>
-                  <table className="mt-4 w-full border-collapse">
-                    <thead><tr><th className="border p-2 text-left">Barang</th><th className="border p-2 text-right">Total datang</th><th className="border p-2 text-right">Aman</th><th className="border p-2 text-right">Rusak</th><th className="border p-2 text-right">Harga Modal</th><th className="border p-2 text-left">Catatan / penanganan</th></tr></thead>
-                    <tbody>{returnDoc.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="border p-2">{item.product_name} ({item.sku})</td>
-                        <td className="border p-2 text-right">{returnDoc.return_type === 'incoming' ? formatQty(sumQty(item.qty_received_safe, item.qty_damaged_at_receipt)) : formatQty(item.qty)} {item.unit_name}</td>
-                        <td className="border p-2 text-right">{returnDoc.return_type === 'incoming' ? formatQty(item.qty_received_safe ?? '0') : '—'}</td>
-                        <td className="border p-2 text-right">{returnDoc.return_type === 'incoming' ? formatQty(item.qty_damaged_at_receipt ?? item.qty) : formatQty(item.qty)}</td>
-                        <td className="border p-2 text-right">{item.unit_cost ? formatRupiah(item.unit_cost) : '—'}</td>
-                        <td className="border p-2">{returnDoc.return_type === 'incoming'
-                          ? `${item.disposition === 'quarantine' ? 'Karantina' : 'Dikembalikan ke supplier'}${item.receipt_note ? ` · ${item.receipt_note}` : ''}`
-                          : 'Barang rusak dari stok toko'}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                  <p className="mt-4">Catatan: {returnDoc.note ?? '—'}</p>
-                </div>
-              </>
-            )}
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+              <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak retur</button>
+              {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'draft' && (
+                <button type="button" disabled={anyPending} onClick={() => {
+                  if (window.confirm('Tandai retur masuk ini sudah dicetak dan dikirim ke supplier?')) submitReturn.mutate();
+                }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+                  {submitReturn.isPending ? 'Menyimpan…' : 'Tandai sudah dikirim'}
+                </button>
+              )}
+            </div>
             {canCreate && returnDoc.return_type === 'outgoing' && returnDoc.status === 'draft' && (
               <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                 <button type="button" disabled={anyPending} onClick={() => {
@@ -1027,6 +926,76 @@ function SupplierReturnDetailDialog({
           <button type="button" onClick={close} disabled={anyPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Tutup</button>
         </div>
       </div>
-    </Modal>
+      </Modal>
+      {returnDoc && (
+        <SupplierReturnPrintSheet
+          returnDoc={returnDoc}
+          storeName={me?.store?.name ?? 'POS Retail SMK'}
+        />
+      )}
+    </>
+  );
+}
+
+function SupplierReturnPrintSheet({
+  returnDoc,
+  storeName,
+}: {
+  returnDoc: SupplierReturn;
+  storeName: string;
+}) {
+  const incoming = returnDoc.return_type === 'incoming';
+
+  return (
+    <div className="print-only print-doc">
+      <article>
+        <header className="mb-4 flex items-start justify-between gap-6 border-b-2 border-black pb-3">
+          <div>
+            <div className="text-base font-bold">{storeName}</div>
+            <h1 className="text-xl font-bold tracking-wide">{incoming ? 'RETUR MASUK' : 'RETUR KELUAR'}</h1>
+          </div>
+          <div className="text-right text-xs leading-5">
+            <div className="font-mono text-sm font-bold">{returnDoc.doc_number}</div>
+            <div>Dibuat: {formatDateTime(returnDoc.created_at)}</div>
+            <div>Status: {returnStatusLabel(returnDoc.return_type, returnDoc.status)}</div>
+          </div>
+        </header>
+        <section className="mb-4 grid grid-cols-2 gap-2 text-sm">
+          <p><strong>Supplier:</strong> {returnDoc.supplier_name}</p>
+          <p><strong>Pemohon:</strong> {returnDoc.requested_by_name}</p>
+          {returnDoc.goods_receipt_doc_number && <p><strong>GR asal:</strong> {returnDoc.goods_receipt_doc_number}</p>}
+          {returnDoc.invoice_no && <p><strong>Faktur supplier:</strong> {returnDoc.invoice_no}</p>}
+        </section>
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Barang</th>
+              {incoming && <th>PO asal</th>}
+              <th className="text-right">{incoming ? 'Qty rusak' : 'Jumlah barang'}</th>
+              <th className="text-right">Harga Modal</th>
+              {incoming && <th>Penanganan</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {returnDoc.items.map((item, index) => (
+              <tr key={item.id}>
+                <td>{index + 1}</td>
+                <td>{item.product_name}<span className="block font-mono text-xs">{item.sku}</span></td>
+                {incoming && <td>{item.source_po_doc_number ?? '—'}</td>}
+                <td className="text-right">{formatQty(item.qty)} {item.unit_name}</td>
+                <td className="text-right">{item.unit_cost ? formatRupiah(item.unit_cost) : '—'}</td>
+                {incoming && <td>{item.disposition === 'quarantine' ? 'Masuk karantina' : 'Dikembalikan ke supplier'}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-4 text-sm"><strong>Catatan:</strong> {returnDoc.note ?? '—'}</p>
+        <div className="mt-12 grid grid-cols-2 gap-12 text-center text-sm">
+          <div>Diserahkan oleh<div className="mt-16 border-t border-black pt-1">{returnDoc.requested_by_name}</div></div>
+          <div>Diterima supplier<div className="mt-16 border-t border-black pt-1">Nama dan tanda tangan</div></div>
+        </div>
+      </article>
+    </div>
   );
 }

@@ -647,7 +647,7 @@ export interface SupplierReturnInput {
     batch_id?: number;
     location_id?: number;
     shelf_position_id?: number;
-    source_bucket: SupplierReturnBucket;
+    source_bucket?: SupplierReturnBucket;
     qty?: Decimal;
   }>;
 }

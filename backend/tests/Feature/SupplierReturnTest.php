@@ -149,6 +149,66 @@ class SupplierReturnTest extends SeededTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'supplier_return.replacement_gr_created', 'entity_id' => $id]);
     }
 
+    public function test_return_without_source_bucket_allocates_damaged_then_sellable_stock(): void
+    {
+        $fixture = $this->fixture();
+        $this->receiveStock($fixture, '5');
+        DB::table('inventory_balances')->where('product_id', $fixture['product_id'])->update([
+            'qty_sellable' => '3.000',
+            'qty_damaged' => '2.000',
+        ]);
+        $item = [
+            'product_id' => $fixture['product_id'],
+            'qty' => '4.000',
+        ];
+
+        $id = $this->postJson('/api/supplier-returns', [
+            'supplier_id' => $fixture['supplier_id'],
+            'items' => [$item],
+        ])->assertCreated()->json('data.id');
+
+        $allocated = DB::table('supplier_return_items')
+            ->where('supplier_return_id', $id)
+            ->orderBy('id')
+            ->get(['source_bucket', 'qty']);
+        $this->assertSame([
+            ['source_bucket' => 'damaged', 'qty' => '2.000'],
+            ['source_bucket' => 'sellable', 'qty' => '2.000'],
+        ], $allocated->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function test_products_can_be_merged_into_matching_supplier_draft_only(): void
+    {
+        $fixture = $this->fixture();
+        $this->receiveStock($fixture, '5');
+        $draftId = $this->createReturn($fixture, '1');
+
+        $secondProduct = $this->product();
+        DB::table('product_suppliers')->insertOrIgnore([
+            'product_id' => $secondProduct,
+            'supplier_id' => $fixture['supplier_id'],
+        ]);
+        $secondFixture = $fixture;
+        $secondFixture['product_id'] = $secondProduct;
+        $this->receiveStock($secondFixture, '4');
+
+        $this->postJson("/api/supplier-returns/{$draftId}/merge", [
+            'items' => [
+                ['product_id' => $secondProduct, 'qty' => '2.000'],
+                ['product_id' => $fixture['product_id'], 'qty' => '1.000'],
+            ],
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'draft')
+            ->assertJsonPath('data.items.1.product_id', $secondProduct)
+            ->assertJsonPath('data.items.2.product_id', $fixture['product_id']);
+        $this->assertSame(3, DB::table('supplier_return_items')->where('supplier_return_id', $draftId)->count());
+
+        $this->postJson("/api/supplier-returns/{$draftId}/submit")->assertOk();
+        $this->postJson("/api/supplier-returns/{$draftId}/merge", [
+            'items' => [['product_id' => $secondProduct, 'qty' => '1.000']],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['status']);
+    }
+
     public function test_supplier_rejection_records_loss_until_owner_reauthenticates_write_off(): void
     {
         $fixture = $this->fixture();

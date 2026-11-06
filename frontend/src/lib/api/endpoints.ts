@@ -283,6 +283,8 @@ export const supplierReturnApi = {
   get: (id: number) => api<{ data: SupplierReturn }>(`/supplier-returns/${id}`).then((r) => r.data),
   create: (input: SupplierReturnInput) =>
     api<{ data: SupplierReturn }>('/supplier-returns', { method: 'POST', body: input }).then((r) => r.data),
+  merge: (id: number, items: Array<{ product_id: number; qty: string }>) =>
+    api<{ data: SupplierReturn }>(`/supplier-returns/${id}/merge`, { method: 'POST', body: { items } }).then((r) => r.data),
   submit: (id: number) =>
     api<{ data: SupplierReturn }>(`/supplier-returns/${id}/submit`, { method: 'POST' }).then((r) => r.data),
   supplierDecision: (id: number, decision: 'accept' | 'reject', note?: string) =>

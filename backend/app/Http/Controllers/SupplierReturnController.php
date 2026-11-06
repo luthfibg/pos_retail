@@ -63,6 +63,23 @@ class SupplierReturnController extends Controller
         )]);
     }
 
+    public function merge(Request $request, int $supplierReturn): JsonResponse
+    {
+        $data = $request->validate([
+            'items' => ['required', 'array', 'min:1', 'max:200'],
+            'items.*.product_id' => ['required', 'integer', 'min:1'],
+            'items.*.qty' => ['required', 'numeric', 'gt:0', 'max:99999.999', 'decimal:0,3'],
+        ]);
+        $user = $request->user();
+
+        return response()->json(['data' => $this->returns->merge(
+            $user,
+            $this->stores->requireIdFor($user),
+            $supplierReturn,
+            $data['items'],
+        )]);
+    }
+
     public function supplierDecision(Request $request, int $supplierReturn): JsonResponse
     {
         $data = $request->validate([

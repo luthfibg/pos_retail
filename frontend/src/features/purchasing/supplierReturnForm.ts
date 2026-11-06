@@ -1,6 +1,5 @@
 import type {
   ProductStock,
-  SupplierReturnBucket,
   SupplierReturnInput,
 } from '@/lib/api/types';
 import { normalizeDecimal } from '@/features/products/productForm';
@@ -10,7 +9,6 @@ import type { ProductOption } from '@/features/inventory/openingForm';
 export interface SupplierReturnLine {
   key: number;
   product: ProductOption;
-  sourceBucket: SupplierReturnBucket;
   qty: string;
   available: string;
 }
@@ -20,11 +18,10 @@ export interface SupplierReturnFormErrors {
   rows: Record<number, string>;
 }
 
-export function availableReturnQty(stock: ProductStock, sourceBucket: SupplierReturnBucket): string {
-  const field = sourceBucket === 'sellable' ? 'qty_sellable' : 'qty_damaged';
+export function availableReturnQty(stock: ProductStock): string {
   const total = stock.batches.reduce((sum, balance) => {
     if (stock.track_expiry && balance.batch_id === null) return sum;
-    return sum + (qtyToMilli(balance[field]) ?? 0n);
+    return sum + (qtyToMilli(balance.qty_sellable) ?? 0n) + (qtyToMilli(balance.qty_damaged) ?? 0n);
   }, 0n);
   return `${total / 1000n}.${(total % 1000n).toString().padStart(3, '0')}`;
 }
@@ -47,11 +44,11 @@ export function validateSupplierReturn(
     if (qty === null || qty <= 0n || qty > 99_999_000n) {
       errors.rows[index] = 'Qty harus lebih dari 0 dan maksimal 99.999, 3 desimal.';
     } else if (available === null || qty > available) {
-      errors.rows[index] = 'Qty melebihi saldo bucket produk.';
+      errors.rows[index] = 'Qty melebihi total stok tersedia untuk retur.';
     }
 
-    const key = `${row.product.id}:${row.sourceBucket}`;
-    if (seen.has(key)) errors.rows[index] = 'Produk dan bucket stok tidak boleh dicatat dua kali.';
+    const key = `${row.product.id}`;
+    if (seen.has(key)) errors.rows[index] = 'Produk tidak boleh dicatat dua kali.';
     seen.add(key);
   });
 
@@ -63,15 +60,19 @@ export function buildSupplierReturnInput(
   rows: SupplierReturnLine[],
   note: string,
 ): SupplierReturnInput {
+  const items = buildSupplierReturnItems(rows);
   const input: SupplierReturnInput = {
     return_type: 'outgoing',
     supplier_id: supplierId,
-    items: rows.map((row) => ({
-      product_id: row.product.id,
-      source_bucket: row.sourceBucket,
-      qty: normalizeDecimal(row.qty),
-    })),
+    items,
   };
   if (note.trim()) input.note = note.trim();
   return input;
+}
+
+export function buildSupplierReturnItems(rows: SupplierReturnLine[]): Array<{ product_id: number; qty: string }> {
+  return rows.map((row) => ({
+    product_id: row.product.id,
+    qty: normalizeDecimal(row.qty),
+  }));
 }
