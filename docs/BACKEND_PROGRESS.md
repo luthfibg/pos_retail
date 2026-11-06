@@ -923,17 +923,18 @@ Berlaku pada semua dialog persetujuan yang memakai re-auth: persetujuan PR, konf
 
 ASUMSI: kunci per pengguna (bukan satu kunci bersama toko) agar dapat diaudit dan dicabut per orang; hash bcrypt dengan penguncian permanen dianggap cukup untuk kode 6 karakter; DELETE membawa body JSON (bila proxy membuang body DELETE, ubah ke POST).
 
-## 15. Retur Supplier dan Write-off (Paket 3) ✅
+## 15. Retur Supplier dan Write-off ✅
 
-`SupplierReturnTest` lulus (6 test, 60 assertions). Migration baru: `2026_11_04_000059_create_supplier_returns_tables.php`. Jalankan `php artisan migrate`; pada database yang sudah ada jalankan `php artisan db:seed --class=PermissionSeeder` untuk menambahkan `supplier_return.create`.
+Migration awal: `2026_11_04_000059_create_supplier_returns_tables.php`; migration alur baru: `2026_11_05_000069_add_supplier_return_workflows.php`. Jalankan `php artisan migrate`; pada database yang belum memiliki permission retur, jalankan `php artisan db:seed --class=PermissionSeeder`.
 
-Retur dicatat untuk supplier tertentu dan lokasi/batch stok. Pengajuan memindahkan barang dari bucket `sellable` atau `damaged` ke `quarantine`, sehingga tidak dapat terjual selama menunggu keputusan. Keputusan supplier dicatat pengguna yang punya izin retur:
+Validasi terarah: `GoodsReceiptTest` 18 lulus (218 assertions) dan `SupplierReturnTest` 6 lulus (62 assertions). Suite backend penuh: 316 lulus, 5 gagal pada ekspektasi lama di `PlatformStoreManagementTest`, `RbacTest`, `ReportTest`, dan `SupplierTest`.
 
-`draft` → `submitted` → `accepted` → `replacement_received`
+Ada dua alur retur:
 
-atau `draft` → `submitted` → `rejected` → `written_off`.
+- **Retur Masuk** dimulai dari GR yang masih `draft`. Barang rusak harus dicatat ke seluruh baris rusak GR, dengan disposisi `direct_return` (dibawa kembali supplier, tidak dihitung sebagai penerimaan PO dan tidak masuk stok) atau `quarantine` (tetap dihitung diterima PO dan masuk bucket karantina saat GR diposting). Retur Masuk harus dikirim (`submitted`) sebelum GR dengan barang rusak dapat diposting. Dokumen retur menyimpan relasi GR/baris penerimaan, supplier, HPP, kuantitas rusak, disposisi, catatan dan nomor faktur supplier.
+- **Retur Keluar** dimulai dari barang rusak yang telah berada dalam stok. Kuantitas stok dialokasikan di backend ke lokasi/batch yang tersedia lalu dikarantina saat retur dikirim; supplier harus sama untuk seluruh dokumen. Barang yang diterima supplier menghasilkan **GR pengganti draft terpisah untuk setiap PO asal**. GR pengganti menambah stok dan menyelesaikan retur hanya setelah diposting; kuantitas penerimaan PO asal tidak ditambahkan untuk kedua kalinya. Jika PO asal tidak dapat ditelusuri, backend menolak membuat GR pengganti secara eksplisit.
 
-Supplier yang menerima retur menyebabkan stok karantina keluar (`supplier_return_out`); barang pengganti diterima lewat aksi terpisah sebagai batch baru (`supplier_replacement_in`) dengan HPP snapshot barang retur. Supplier yang menolak membuat nilai `loss_amount` dari qty × HPP snapshot; stok tetap dikarantina sampai pemegang `inventory.adjust.approve` menyetujui write-off dengan autentikasi ulang Owner/Admin. Write-off mengurangi bucket karantina dengan movement `write_off`. Penerimaan pengganti dilakukan sekaligus untuk semua baris retur dan memakai jumlah qty asal.
+Alur Retur Keluar: `draft` → `submitted` → `accepted` → GR pengganti `draft` → `replacement_received` setelah seluruh GR diposting, atau `draft` → `submitted` → `rejected` → `written_off`. Penolakan supplier tetap mengarantina barang hingga pemegang `inventory.adjust.approve` menyetujui write-off dengan autentikasi ulang Owner/Admin. HPP retur disnapshot dari `products.unit_cost`; write-off mencatat nilai kerugian dan movement `write_off`.
 
 ### Endpoint (`auth:sanctum`)
 
@@ -944,13 +945,13 @@ Supplier yang menerima retur menyebabkan stok karantina keluar (`supplier_return
 | GET | `/api/supplier-returns/{id}` | `supplier_return.create` atau `inventory.adjust.approve` | Detail |
 | POST | `/api/supplier-returns/{id}/submit` | `supplier_return.create` | Validasi stok terbaru dan pindahkan item ke karantina |
 | POST | `/api/supplier-returns/{id}/supplier-decision` | `supplier_return.create` | Catat `{ "decision": "accept|reject", "note": "..." }`; alasan wajib untuk reject |
-| POST | `/api/supplier-returns/{id}/replacement-receipt` | `supplier_return.create` | Terima seluruh qty barang pengganti, `items[]` berisi `return_item_id`, `expiry_date?`, `batch_code?`, `shelf_position_id?` |
+| POST | `/api/supplier-returns/{id}/replacement-receipt` | `supplier_return.create` | Buat GR pengganti draft per PO asal; isi `items[]` dengan `return_item_id`, `expiry_date?`, `batch_code?`, `shelf_position_id?` |
 | POST | `/api/supplier-returns/{id}/write-off` | `inventory.adjust.approve` | Persetujuan Owner/Admin; wajib `approver_username` dan kredensial sesuai mode autentikasi ulang |
 | POST | `/api/supplier-returns/{id}/cancel` | `supplier_return.create` | Batalkan draft |
 
-Body buat: `supplier_id`, `items[]` (`product_id`, `location_id`, `qty`, `batch_id?`, `shelf_position_id?`, `source_bucket?` = `sellable|damaged`), `note?`. Produk dan supplier harus milik toko yang sedang aktif; batch/posisi harus cocok dengan produk/lokasi. Lingkup toko/gudang diperiksa kembali saat submit, keputusan, dan penerimaan pengganti. Role pemegang `supplier_return.create` dikonfigurasi lewat aturan `supplier_return.store_floor` / `supplier_return.warehouse` pada matriks kewenangan stok (bagian 13).
+Body Retur Keluar: `supplier_id`, `items[]` (`product_id`, `qty`, `source_bucket?` = `sellable|damaged`), `note?`; server mengalokasikan lokasi/batch berdasarkan saldo stok. Body Retur Masuk: `return_type: "incoming"`, `supplier_id`, `goods_receipt_id`, `invoice_no?`, `note?`, dan `items[]` (`goods_receipt_item_id`, `disposition: "direct_return"|"quarantine"`). Daftar retur memuat `return_type`, relasi GR, faktur, dan disposisi. Produk dan supplier harus milik toko aktif; lingkup toko/gudang diperiksa saat tindakan terkait.
 
-Respons detail memuat `doc_number` (`RET-000001`), supplier, status, waktu submit/keputusan, catatan, `loss_amount` (string uang/null), approver, dan `items[]` termasuk lokasi, batch, qty, HPP snapshot, serta batch pengganti. Draft tidak mengubah stok; submit gagal 422 jika stok berubah/tidak cukup dan transaksi tidak meninggalkan movement parsial. Status akhir tidak dapat dibatalkan atau diposting ulang. Aksi penting dicatat sebagai `supplier_return.create|submit|accept|reject|replacement_received|write_off|cancel`.
+Respons detail memuat `doc_number` (`RET-000001`), `return_type`, supplier, status, waktu submit/keputusan, catatan, faktur, `loss_amount` (string uang/null), approver, relasi GR dan `items[]` termasuk lokasi, batch, qty, HPP snapshot, disposisi, serta GR pengganti. Draft tidak mengubah stok; submit gagal 422 jika stok berubah/tidak cukup atau detail GR tidak cocok. Aksi penting dicatat pada audit log.
 
 ## 16. Ubah Nama Toko oleh Pengguna Retail
 

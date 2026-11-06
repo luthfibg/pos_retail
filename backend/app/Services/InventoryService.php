@@ -163,7 +163,7 @@ class InventoryService
     // ------------------------------------------------------------------ penerimaan
 
     /**
-     * Barang masuk dari penerimaan PO atau pengganti retur. Produk track_expiry wajib bertanggal kadaluarsa.
+     * Barang masuk dari penerimaan PO atau GR pengganti. Produk track_expiry wajib bertanggal kadaluarsa.
      *
      * @return array{batch_id: int, balance_id: int}
      */
@@ -181,6 +181,7 @@ class InventoryService
         ?int $locationId = null,
         ?int $positionId = null,
         string $movementType = 'receipt',
+        string $bucket = 'sellable',
     ): array {
         $this->requireTransaction();
 
@@ -210,6 +211,7 @@ class InventoryService
             refType: $refType,
             refId: $refId,
             actorId: $actorId,
+            bucket: $bucket,
         );
     }
 
@@ -869,10 +871,14 @@ class InventoryService
         string $refType,
         int $refId,
         ?int $actorId,
+        string $bucket = 'sellable',
     ): array {
         $units = Decimal::qty($qty);
         if ($units <= 0) {
             throw ValidationException::withMessages(['qty' => ['Jumlah harus lebih dari nol.']]);
+        }
+        if (! array_key_exists($bucket, self::BUCKET_COLUMNS)) {
+            throw new LogicException('Bucket stok masuk tidak valid.');
         }
         $qtyText = Decimal::qtyString($units);
         $now = $this->now();
@@ -887,7 +893,7 @@ class InventoryService
         ]);
 
         $balanceId = $this->lockOrCreateBalance((int) $product->id, $locationId, $positionId, $batchId);
-        $this->increaseBalance($balanceId, 'sellable', $units);
+        $this->increaseBalance($balanceId, $bucket, $units);
 
         DB::table('inventory_movements')->insert([
             'store_id' => $storeId,
@@ -895,7 +901,7 @@ class InventoryService
             'batch_id' => $batchId,
             'to_location_id' => $locationId,
             'to_position_id' => $positionId,
-            'to_bucket' => 'sellable',
+            'to_bucket' => $bucket,
             'qty' => $qtyText,
             'movement_type' => $type,
             'unit_cost' => $unitCost,

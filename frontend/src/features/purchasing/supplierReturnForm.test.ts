@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProductStock } from '@/lib/api/types';
 import {
-  availableReturnBalances,
+  availableReturnQty,
   buildSupplierReturnInput,
   validateSupplierReturn,
   type SupplierReturnLine,
@@ -22,9 +22,9 @@ const stock: ProductStock = {
       qty_sellable: '5.000', qty_quarantine: '0.000', qty_damaged: '2.000',
     },
     {
-      balance_id: 2, batch_id: 9, batch_code: 'B-9', expiry_date: null, expiry_status: 'none',
+      balance_id: 2, batch_id: null, batch_code: null, expiry_date: null, expiry_status: 'none',
       is_opening: true, received_at: null, location_id: 2, shelf_position_id: null,
-      qty_sellable: '0.000', qty_quarantine: '0.000', qty_damaged: '0.000',
+      qty_sellable: '4.000', qty_quarantine: '0.000', qty_damaged: '0.000',
     },
   ],
 };
@@ -32,35 +32,32 @@ const product = { id: 12, sku: 'SKU-12', name: 'Produk', unit_name: 'pcs', track
 const line: SupplierReturnLine = {
   key: 1,
   product,
-  balance: stock.batches[0]!,
   sourceBucket: 'damaged',
   qty: '1.500',
+  available: '2.000',
 };
 
 describe('supplierReturnForm', () => {
-  it('filters balances with positive quantity in the selected source bucket', () => {
-    expect(availableReturnBalances(stock, 'sellable').map((item) => item.balance_id)).toEqual([1]);
-    expect(availableReturnBalances(stock, 'damaged').map((item) => item.balance_id)).toEqual([1]);
-    expect(availableReturnBalances({ ...stock, batches: stock.batches.map((item) => ({ ...item, batch_id: null })) }, 'sellable')).toEqual([]);
+  it('aggregates available stock while excluding unbatched balances for expiry-tracked products', () => {
+    expect(availableReturnQty(stock, 'sellable')).toBe('5.000');
+    expect(availableReturnQty(stock, 'damaged')).toBe('2.000');
   });
 
-  it('validates required data, positive quantities, balance limits, and duplicate source balances', () => {
+  it('validates required data, positive quantities, balance limits, and duplicate product buckets', () => {
     expect(validateSupplierReturn(4, [line], '').rows).toEqual({});
     expect(validateSupplierReturn(null, [line], '').general).toBe('Pilih supplier.');
     expect(validateSupplierReturn(4, [{ ...line, qty: '2.001' }], '').rows[0]).toContain('melebihi saldo');
     expect(validateSupplierReturn(4, [{ ...line, qty: '0' }], '').rows[0]).toContain('lebih dari 0');
-    expect(validateSupplierReturn(4, [line, { ...line, key: 2 }], '').rows[1]).toContain('duplikat');
+    expect(validateSupplierReturn(4, [line, { ...line, key: 2 }], '').rows[1]).toContain('dua kali');
   });
 
-  it('builds the draft request from the selected batch and bucket', () => {
+  it('builds a quantity-only outgoing return request', () => {
     expect(buildSupplierReturnInput(4, [line], ' Rusak ')).toEqual({
+      return_type: 'outgoing',
       supplier_id: 4,
       note: 'Rusak',
       items: [{
         product_id: 12,
-        batch_id: 8,
-        location_id: 2,
-        shelf_position_id: 3,
         source_bucket: 'damaged',
         qty: '1.500',
       }],

@@ -100,7 +100,7 @@ export function ProductsPage() {
           <button
             type="button"
             disabled={selectedProducts.length === 0}
-            onClick={() => navigate(`/supplier-returns?create=1&products=${selectedProducts.map((product) => product.id).join(',')}`)}
+            onClick={() => navigate(`/supplier-returns?return_type=outgoing&create=1&products=${selectedProducts.map((product) => product.id).join(',')}`)}
             className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-50"
           >
             Retur{selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}

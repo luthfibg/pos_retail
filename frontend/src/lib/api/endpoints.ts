@@ -278,7 +278,7 @@ export const goodsReceiptApi = {
 };
 
 export const supplierReturnApi = {
-  list: (f: { q?: string; status?: SupplierReturnStatus; supplier_id?: number; page?: number; per_page?: number } = {}) =>
+  list: (f: { q?: string; status?: SupplierReturnStatus; return_type?: 'incoming' | 'outgoing'; supplier_id?: number; page?: number; per_page?: number } = {}) =>
     api<Paginated<SupplierReturnSummary>>('/supplier-returns', { query: { ...f } }),
   get: (id: number) => api<{ data: SupplierReturn }>(`/supplier-returns/${id}`).then((r) => r.data),
   create: (input: SupplierReturnInput) =>

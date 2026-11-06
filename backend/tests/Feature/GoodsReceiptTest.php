@@ -45,6 +45,28 @@ class GoodsReceiptTest extends SeededTestCase
         return (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_sellable');
     }
 
+    private function sendIncomingReturn(int $goodsReceiptId, int $supplierId): void
+    {
+        Sanctum::actingAs($this->seededAdmin(), ['*']);
+        $items = DB::table('goods_receipt_items')->where('gr_id', $goodsReceiptId)->where('qty_damaged', '>', 0)->get();
+        $returnId = $this->postJson('/api/supplier-returns', [
+            'return_type' => 'incoming',
+            'supplier_id' => $supplierId,
+            'goods_receipt_id' => $goodsReceiptId,
+            'items' => $items->map(fn ($item) => [
+                'goods_receipt_item_id' => (int) $item->id,
+                'disposition' => $item->damage_disposition,
+                'source_bucket' => 'damaged',
+            ])->all(),
+        ])->assertCreated()
+            ->assertJsonPath('data.return_type', 'incoming')
+            ->json('data.id');
+
+        $this->postJson("/api/supplier-returns/{$returnId}/submit")
+            ->assertOk()->assertJsonPath('data.status', 'submitted');
+        Sanctum::actingAs($this->cashier, ['*']);
+    }
+
     public function test_cashier_receives_full_order_and_stock_is_posted(): void
     {
         $p = $this->product();
@@ -109,19 +131,69 @@ class GoodsReceiptTest extends SeededTestCase
         $this->assertSame(8.0, $this->stock($p));
     }
 
-    public function test_damaged_goods_are_recorded_but_not_stocked(): void
+    public function test_quarantined_damaged_goods_count_as_received_and_are_quarantined(): void
     {
         $p = $this->product();
         [$po, $item] = $this->sentPo($p);
 
-        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '8', 'qty_damaged' => '2'], ['post' => true]))
+        $gr = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, [
+            'qty_received' => '8',
+            'qty_damaged' => '2',
+            'damage_disposition' => 'quarantine',
+        ]))
             ->assertCreated()
             ->assertJsonPath('data.items.0.qty_damaged', '2.000')
-            ->assertJsonPath('data.items.0.qty_short', '0.000');
+            ->json('data');
+        $this->sendIncomingReturn($gr['id'], (int) DB::table('purchase_orders')->where('id', $po)->value('supplier_id'));
+        $this->postJson("/api/goods-receipts/{$gr['id']}/post")
+            ->assertOk()->assertJsonPath('data.items.0.qty_short', '0.000');
+
+        $this->assertSame(8.0, $this->stock($p));
+        $this->assertSame(2.0, (float) DB::table('inventory_balances')->where('product_id', $p)->sum('qty_quarantine'));
+        $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
+        $this->assertSame(10.0, (float) DB::table('purchase_order_items')->where('id', $item)->value('qty_received'));
+        $this->assertSame(1, $this->notificationCount('goods_receipt.damaged', $this->seededAdmin()->id));
+    }
+
+    public function test_gr_with_damaged_goods_cannot_be_posted_before_incoming_return_is_sent(): void
+    {
+        $p = $this->product();
+        [$po, $item] = $this->sentPo($p);
+        $gr = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, [
+            'qty_received' => '8',
+            'qty_damaged' => '2',
+            'damage_disposition' => 'quarantine',
+        ]))->assertCreated()->json('data');
+
+        $this->postJson("/api/goods-receipts/{$gr['id']}/post")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['items']);
+
+        $this->assertSame(0.0, $this->stock($p));
+        $this->assertSame('0.000', DB::table('inventory_balances')->where('product_id', $p)->value('qty_quarantine') ?? '0.000');
+        $this->assertSame('0.000', DB::table('purchase_order_items')->where('id', $item)->value('qty_received'));
+    }
+
+    public function test_directly_returned_damaged_goods_do_not_count_toward_po_receipt(): void
+    {
+        $p = $this->product();
+        [$po, $item] = $this->sentPo($p);
+
+        $gr = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, [
+            'qty_received' => '8',
+            'qty_damaged' => '2',
+            'damage_disposition' => 'direct_return',
+        ]))
+            ->assertCreated()
+            ->json('data');
+        $this->sendIncomingReturn($gr['id'], (int) DB::table('purchase_orders')->where('id', $po)->value('supplier_id'));
+        $this->postJson("/api/goods-receipts/{$gr['id']}/post")
+            ->assertOk()->assertJsonPath('data.items.0.qty_short', '2.000');
 
         $this->assertSame(8.0, $this->stock($p));
         $this->assertSame('partially_received', DB::table('purchase_orders')->where('id', $po)->value('status'));
-        $this->assertSame(1, $this->notificationCount('goods_receipt.damaged', $this->seededAdmin()->id));
+        $this->assertSame(8.0, (float) DB::table('purchase_order_items')->where('id', $item)->value('qty_received'));
+        $this->assertSame(0.0, (float) DB::table('inventory_balances')->where('product_id', $p)->sum('qty_quarantine'));
     }
 
     public function test_expiry_rules(): void
@@ -403,6 +475,10 @@ class GoodsReceiptTest extends SeededTestCase
     {
         $p = $this->product();
         $supplier = $this->supplier();
+        DB::table('product_suppliers')->insert([
+            'product_id' => $p,
+            'supplier_id' => $supplier,
+        ]);
 
         // Purchasing membuat PR manual
         $this->actAsAdmin();

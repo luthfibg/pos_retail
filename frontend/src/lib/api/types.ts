@@ -578,8 +578,12 @@ export type SupplierReturnBucket = 'sellable' | 'damaged';
 export interface SupplierReturnSummary {
   id: number;
   doc_number: string;
+  return_type: 'incoming' | 'outgoing';
   supplier_id: number;
   supplier_name: string;
+  goods_receipt_id: number | null;
+  goods_receipt_doc_number: string | null;
+  invoice_no: string | null;
   status: SupplierReturnStatus;
   requested_by: number;
   requested_by_name: string;
@@ -611,6 +615,13 @@ export interface SupplierReturnItem {
   shelf_position_id: number | null;
   shelf_position: string | null;
   source_bucket: SupplierReturnBucket;
+  disposition: 'direct_return' | 'quarantine' | null;
+  goods_receipt_item_id: number | null;
+  source_po_item_id: number | null;
+  source_po_doc_number: string | null;
+  qty_received_safe: Decimal | null;
+  qty_damaged_at_receipt: Decimal | null;
+  receipt_note: string | null;
   qty: Decimal;
   unit_cost: Decimal | null;
   replacement_batch_id: number | null;
@@ -620,18 +631,24 @@ export interface SupplierReturnItem {
 
 export interface SupplierReturn extends SupplierReturnSummary {
   items: SupplierReturnItem[];
+  replacement_goods_receipts?: Array<{ id: number; doc_number: string; po_id: number }>;
 }
 
 export interface SupplierReturnInput {
+  return_type?: 'incoming' | 'outgoing';
   supplier_id: number;
+  goods_receipt_id?: number;
+  invoice_no?: string;
   note?: string;
-  items: Array<{
-    product_id: number;
+  items?: Array<{
+    product_id?: number;
+    goods_receipt_item_id?: number;
+    disposition?: 'direct_return' | 'quarantine';
     batch_id?: number;
-    location_id: number;
+    location_id?: number;
     shelf_position_id?: number;
     source_bucket: SupplierReturnBucket;
-    qty: Decimal;
+    qty?: Decimal;
   }>;
 }
 
@@ -1114,6 +1131,8 @@ export interface GoodsReceiptSummary {
   doc_number: string;
   po_id: number;
   po_doc_number: string;
+  supplier_return_id: number | null;
+  supplier_return_doc_number: string | null;
   supplier_name: string;
   receiving_location_id: number;
   receiving_location_name: string;
@@ -1134,6 +1153,7 @@ export interface GoodsReceiptItem {
   qty_ordered: Decimal;
   qty_received: Decimal;
   qty_damaged: Decimal;
+  damage_disposition: 'direct_return' | 'quarantine' | null;
   qty_short: Decimal;
   unit_cost: Decimal | null;
   po_unit_price: Decimal | null;
@@ -1171,6 +1191,7 @@ export interface GoodsReceiptItemInput {
   po_item_id: number;
   qty_received: Decimal;
   qty_damaged?: Decimal;
+  damage_disposition?: 'direct_return' | 'quarantine' | null;
   expiry_date?: string | null;
   batch_code?: string | null;
   shelf_position_id?: number | null;

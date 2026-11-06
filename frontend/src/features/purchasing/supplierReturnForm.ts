@@ -2,7 +2,6 @@ import type {
   ProductStock,
   SupplierReturnBucket,
   SupplierReturnInput,
-  StockBatch,
 } from '@/lib/api/types';
 import { normalizeDecimal } from '@/features/products/productForm';
 import { qtyToMilli } from '@/lib/money';
@@ -11,9 +10,9 @@ import type { ProductOption } from '@/features/inventory/openingForm';
 export interface SupplierReturnLine {
   key: number;
   product: ProductOption;
-  balance: StockBatch;
   sourceBucket: SupplierReturnBucket;
   qty: string;
+  available: string;
 }
 
 export interface SupplierReturnFormErrors {
@@ -21,14 +20,13 @@ export interface SupplierReturnFormErrors {
   rows: Record<number, string>;
 }
 
-export function availableReturnBalances(
-  stock: ProductStock,
-  sourceBucket: SupplierReturnBucket,
-): StockBatch[] {
+export function availableReturnQty(stock: ProductStock, sourceBucket: SupplierReturnBucket): string {
   const field = sourceBucket === 'sellable' ? 'qty_sellable' : 'qty_damaged';
-  return stock.batches.filter((balance) =>
-    (qtyToMilli(balance[field]) ?? 0n) > 0n && (!stock.track_expiry || balance.batch_id !== null),
-  );
+  const total = stock.batches.reduce((sum, balance) => {
+    if (stock.track_expiry && balance.batch_id === null) return sum;
+    return sum + (qtyToMilli(balance[field]) ?? 0n);
+  }, 0n);
+  return `${total / 1000n}.${(total % 1000n).toString().padStart(3, '0')}`;
 }
 
 export function validateSupplierReturn(
@@ -44,23 +42,16 @@ export function validateSupplierReturn(
 
   const seen = new Set<string>();
   rows.forEach((row, index) => {
-    const balance = row.balance;
-    const available = qtyToMilli(row.sourceBucket === 'sellable' ? balance.qty_sellable : balance.qty_damaged);
+    const available = qtyToMilli(row.available);
     const qty = qtyToMilli(row.qty);
-    if (qty === null || qty <= 0n || qty > 999_999_999_000n) {
-      errors.rows[index] = 'Qty harus lebih dari 0 dan maksimal 999999999.999.';
+    if (qty === null || qty <= 0n || qty > 99_999_000n) {
+      errors.rows[index] = 'Qty harus lebih dari 0 dan maksimal 99.999, 3 desimal.';
     } else if (available === null || qty > available) {
-      errors.rows[index] = 'Qty melebihi saldo bucket pada batch/lokasi/posisi yang dipilih.';
+      errors.rows[index] = 'Qty melebihi saldo bucket produk.';
     }
 
-    const key = [
-      row.product.id,
-      balance.batch_id ?? '',
-      balance.location_id,
-      balance.shelf_position_id ?? '',
-      row.sourceBucket,
-    ].join(':');
-    if (seen.has(key)) errors.rows[index] = 'Kombinasi produk, batch, lokasi, posisi, dan bucket tidak boleh duplikat.';
+    const key = `${row.product.id}:${row.sourceBucket}`;
+    if (seen.has(key)) errors.rows[index] = 'Produk dan bucket stok tidak boleh dicatat dua kali.';
     seen.add(key);
   });
 
@@ -73,12 +64,10 @@ export function buildSupplierReturnInput(
   note: string,
 ): SupplierReturnInput {
   const input: SupplierReturnInput = {
+    return_type: 'outgoing',
     supplier_id: supplierId,
     items: rows.map((row) => ({
       product_id: row.product.id,
-      ...(row.balance.batch_id === null ? {} : { batch_id: row.balance.batch_id }),
-      location_id: row.balance.location_id,
-      ...(row.balance.shelf_position_id === null ? {} : { shelf_position_id: row.balance.shelf_position_id }),
       source_bucket: row.sourceBucket,
       qty: normalizeDecimal(row.qty),
     })),

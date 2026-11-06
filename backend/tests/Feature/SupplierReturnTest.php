@@ -28,8 +28,44 @@ class SupplierReturnTest extends SeededTestCase
         return ['product_id' => $productId, 'supplier_id' => $supplierId, 'location_id' => $locationId];
     }
 
-    private function receiveStock(int $productId, string $qty, string $unitCost = '2500.00', ?string $expiryDate = null): void
+    private function receiveStock(array $fixture, string $qty, string $unitCost = '2500.00', ?string $expiryDate = null): void
     {
+        static $number = 0;
+        $number++;
+        $productId = $fixture['product_id'];
+        $admin = $this->seededAdmin();
+        $pr = $this->pr($admin->id, [$productId => [$qty, $unitCost]], 'converted');
+        $po = $this->po($pr, $fixture['supplier_id'], [$productId => [$qty, $unitCost]], 'received', $admin->id);
+        $poItemId = $this->poItemId($po, $productId);
+        DB::table('purchase_order_items')->where('id', $poItemId)->update(['qty_received' => $qty]);
+        DB::table('purchase_orders')->where('id', $po)->update(['receipt_status' => 'complete']);
+        DB::table('product_suppliers')->insertOrIgnore([
+            'product_id' => $productId,
+            'supplier_id' => $fixture['supplier_id'],
+        ]);
+        $goodsReceiptId = DB::table('goods_receipts')->insertGetId([
+            'store_id' => $this->storeId(),
+            'doc_number' => sprintf('GR-ORIG-%06d', $number),
+            'po_id' => $po,
+            'supplier_id' => $fixture['supplier_id'],
+            'receiving_location_id' => $fixture['location_id'],
+            'status' => 'posted',
+            'document_status' => 'pending',
+            'received_by' => $admin->id,
+            'posted_at' => now(),
+        ]);
+        $goodsReceiptItemId = DB::table('goods_receipt_items')->insertGetId([
+            'gr_id' => $goodsReceiptId,
+            'po_item_id' => $poItemId,
+            'product_id' => $productId,
+            'qty_ordered' => $qty,
+            'qty_received' => $qty,
+            'qty_damaged' => '0.000',
+            'qty_short' => '0.000',
+            'unit_cost' => $unitCost,
+            'expiry_date' => $expiryDate,
+        ]);
+
         DB::transaction(fn () => app(InventoryService::class)->receive(
             storeId: $this->storeId(),
             productId: $productId,
@@ -37,10 +73,11 @@ class SupplierReturnTest extends SeededTestCase
             unitCost: $unitCost,
             expiryDate: $expiryDate,
             batchCode: null,
-            goodsReceiptItemId: null,
+            goodsReceiptItemId: $goodsReceiptItemId,
             refType: 'goods_receipt',
-            refId: 1,
-            actorId: null,
+            refId: $goodsReceiptId,
+            actorId: $admin->id,
+            locationId: $fixture['location_id'],
         ));
     }
 
@@ -68,7 +105,7 @@ class SupplierReturnTest extends SeededTestCase
     public function test_supplier_return_acceptance_quarantines_items_and_receives_replacement(): void
     {
         $fixture = $this->fixture();
-        $this->receiveStock($fixture['product_id'], '5');
+        $this->receiveStock($fixture, '5');
         $id = $this->createReturn($fixture, '2');
 
         $this->postJson("/api/supplier-returns/{$id}/submit")
@@ -91,28 +128,31 @@ class SupplierReturnTest extends SeededTestCase
         ]);
 
         $returnItemId = (int) DB::table('supplier_return_items')->where('supplier_return_id', $id)->value('id');
-        $this->postJson("/api/supplier-returns/{$id}/replacement-receipt", [
+        $replacement = $this->postJson("/api/supplier-returns/{$id}/replacement-receipt", [
             'items' => [['return_item_id' => $returnItemId, 'batch_code' => 'REPL-001']],
         ])->assertOk()
-            ->assertJsonPath('data.status', 'replacement_received')
-            ->assertJsonPath('data.items.0.replacement_batch_code', 'REPL-001');
+            ->assertJsonPath('data.status', 'accepted')
+            ->json('data.replacement_goods_receipts.0.id');
+
+        $this->postJson("/api/goods-receipts/{$replacement}/post")
+            ->assertOk()->assertJsonPath('data.status', 'posted');
+        $this->assertSame('replacement_received', DB::table('supplier_returns')->where('id', $id)->value('status'));
 
         $this->assertSame('5.000', DB::table('inventory_balances')->where('product_id', $fixture['product_id'])->sum('qty_sellable'));
         $this->assertDatabaseHas('inventory_movements', [
             'product_id' => $fixture['product_id'],
-            'movement_type' => 'supplier_replacement_in',
+            'movement_type' => 'receipt',
             'to_bucket' => 'sellable',
             'qty' => '2.000',
-            'ref_type' => 'supplier_return',
-            'ref_id' => $id,
+            'ref_type' => 'goods_receipt',
         ]);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'supplier_return.replacement_received', 'entity_id' => $id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'supplier_return.replacement_gr_created', 'entity_id' => $id]);
     }
 
     public function test_supplier_rejection_records_loss_until_owner_reauthenticates_write_off(): void
     {
         $fixture = $this->fixture();
-        $this->receiveStock($fixture['product_id'], '5', '2500.50');
+        $this->receiveStock($fixture, '5', '2500.50');
         $batchId = (int) DB::table('product_batches')->where('product_id', $fixture['product_id'])->value('id');
         DB::transaction(fn () => app(InventoryService::class)->adjust(
             storeId: $this->storeId(),
@@ -225,7 +265,7 @@ class SupplierReturnTest extends SeededTestCase
     {
         $fixture = $this->fixture();
         DB::table('products')->where('id', $fixture['product_id'])->update(['track_expiry' => 1]);
-        $this->receiveStock($fixture['product_id'], '3', '2500.00', '2027-01-01');
+        $this->receiveStock($fixture, '3', '2500.00', '2027-01-01');
         $id = $this->createReturn($fixture, '1');
         $this->postJson("/api/supplier-returns/{$id}/submit")->assertOk();
         $this->postJson("/api/supplier-returns/{$id}/supplier-decision", ['decision' => 'accept'])->assertOk();
@@ -243,7 +283,7 @@ class SupplierReturnTest extends SeededTestCase
     public function test_insufficient_stock_does_not_submit_or_move_any_items(): void
     {
         $fixture = $this->fixture();
-        $this->receiveStock($fixture['product_id'], '1');
+        $this->receiveStock($fixture, '1');
         $id = $this->createReturn($fixture, '2');
 
         $this->postJson("/api/supplier-returns/{$id}/submit")

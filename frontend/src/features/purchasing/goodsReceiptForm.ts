@@ -7,6 +7,7 @@ export interface GoodsReceiptLineForm {
   poItemId: number;
   qtyReceived: string;
   qtyDamaged: string;
+  damageDisposition: 'direct_return' | 'quarantine';
   expiryDate: string;
   batchCode: string;
   note: string;
@@ -15,6 +16,7 @@ export interface GoodsReceiptLineForm {
 export interface GoodsReceiptLineErrors {
   qtyReceived?: string;
   qtyDamaged?: string;
+  damageDisposition?: string;
   expiryDate?: string;
 }
 
@@ -46,6 +48,9 @@ export function validateGoodsReceiptLines(
     if (damaged && (damagedMilli === null || damagedMilli > 99_999_000n)) {
       lineErrors.qtyDamaged = 'Jumlah rusak tidak valid (maks. 99.999, 3 desimal).';
     }
+    if ((damagedMilli ?? 0n) > 0n && !line.damageDisposition) {
+      lineErrors.damageDisposition = 'Pilih penanganan barang rusak.';
+    }
     if (receivedMilli === null || damagedMilli === null) {
       errors[line.key] = lineErrors;
       continue;
@@ -62,7 +67,9 @@ export function validateGoodsReceiptLines(
       lineErrors.qtyReceived = 'Jumlah diterima dan rusak melebihi sisa pesanan.';
     }
 
-    if ((receivedMilli ?? 0n) > 0n && tracksExpiry[item.product_id]) {
+    const stockableQuantity = (receivedMilli ?? 0n) > 0n
+      || ((damagedMilli ?? 0n) > 0n && line.damageDisposition === 'quarantine');
+    if (stockableQuantity && tracksExpiry[item.product_id]) {
       if (!line.expiryDate) lineErrors.expiryDate = 'Tanggal kedaluwarsa wajib diisi.';
       else if (line.expiryDate < today) lineErrors.expiryDate = 'Tanggal kedaluwarsa tidak boleh sudah lewat.';
     } else if (line.expiryDate && !tracksExpiry[item.product_id]) {
@@ -87,6 +94,9 @@ export function buildGoodsReceiptItems(lines: GoodsReceiptLineForm[]): GoodsRece
       po_item_id: line.poItemId,
       qty_received: normalizeDecimal(line.qtyReceived) || '0',
       qty_damaged: normalizeDecimal(line.qtyDamaged) || '0',
+      damage_disposition: (qtyToMilli(normalizeDecimal(line.qtyDamaged)) ?? 0n) > 0n
+        ? line.damageDisposition
+        : null,
       expiry_date: line.expiryDate || null,
       batch_code: line.batchCode.trim() || null,
       note: line.note.trim() || null,

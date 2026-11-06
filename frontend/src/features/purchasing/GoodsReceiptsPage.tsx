@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
@@ -39,6 +40,7 @@ function emptyLine(poItem: PurchaseOrderItem, key = String(poItem.id)): GoodsRec
     poItemId: poItem.id,
     qtyReceived: '',
     qtyDamaged: '',
+    damageDisposition: 'direct_return',
     expiryDate: '',
     batchCode: '',
     note: '',
@@ -46,6 +48,7 @@ function emptyLine(poItem: PurchaseOrderItem, key = String(poItem.id)): GoodsRec
 }
 
 export function GoodsReceiptsPage() {
+  const [searchParams] = useSearchParams();
   const [poSearchValue, setPoSearchValue] = useState('');
   const [poSearch, setPoSearch] = useState('');
   const [poPage, setPoPage] = useState(1);
@@ -53,7 +56,10 @@ export function GoodsReceiptsPage() {
   const [receiptSearch, setReceiptSearch] = useState('');
   const [receiptPage, setReceiptPage] = useState(1);
   const [createPoId, setCreatePoId] = useState<number | null>(null);
-  const [selectedReceiptId, setSelectedReceiptId] = useState<number | null>(null);
+  const [selectedReceiptId, setSelectedReceiptId] = useState<number | null>(() => {
+    const id = Number(searchParams.get('gr_id'));
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  });
 
   const purchaseOrders = useQuery({
     queryKey: ['purchase-orders', 'receivable', poSearch, poPage],
@@ -166,7 +172,7 @@ export function GoodsReceiptsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {receipts.data.data.map((receipt) => (
                     <tr key={receipt.id}>
-                      <td className="px-3 py-2">{receipt.po_doc_number}<div className="text-xs text-slate-500">{receipt.supplier_name}</div></td>
+                      <td className="px-3 py-2">{receipt.po_doc_number}<div className="text-xs text-slate-500">{receipt.supplier_name}{receipt.supplier_return_doc_number ? ` · Pengganti ${receipt.supplier_return_doc_number}` : ''}</div></td>
                       <td className="px-3 py-2 font-mono font-medium">{receipt.doc_number}</td>
                       <td className={`px-3 py-2 font-medium ${STATUS_TEXT_CLASS[receipt.status]}`}>{STATUS_LABEL[receipt.status]}</td>
                       <td className="px-3 py-2">{receipt.received_by_name}</td>
@@ -315,6 +321,18 @@ function CreateGoodsReceiptDialog({
                     <Field label={`Rusak (${item.unit_name})`} error={errors?.qtyDamaged}>
                       <LocalDecimalInput className={inputCls} kind="quantity" value={line.qtyDamaged} onChange={(value) => updateLine(line.key, 'qtyDamaged', value)} />
                     </Field>
+                    {line.qtyDamaged.trim() !== '' && Number(line.qtyDamaged.replace(',', '.')) > 0 && (
+                      <Field label="Penanganan barang rusak" error={errors?.damageDisposition}>
+                        <select
+                          className={inputCls}
+                          value={line.damageDisposition}
+                          onChange={(event) => updateLine(line.key, 'damageDisposition', event.target.value)}
+                        >
+                          <option value="direct_return">Dikembalikan langsung ke supplier</option>
+                          <option value="quarantine">Tetap di toko, masuk karantina</option>
+                        </select>
+                      </Field>
+                    )}
                     <Field label="Tanggal kedaluwarsa" error={errors?.expiryDate}>
                       <input type="date" min={todayWib()} className={inputCls} value={line.expiryDate} onChange={(event) => updateLine(line.key, 'expiryDate', event.target.value)} disabled={expiryLoading || !expiryRequired} />
                     </Field>
@@ -361,6 +379,7 @@ function GoodsReceiptDetailDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentError, setAttachmentError] = useState('');
   const attachmentInput = useRef<HTMLInputElement>(null);
@@ -421,6 +440,7 @@ function GoodsReceiptDetailDialog({
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <Detail label="Nomor GR" value={receipt.doc_number} />
             <Detail label="Nomor PO" value={receipt.po_doc_number} />
+            {receipt.supplier_return_doc_number && <Detail label="Retur asal" value={receipt.supplier_return_doc_number} />}
             <Detail label="Supplier" value={receipt.supplier_name} />
             <Detail label="Status" value={STATUS_LABEL[receipt.status]} />
             <Detail label="Dibuat oleh" value={receipt.received_by_name} />
@@ -433,7 +453,7 @@ function GoodsReceiptDetailDialog({
           <div className="overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full min-w-[600px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr><th className="px-3 py-2">Barang</th><th className="px-3 py-2 text-right">Diterima</th><th className="px-3 py-2 text-right">Rusak</th><th className="px-3 py-2">Batch / Kedaluwarsa</th></tr>
+                <tr><th className="px-3 py-2">Barang</th><th className="px-3 py-2 text-right">Diterima aman</th><th className="px-3 py-2 text-right">Rusak</th><th className="px-3 py-2">Penanganan rusak</th><th className="px-3 py-2">Batch / Kedaluwarsa</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {receipt.items.map((item) => (
@@ -441,6 +461,7 @@ function GoodsReceiptDetailDialog({
                     <td className="px-3 py-2">{item.name}<div className="font-mono text-xs text-slate-500">{item.sku}</div></td>
                     <td className="px-3 py-2 text-right">{formatQty(item.qty_received)} {item.unit_name}</td>
                     <td className="px-3 py-2 text-right">{formatQty(item.qty_damaged)} {item.unit_name}</td>
+                    <td className="px-3 py-2">{item.damage_disposition === 'quarantine' ? 'Karantina' : item.damage_disposition === 'direct_return' ? 'Dikembalikan ke supplier' : '—'}</td>
                     <td className="px-3 py-2">{item.batch_code || '—'}{item.expiry_date && <div className="text-xs text-slate-500">Exp {formatDate(item.expiry_date)}</div>}</td>
                   </tr>
                 ))}
@@ -448,6 +469,15 @@ function GoodsReceiptDetailDialog({
             </table>
           </div>
           {receipt.note && <p className="rounded-md bg-slate-50 p-3 text-sm">Catatan: {receipt.note}</p>}
+          {receipt.status === 'draft' && receipt.items.some((item) => Number(item.qty_damaged) > 0) && (
+            <button
+              type="button"
+              onClick={() => navigate(`/supplier-returns?return_type=incoming&gr_id=${receipt.id}&create=1`)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium"
+            >
+              Buat Retur Masuk dari GR ini
+            </button>
+          )}
 
             <section className="space-y-3 rounded-md border border-slate-200 p-3">
               <div>

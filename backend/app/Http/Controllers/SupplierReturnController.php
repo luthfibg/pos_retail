@@ -17,6 +17,7 @@ class SupplierReturnController extends Controller
     {
         $filters = $request->validate([
             'status' => ['nullable', Rule::in(['draft', 'submitted', 'accepted', 'rejected', 'replacement_received', 'written_off', 'cancelled'])],
+            'return_type' => ['nullable', Rule::in(['incoming', 'outgoing'])],
             'supplier_id' => ['nullable', 'integer', 'min:1'],
             'q' => ['nullable', 'string', 'max:40'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
