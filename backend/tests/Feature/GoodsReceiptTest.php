@@ -45,7 +45,7 @@ class GoodsReceiptTest extends SeededTestCase
         return (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_sellable');
     }
 
-    private function sendIncomingReturn(int $goodsReceiptId, int $supplierId): void
+    private function sendIncomingReturn(int $goodsReceiptId, int $supplierId): int
     {
         Sanctum::actingAs($this->seededAdmin(), ['*']);
         $items = DB::table('goods_receipt_items')->where('gr_id', $goodsReceiptId)->where('qty_damaged', '>', 0)->get();
@@ -65,6 +65,8 @@ class GoodsReceiptTest extends SeededTestCase
         $this->postJson("/api/supplier-returns/{$returnId}/submit")
             ->assertOk()->assertJsonPath('data.status', 'submitted');
         Sanctum::actingAs($this->cashier, ['*']);
+
+        return $returnId;
     }
 
     public function test_cashier_receives_full_order_and_stock_is_posted(): void
@@ -153,6 +155,102 @@ class GoodsReceiptTest extends SeededTestCase
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
         $this->assertSame(10.0, (float) DB::table('purchase_order_items')->where('id', $item)->value('qty_received'));
         $this->assertSame(1, $this->notificationCount('goods_receipt.damaged', $this->seededAdmin()->id));
+    }
+
+    public function test_incoming_return_acceptance_receives_replacement_and_removes_quarantine_without_changing_po_receipt(): void
+    {
+        $productId = $this->product();
+        [$poId, $poItemId] = $this->sentPo($productId);
+        $receipt = $this->postJson('/api/goods-receipts', $this->receipt($poId, $poItemId, [
+            'qty_received' => '8',
+            'qty_damaged' => '2',
+            'damage_disposition' => 'quarantine',
+        ]))->assertCreated()->json('data');
+        $returnId = $this->sendIncomingReturn($receipt['id'], (int) DB::table('purchase_orders')->where('id', $poId)->value('supplier_id'));
+
+        $this->postJson("/api/goods-receipts/{$receipt['id']}/post")->assertOk();
+        $receivedBeforeDecision = DB::table('purchase_order_items')->where('id', $poItemId)->value('qty_received');
+        $returnItem = DB::table('supplier_return_items')->where('supplier_return_id', $returnId)->first();
+        $this->assertNotNull($returnItem->batch_id);
+
+        Sanctum::actingAs($this->seededAdmin(), ['*']);
+        $this->postJson("/api/supplier-returns/{$returnId}/supplier-decision", [
+            'decision' => 'accept',
+        ])->assertOk()->assertJsonPath('data.status', 'replacement_received');
+
+        $this->assertSame(10.0, (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_sellable'));
+        $this->assertSame(0.0, (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_quarantine'));
+        $this->assertSame($receivedBeforeDecision, DB::table('purchase_order_items')->where('id', $poItemId)->value('qty_received'));
+        $this->assertDatabaseHas('inventory_movements', [
+            'product_id' => $productId,
+            'movement_type' => 'supplier_replacement_in',
+            'qty' => '2.000',
+            'ref_type' => 'supplier_return',
+            'ref_id' => $returnId,
+        ]);
+        $this->assertDatabaseHas('inventory_movements', [
+            'product_id' => $productId,
+            'movement_type' => 'supplier_return_out',
+            'from_bucket' => 'quarantine',
+            'qty' => '2.000',
+            'ref_id' => $returnId,
+        ]);
+    }
+
+    public function test_incoming_return_rejection_records_hpp_loss_and_keeps_quarantine(): void
+    {
+        $productId = $this->product();
+        [$poId, $poItemId] = $this->sentPo($productId);
+        $receipt = $this->postJson('/api/goods-receipts', $this->receipt($poId, $poItemId, [
+            'qty_received' => '8',
+            'qty_damaged' => '2',
+            'damage_disposition' => 'quarantine',
+        ]))->assertCreated()->json('data');
+        $returnId = $this->sendIncomingReturn($receipt['id'], (int) DB::table('purchase_orders')->where('id', $poId)->value('supplier_id'));
+
+        $this->postJson("/api/goods-receipts/{$receipt['id']}/post")->assertOk();
+        $returnItem = DB::table('supplier_return_items')->where('supplier_return_id', $returnId)->first();
+        $expectedLoss = number_format(2 * (float) $returnItem->unit_cost, 2, '.', '');
+
+        Sanctum::actingAs($this->seededAdmin(), ['*']);
+        $this->postJson("/api/supplier-returns/{$returnId}/supplier-decision", [
+            'decision' => 'reject',
+            'note' => 'Supplier menolak klaim.',
+        ])->assertOk()->assertJsonPath('data.status', 'rejected')
+            ->assertJsonPath('data.loss_amount', $expectedLoss);
+
+        $this->assertSame(2.0, (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_quarantine'));
+        $this->assertSame(0, DB::table('inventory_movements')->where('ref_type', 'supplier_return')
+            ->where('ref_id', $returnId)->whereIn('movement_type', ['supplier_return_out', 'write_off'])->count());
+        $this->assertSame(0, DB::table('inventory_movements')->where('ref_type', 'supplier_return')
+            ->where('ref_id', $returnId)->where('movement_type', 'supplier_replacement_in')->count());
+    }
+
+    public function test_direct_return_acceptance_adds_replacement_to_stock(): void
+    {
+        $productId = $this->product();
+        [$poId, $poItemId] = $this->sentPo($productId);
+        $receipt = $this->postJson('/api/goods-receipts', $this->receipt($poId, $poItemId, [
+            'qty_received' => '8',
+            'qty_damaged' => '2',
+            'damage_disposition' => 'direct_return',
+        ]))->assertCreated()->json('data');
+        $returnId = $this->sendIncomingReturn($receipt['id'], (int) DB::table('purchase_orders')->where('id', $poId)->value('supplier_id'));
+
+        $this->postJson("/api/goods-receipts/{$receipt['id']}/post")->assertOk();
+        Sanctum::actingAs($this->seededAdmin(), ['*']);
+        $this->postJson("/api/supplier-returns/{$returnId}/supplier-decision", [
+            'decision' => 'accept',
+        ])->assertOk()->assertJsonPath('data.status', 'replacement_received');
+
+        $this->assertSame(10.0, (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_sellable'));
+        $this->assertSame(0.0, (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_quarantine'));
+        $this->assertDatabaseHas('inventory_movements', [
+            'product_id' => $productId,
+            'movement_type' => 'supplier_replacement_in',
+            'qty' => '2.000',
+            'ref_id' => $returnId,
+        ]);
     }
 
     public function test_gr_with_damaged_goods_cannot_be_posted_before_incoming_return_is_sent(): void

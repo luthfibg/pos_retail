@@ -936,6 +936,8 @@ Ada dua alur retur:
 
 Alur Retur Keluar: `draft` → `submitted` → `accepted` → GR pengganti `draft` → `replacement_received` setelah seluruh GR diposting, atau `draft` → `submitted` → `rejected` → `written_off`. Penolakan supplier tetap mengarantina barang hingga pemegang `inventory.adjust.approve` menyetujui write-off dengan autentikasi ulang Owner/Admin. HPP retur disnapshot dari `products.unit_cost`; write-off mencatat nilai kerugian dan movement `write_off`.
 
+Retur Masuk berlanjut setelah supplier merespons: `draft` → `submitted` → `replacement_received` atau `rejected`. Keputusan hanya dapat dicatat setelah GR asal diposting. Jika diterima, barang karantina asal dikeluarkan dari karantina, barang pengganti langsung ditambahkan ke stok dengan movement `supplier_replacement_in`, dan kuantitas penerimaan PO tidak berubah. Baris retur menyimpan tautan batch karantina untuk pengeluaran yang tepat; tanggal kedaluwarsa dan kode batch pengganti mengikuti data baris GR asal. Jika ditolak, nilai kerugian dihitung dari HPP snapshot × jumlah retur dan disimpan pada `loss_amount`; barang karantina tetap ada dan tidak otomatis dihapus atau dijual.
+
 ### Endpoint (`auth:sanctum`)
 
 | Method | Path | Izin | Fungsi |
@@ -943,9 +945,9 @@ Alur Retur Keluar: `draft` → `submitted` → `accepted` → GR pengganti `draf
 | GET | `/api/supplier-returns` | `supplier_return.create` atau `inventory.adjust.approve` | Daftar; filter `status`, `supplier_id`, awalan nomor `q`, `per_page` |
 | POST | `/api/supplier-returns` | `supplier_return.create` | Buat draft |
 | GET | `/api/supplier-returns/{id}` | `supplier_return.create` atau `inventory.adjust.approve` | Detail |
-| POST | `/api/supplier-returns/{id}/submit` | `supplier_return.create` | Validasi stok terbaru dan pindahkan item ke karantina |
+| POST | `/api/supplier-returns/{id}/submit` | `supplier_return.create` | Retur Keluar memvalidasi stok terbaru dan memindahkan item ke karantina; Retur Masuk menandai dokumen sudah dikirim selama GR masih draft |
 | POST | `/api/supplier-returns/{id}/merge` | `supplier_return.create` | Tambahkan produk ke draft Retur Keluar; supplier harus sama, status harus `draft`, dan stok dialokasikan rusak lebih dulu |
-| POST | `/api/supplier-returns/{id}/supplier-decision` | `supplier_return.create` | Catat `{ "decision": "accept|reject", "note": "..." }`; alasan wajib untuk reject |
+| POST | `/api/supplier-returns/{id}/supplier-decision` | `supplier_return.create` | Catat `{ "decision": "accept|reject", "note": "..." }`; alasan wajib untuk reject. Retur Masuk hanya setelah GR diposting: accept memasukkan pengganti ke stok dan mengeluarkan barang karantina, reject mencatat kerugian HPP dan mempertahankan karantina |
 | POST | `/api/supplier-returns/{id}/replacement-receipt` | `supplier_return.create` | Buat GR pengganti draft per PO asal; isi `items[]` dengan `return_item_id`, `expiry_date?`, `batch_code?`, `shelf_position_id?` |
 | POST | `/api/supplier-returns/{id}/write-off` | `inventory.adjust.approve` | Persetujuan Owner/Admin; wajib `approver_username` dan kredensial sesuai mode autentikasi ulang |
 | POST | `/api/supplier-returns/{id}/cancel` | `supplier_return.create` | Batalkan draft |

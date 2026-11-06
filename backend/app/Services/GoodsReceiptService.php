@@ -437,6 +437,15 @@ class GoodsReceiptService
                     if ($item->supplier_return_item_id !== null) {
                         $replacementBatches[(int) $item->supplier_return_item_id] = $in['batch_id'];
                     }
+                    if ($receiptPart['bucket'] === 'quarantine') {
+                        DB::table('supplier_return_items')
+                            ->where('goods_receipt_item_id', $item->id)
+                            ->where('disposition', 'quarantine')
+                            ->update([
+                                'batch_id' => $in['batch_id'],
+                                'shelf_position_id' => $item->shelf_position_id,
+                            ]);
+                    }
                 }
 
                 $accepted = $acceptedByPoItem[$item->po_item_id] ?? 0;

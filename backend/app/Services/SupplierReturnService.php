@@ -570,9 +570,6 @@ class SupplierReturnService
 
         DB::transaction(function () use ($actor, $storeId, $id, $data) {
             $return = $this->lock($storeId, $id);
-            if ($return->return_type !== 'outgoing') {
-                throw ValidationException::withMessages(['status' => ['Retur Masuk dicetak dan dikirim tanpa menunggu keputusan supplier.']]);
-            }
             if ($return->status !== 'submitted') {
                 throw ValidationException::withMessages(['status' => ['Keputusan supplier hanya dapat dicatat untuk retur yang menunggu keputusan.']]);
             }
@@ -581,29 +578,90 @@ class SupplierReturnService
             $this->assertScopes($actor, $storeId, $items);
             $accepted = $data['decision'] === 'accept';
             $lossAmount = $accepted ? null : $this->lossAmount($items);
-            if ($accepted) {
+            $nextStatus = $accepted ? 'accepted' : 'rejected';
+
+            if ($return->return_type === 'incoming') {
+                $receipt = DB::table('goods_receipts')
+                    ->where('store_id', $storeId)
+                    ->where('id', $return->goods_receipt_id)
+                    ->lockForUpdate()
+                    ->first(['status']);
+                if ($receipt === null || $receipt->status !== 'posted') {
+                    throw ValidationException::withMessages([
+                        'goods_receipt_id' => ['Posting GR asal terlebih dahulu sebelum mencatat keputusan retur masuk.'],
+                    ]);
+                }
+
+                $quarantinedItems = array_values(array_filter(
+                    $items,
+                    fn (array $item): bool => $item['disposition'] === 'quarantine',
+                ));
+                if ($accepted && $quarantinedItems !== []) {
+                    $this->inventory->closeSupplierReturn(
+                        $storeId,
+                        $id,
+                        $quarantinedItems,
+                        $actor->id,
+                        'supplier_return_out',
+                    );
+                }
+
+                if ($accepted) {
+                    foreach ($items as $item) {
+                        $sourceReceiptItem = DB::table('goods_receipt_items')
+                            ->where('id', $item['goods_receipt_item_id'])
+                            ->first(['product_id', 'expiry_date', 'batch_code', 'shelf_position_id']);
+                        if ($sourceReceiptItem === null) {
+                            throw ValidationException::withMessages([
+                                'items' => ['Baris GR sumber tidak ditemukan untuk penerimaan barang pengganti.'],
+                            ]);
+                        }
+
+                        $replacement = $this->inventory->receive(
+                            $storeId,
+                            (int) $item['product_id'],
+                            (string) $item['qty'],
+                            (string) $item['unit_cost'],
+                            $sourceReceiptItem->expiry_date,
+                            $sourceReceiptItem->batch_code,
+                            (int) $item['goods_receipt_item_id'],
+                            'supplier_return',
+                            $id,
+                            $actor->id,
+                            (int) $item['location_id'],
+                            $sourceReceiptItem->shelf_position_id === null ? null : (int) $sourceReceiptItem->shelf_position_id,
+                            movementType: 'supplier_replacement_in',
+                        );
+                        DB::table('supplier_return_items')->where('id', $item['id'])
+                            ->update(['replacement_batch_id' => $replacement['batch_id']]);
+                    }
+                    $nextStatus = 'replacement_received';
+                }
+            } elseif ($accepted) {
                 $this->inventory->closeSupplierReturn($storeId, $id, $items, $actor->id, 'supplier_return_out');
+            }
+
+            DB::table('supplier_returns')->where('id', $id)->update([
+                'status' => $nextStatus,
+                'decided_by' => $actor->id,
+                'decided_at' => $this->nowUtc(),
+                'decision_note' => $data['note'] ?? null,
+                'loss_amount' => $lossAmount,
+            ]);
+            if ($accepted) {
                 $this->inventory->synchronizeAutomaticPurchaseRequisitions(
                     $actor,
                     $storeId,
                     array_values(array_unique(array_map('intval', array_column($items, 'product_id')))),
                 );
             }
-
-            DB::table('supplier_returns')->where('id', $id)->update([
-                'status' => $accepted ? 'accepted' : 'rejected',
-                'decided_by' => $actor->id,
-                'decided_at' => $this->nowUtc(),
-                'decision_note' => $data['note'] ?? null,
-                'loss_amount' => $lossAmount,
-            ]);
             $this->audit->log(
                 $accepted ? 'supplier_return.accept' : 'supplier_return.reject',
                 'supplier_return',
                 $id,
                 before: ['status' => 'submitted'],
                 after: [
-                    'status' => $accepted ? 'accepted' : 'rejected',
+                    'status' => $nextStatus,
                     'loss_amount' => $lossAmount,
                 ],
                 reason: $data['note'] ?? null,

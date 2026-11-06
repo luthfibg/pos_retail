@@ -46,7 +46,7 @@ function returnStatusLabel(returnType: 'incoming' | 'outgoing', status: Supplier
 function sumQty(left: string | null, right: string | null): string {
   return (Number(left ?? 0) + Number(right ?? 0)).toFixed(3);
 }
-const INCOMING_STATUSES: SupplierReturnStatus[] = ['draft', 'submitted', 'cancelled'];
+const INCOMING_STATUSES: SupplierReturnStatus[] = ['draft', 'submitted', 'rejected', 'replacement_received', 'cancelled'];
 const OUTGOING_STATUSES: SupplierReturnStatus[] = ['draft', 'submitted', 'accepted', 'rejected', 'replacement_received', 'written_off', 'cancelled'];
 
 export function SupplierReturnsPage() {
@@ -810,7 +810,21 @@ function SupplierReturnDetailDialog({
                   {submitReturn.isPending ? 'Menyimpan…' : 'Tandai sudah dikirim'}
                 </button>
               )}
-            </div>
+              {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'submitted' && (
+                <>
+                  <button type="button" disabled={anyPending} onClick={() => {
+                    setDecision('accept');
+                    setDecisionNote('');
+                    setAction('decision');
+                  }} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">Retur diterima</button>
+                  <button type="button" disabled={anyPending} onClick={() => {
+                    setDecision('reject');
+                    setDecisionNote('');
+                    setAction('decision');
+                  }} className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-60">Retur ditolak</button>
+                </>
+              )}
+              </div>
             {canCreate && returnDoc.return_type === 'outgoing' && returnDoc.status === 'draft' && (
               <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                 <button type="button" disabled={anyPending} onClick={() => {
@@ -831,7 +845,7 @@ function SupplierReturnDetailDialog({
                 <button type="button" onClick={() => setAction('replacement')} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Terima barang pengganti</button>
               </div>
             )}
-            {canWriteOff && returnDoc.status === 'rejected' && (
+            {canWriteOff && returnDoc.return_type === 'outgoing' && returnDoc.status === 'rejected' && (
               <div className="border-t border-slate-100 pt-3">
                 <button type="button" onClick={() => setAction('writeoff')} className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white">Setujui write-off</button>
               </div>
@@ -845,6 +859,25 @@ function SupplierReturnDetailDialog({
                     <button type="button" disabled={anyPending} onClick={() => {
                       if (window.confirm('Batalkan Draft retur ini?')) cancelReturn.mutate();
                     }} className="rounded-md bg-red-700 px-3 py-2 text-sm text-white disabled:opacity-60">Konfirmasi pembatalan</button>
+                  </>
+                ) : returnDoc.return_type === 'incoming' ? (
+                  <>
+                    <h3 className="text-sm font-semibold">{decision === 'accept' ? 'Konfirmasi retur diterima' : 'Konfirmasi retur ditolak'}</h3>
+                    <p className="text-xs text-slate-600">
+                      {decision === 'accept'
+                        ? 'Barang pengganti akan langsung menambah stok. Barang rusak di karantina akan dikeluarkan; penerimaan PO tidak berubah.'
+                        : 'Nilai rugi dihitung dari HPP dikali jumlah retur. Barang yang masih di karantina tidak akan dihapus dari stok.'}
+                    </p>
+                    <Field label={decision === 'reject' ? 'Alasan penolakan (wajib)' : 'Catatan (opsional)'}>
+                      <textarea className={inputCls} rows={2} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} />
+                    </Field>
+                    <button type="button" disabled={anyPending || (decision === 'reject' && !decisionNote.trim())} onClick={() => {
+                      if (window.confirm(decision === 'accept'
+                        ? 'Konfirmasi barang pengganti diterima dan tambahkan ke stok?'
+                        : 'Catat penolakan supplier dan simpan nilai kerugian?')) decide.mutate();
+                    }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+                      {decide.isPending ? 'Menyimpan…' : 'Simpan keputusan'}
+                    </button>
                   </>
                 ) : (
                   <>
