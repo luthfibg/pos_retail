@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
-import { RequireAnyPermission, RequireAuth, RequirePermission, RequirePlatformOperator } from '@/features/auth/guards';
+import { RequireAnyPermission, RequireAnyRole, RequireAuth, RequirePermission, RequirePlatformOperator } from '@/features/auth/guards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
@@ -10,6 +10,8 @@ import { CategoriesPage } from '@/features/categories/CategoriesPage';
 import { SuppliersPage } from '@/features/suppliers/SuppliersPage';
 import { OpeningBalancePage } from '@/features/inventory/OpeningBalancePage';
 import { MovementsPage } from '@/features/inventory/MovementsPage';
+import { AdjustmentOpnamePage } from '@/features/inventory/AdjustmentOpnamePage';
+import { OpnamePlaceholder } from '@/features/inventory/OpnamePlaceholder';
 import { CustomersPage } from '@/features/customers/CustomersPage';
 import { PosPage } from '@/features/sales/PosPage';
 const SalesHistoryPage = lazy(() => import('@/features/sales/SalesHistoryPage').then((module) => ({ default: module.SalesHistoryPage })));
@@ -19,6 +21,7 @@ const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module)
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
 const AdjustmentsPage = lazy(() => import('@/features/inventory/AdjustmentsPage').then((module) => ({ default: module.AdjustmentsPage })));
+const DirectAdjustmentsPage = lazy(() => import('@/features/inventory/DirectAdjustmentsPage').then((module) => ({ default: module.DirectAdjustmentsPage })));
 const TransfersPage = lazy(() => import('@/features/inventory/TransfersPage').then((module) => ({ default: module.TransfersPage })));
 const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
 const SupplierReturnsPage = lazy(() => import('@/features/purchasing/SupplierReturnsPage').then((module) => ({ default: module.SupplierReturnsPage })));
@@ -92,8 +95,20 @@ export const router = createBrowserRouter([
             children: [{ path: 'inventory/opening', element: <OpeningBalancePage /> }],
           },
           {
+            element: <RequireAnyRole roles={['Admin', 'Owner', 'Kasir']} />,
+            children: [{
+              path: 'inventory/adjustments',
+              element: <AdjustmentOpnamePage />,
+              children: [
+                { index: true, element: <Navigate to="adjustment" replace /> },
+                { path: 'adjustment', element: <LazyPage><DirectAdjustmentsPage /></LazyPage> },
+                { path: 'opname', element: <OpnamePlaceholder /> },
+              ],
+            }],
+          },
+          {
             element: <RequireAnyPermission permissions={['inventory.adjust.request', 'inventory.adjust.approve']} />,
-            children: [{ path: 'inventory/adjustments', element: <LazyPage><AdjustmentsPage /></LazyPage> }],
+            children: [{ path: 'inventory/adjustments-legacy', element: <LazyPage><AdjustmentsPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="stock_transfer.create" />,

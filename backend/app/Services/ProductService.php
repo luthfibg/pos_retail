@@ -317,7 +317,10 @@ class ProductService
             ->where('products.store_id', $storeId)
             ->selectRaw(
                 'products.*, c.name as category_name, '.
-                '(select coalesce(sum(b.qty_sellable), 0) from inventory_balances b where b.product_id = products.id) as stock_sellable'
+                '(select coalesce(sum(b.qty_sellable), 0) from inventory_balances b where b.product_id = products.id) as stock_sellable, '.
+                '(select coalesce(sum(b.qty_sellable), 0) from inventory_balances b where b.product_id = products.id '.
+                'and b.location_id = (select min(l.id) from locations l where l.store_id = products.store_id '.
+                "and l.type = 'store_floor' and l.is_active = 1)) as store_floor_stock_sellable"
             );
     }
 
@@ -343,6 +346,7 @@ class ProductService
             'restock_quantity' => $row->restock_quantity,
             'status' => $row->status,
             'stock_sellable' => $stock,
+            'store_floor_stock_sellable' => (string) $row->store_floor_stock_sellable,
             'stock_status' => StockStatus::for($stock, $row->min_stock, $row->critical_stock),
         ];
     }

@@ -44,3 +44,16 @@ export function RequireAnyPermission({ permissions }: { permissions: string[] })
   }
   return <Outlet />;
 }
+
+export function RequireAnyRole({ roles }: { roles: string[] }) {
+  const { me } = useAuth();
+  if (!roles.some((role) => me?.roles.includes(role))) {
+    return (
+      <div className="p-8">
+        <h1 className="text-lg font-semibold">Tidak ada akses</h1>
+        <p className="mt-1 text-sm text-slate-600">Menu ini hanya tersedia untuk Admin, Owner, atau Kasir.</p>
+      </div>
+    );
+  }
+  return <Outlet />;
+}

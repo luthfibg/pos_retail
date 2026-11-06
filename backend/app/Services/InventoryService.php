@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\InsufficientStockException;
 use App\Models\User;
 use App\Support\Decimal;
 use App\Support\DocumentNumber;
@@ -185,7 +186,7 @@ class InventoryService
     ): array {
         $this->requireTransaction();
 
-        if (! in_array($movementType, ['receipt', 'supplier_replacement_in'], true)) {
+        if (! in_array($movementType, ['receipt', 'supplier_replacement_in', 'adjustment'], true)) {
             throw new LogicException('Jenis pergerakan stok masuk tidak valid.');
         }
 
@@ -213,6 +214,152 @@ class InventoryService
             actorId: $actorId,
             bucket: $bucket,
         );
+    }
+
+    /**
+     * Apply one manual adjustment at the active store-floor location. Expiry-tracked
+     * increases create an expiry bucket without exposing batch identity to the user.
+     *
+     * @return array{stock_before: string, stock_after: string, allocations: list<array<string, mixed>>, movement_ids: list<int>}
+     */
+    public function recordDirectAdjustment(
+        int $storeId,
+        int $adjustmentId,
+        int $productId,
+        string $type,
+        int $quantity,
+        string $reasonCode,
+        ?string $expiryDate,
+        int $actorId,
+    ): array {
+        $this->requireTransaction();
+
+        $product = DB::table('products')
+            ->where('store_id', $storeId)
+            ->where('id', $productId)
+            ->lockForUpdate()
+            ->first();
+        abort_if($product === null, 404, 'Produk tidak ditemukan.');
+        if ($product->status !== 'active') {
+            throw ValidationException::withMessages(['product_id' => ['Produk harus berstatus aktif.']]);
+        }
+        if ($type === 'increase' && $product->track_expiry && $expiryDate === null) {
+            throw ValidationException::withMessages(['expiry_date' => ['Tanggal kedaluwarsa wajib diisi untuk produk ini.']]);
+        }
+
+        $locationId = $this->sellingLocationId($storeId);
+        $rows = DB::table('inventory_balances as bal')
+            ->leftJoin('product_batches as pb', 'pb.id', '=', 'bal.batch_id')
+            ->where('bal.product_id', $productId)
+            ->where('bal.location_id', $locationId)
+            ->where('bal.qty_sellable', '>', 0)
+            ->orderByRaw('pb.expiry_date IS NULL')
+            ->orderBy('pb.expiry_date')
+            ->orderBy('pb.received_at')
+            ->orderBy('bal.id')
+            ->lockForUpdate()
+            ->get([
+                'bal.id', 'bal.batch_id', 'bal.shelf_position_id', 'bal.qty_sellable',
+                'pb.expiry_date',
+            ]);
+
+        $stockBeforeUnits = 0;
+        foreach ($rows as $row) {
+            $stockBeforeUnits += Decimal::qty((string) $row->qty_sellable);
+        }
+        $amount = Decimal::qty((string) $quantity);
+        if ($type === 'decrease' && $stockBeforeUnits < $amount) {
+            throw new InsufficientStockException('Stok saat ini tidak mencukupi untuk pengurangan tersebut.');
+        }
+
+        $allocations = [];
+        $movementIds = [];
+        if ($type === 'increase') {
+            $received = $this->stockIn(
+                storeId: $storeId,
+                product: $product,
+                locationId: $locationId,
+                positionId: null,
+                qty: Decimal::qtyString($amount),
+                unitCost: $product->unit_cost === null ? null : (string) $product->unit_cost,
+                expiryDate: $expiryDate,
+                batchCode: null,
+                goodsReceiptItemId: null,
+                isOpening: false,
+                type: 'adjustment',
+                refType: 'stock_adjustment',
+                refId: $adjustmentId,
+                actorId: $actorId,
+            );
+            $allocations[] = [
+                'product_id' => $productId,
+                'batch_id' => $received['batch_id'],
+                'location_id' => $locationId,
+                'shelf_position_id' => null,
+                'qty_before' => '0.000',
+                'qty_counted' => Decimal::qtyString($amount),
+                'qty_diff' => Decimal::qtyString($amount),
+                'stock_movement_id' => $received['movement_id'],
+            ];
+            $movementIds[] = $received['movement_id'];
+        } else {
+            $remaining = $amount;
+            foreach ($rows as $row) {
+                if ($remaining <= 0) {
+                    break;
+                }
+
+                $available = Decimal::qty((string) $row->qty_sellable);
+                $taken = min($remaining, $available);
+                $remaining -= $taken;
+                $this->decreaseBalance((int) $row->id, 'sellable', $taken);
+                $movesToDamaged = $reasonCode === 'damaged';
+                if ($movesToDamaged) {
+                    $this->increaseBalance((int) $row->id, 'damaged', $taken);
+                }
+
+                $movementId = DB::table('inventory_movements')->insertGetId([
+                    'store_id' => $storeId,
+                    'product_id' => $productId,
+                    'batch_id' => $row->batch_id,
+                    'from_location_id' => $locationId,
+                    'from_position_id' => $row->shelf_position_id,
+                    'from_bucket' => 'sellable',
+                    'to_location_id' => $movesToDamaged ? $locationId : null,
+                    'to_position_id' => $movesToDamaged ? $row->shelf_position_id : null,
+                    'to_bucket' => $movesToDamaged ? 'damaged' : null,
+                    'qty' => Decimal::qtyString($taken),
+                    'movement_type' => in_array($reasonCode, ['lost', 'expired'], true) ? 'write_off' : 'adjustment',
+                    'unit_cost' => $product->unit_cost,
+                    'ref_type' => 'stock_adjustment',
+                    'ref_id' => $adjustmentId,
+                    'occurred_at' => $this->now(),
+                    'created_by' => $actorId,
+                ]);
+                $movementIds[] = (int) $movementId;
+                $allocations[] = [
+                    'product_id' => $productId,
+                    'batch_id' => $row->batch_id,
+                    'location_id' => $locationId,
+                    'shelf_position_id' => $row->shelf_position_id,
+                    'qty_before' => $row->qty_sellable,
+                    'qty_counted' => Decimal::qtyString($available - $taken),
+                    'qty_diff' => Decimal::qtyString(-$taken),
+                    'stock_movement_id' => (int) $movementId,
+                ];
+            }
+        }
+
+        $stockAfterUnits = $type === 'increase'
+            ? $stockBeforeUnits + $amount
+            : $stockBeforeUnits - $amount;
+
+        return [
+            'stock_before' => Decimal::qtyString($stockBeforeUnits),
+            'stock_after' => Decimal::qtyString($stockAfterUnits),
+            'allocations' => $allocations,
+            'movement_ids' => $movementIds,
+        ];
     }
 
     /**
@@ -854,7 +1001,7 @@ class InventoryService
     /**
      * Barang masuk ke bucket sellable: batch baru, saldo, pergerakan, dan pembaruan Harga Modal terbaru.
      *
-     * @return array{batch_id: int, balance_id: int}
+     * @return array{batch_id: int, balance_id: int, movement_id: int}
      */
     private function stockIn(
         int $storeId,
@@ -895,7 +1042,7 @@ class InventoryService
         $balanceId = $this->lockOrCreateBalance((int) $product->id, $locationId, $positionId, $batchId);
         $this->increaseBalance($balanceId, $bucket, $units);
 
-        DB::table('inventory_movements')->insert([
+        $movementId = DB::table('inventory_movements')->insertGetId([
             'store_id' => $storeId,
             'product_id' => $product->id,
             'batch_id' => $batchId,
@@ -918,7 +1065,7 @@ class InventoryService
             );
         }
 
-        return ['batch_id' => $batchId, 'balance_id' => $balanceId];
+        return ['batch_id' => $batchId, 'balance_id' => $balanceId, 'movement_id' => (int) $movementId];
     }
 
     private function lockOrCreateBalance(int $productId, int $locationId, ?int $positionId, ?int $batchId): int

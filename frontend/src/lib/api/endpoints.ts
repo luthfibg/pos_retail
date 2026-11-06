@@ -15,6 +15,7 @@ import type {
   SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
   BankAccount, BankAccountSummary,
   AvailableRegister, Register,
+  DirectAdjustment, DirectAdjustmentInput, DirectAdjustmentMeta, DirectAdjustmentReasonCode, DirectAdjustmentType,
 } from './types';
 
 export const authApi = {
@@ -146,6 +147,24 @@ export const productApi = {
     id: number,
     input: Partial<Omit<ProductInput, 'sku' | 'barcode'>> & { status?: 'active' | 'inactive'; reason?: string },
   ) => api<{ data: Product }>(`/products/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
+};
+
+export const directAdjustmentApi = {
+  meta: () => api<{ data: DirectAdjustmentMeta }>('/stock-adjustments/meta').then((r) => r.data),
+  list: (filters: {
+    q?: string;
+    type?: DirectAdjustmentType | '';
+    reason_code?: DirectAdjustmentReasonCode | '';
+    source?: 'manual' | 'opname' | '';
+    date_from?: string;
+    date_to?: string;
+    sort?: 'newest' | 'oldest';
+    page?: number;
+    per_page?: number;
+  } = {}) => api<Paginated<DirectAdjustment>>('/stock-adjustments', { query: { ...filters } }),
+  get: (id: number) => api<{ data: DirectAdjustment }>(`/stock-adjustments/${id}`).then((r) => r.data),
+  create: (input: DirectAdjustmentInput) =>
+    api<{ data: DirectAdjustment }>('/stock-adjustments', { method: 'POST', body: input }).then((r) => r.data),
 };
 
 export const categoryApi = {

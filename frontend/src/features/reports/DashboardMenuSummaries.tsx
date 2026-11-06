@@ -110,15 +110,15 @@ function SummaryCardView({
 }
 
 export function DashboardMenuSummaries({ applied }: DashboardMenuSummariesProps) {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const isAdmin = can('shift.review');
   const inventoryMenus = useQuery({
     queryKey: ['settings', 'inventory-menus'],
     queryFn: settingsApi.inventoryMenus,
   });
   const visibleRoutes = useMemo(
-    () => new Set(getVisibleNavGroups(can, isAdmin, inventoryMenus.data).flatMap((group) => group.items.map((item) => item.to))),
-    [can, isAdmin, inventoryMenus.data],
+    () => new Set(getVisibleNavGroups(can, isAdmin, inventoryMenus.data, me?.roles ?? []).flatMap((group) => group.items.map((item) => item.to))),
+    [can, isAdmin, inventoryMenus.data, me?.roles],
   );
   const canViewBilling = visibleRoutes.has('/billing');
   const { year, month } = getLocalYearMonth();

@@ -39,3 +39,10 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
     Route::post('transfers/{transfer}/cancel', [StockTransferController::class, 'cancel'])
         ->whereNumber('transfer')->middleware('can:stock_transfer.create');
 });
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('stock-adjustments/meta', [StockAdjustmentController::class, 'directMeta']);
+    Route::get('stock-adjustments', [StockAdjustmentController::class, 'directIndex']);
+    Route::post('stock-adjustments', [StockAdjustmentController::class, 'directStore']);
+    Route::get('stock-adjustments/{adjustment}', [StockAdjustmentController::class, 'directShow'])->whereNumber('adjustment');
+});

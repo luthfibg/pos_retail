@@ -15,7 +15,7 @@ export function HomeRedirect() {
   if (me?.platform_operator) return <Navigate to="/platform/stores" replace />;
   if (inventoryMenus.isLoading && !inventoryMenus.data) return null;
   const isAdmin = can('shift.review');
-  const items = getVisibleNavGroups(can, isAdmin, inventoryMenus.data).flatMap((group) => group.items);
+  const items = getVisibleNavGroups(can, isAdmin, inventoryMenus.data, me?.roles ?? []).flatMap((group) => group.items);
   const preferred = items.find((item) => item.to === (isAdmin ? '/dashboard' : '/pos'));
   return <Navigate to={preferred?.to ?? items[0]?.to ?? '/products'} replace />;
 }

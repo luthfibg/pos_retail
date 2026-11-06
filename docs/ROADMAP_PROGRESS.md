@@ -229,13 +229,25 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 ## 4. Untuk agent frontend
 
+### Adjustment & Opname — Handoff #1 (6 Nov 2026)
+
+**Status:** implementasi backend dan UI Adjustment langsung selesai; validasi terarah lulus, UAT browser masih menunggu. Tab Opname tetap placeholder untuk Handoff #2 dan seterusnya.
+
+- Halaman bertab memakai rute bersarang `/inventory/adjustments/adjustment` dan `/inventory/adjustments/opname`; rute induk mengarahkan ke tab Adjustment. Menu dan akses langsung untuk Admin, Owner, dan Kasir tidak memakai permission Adjustment baru. Keputusan ini mengikuti arahan pengguna, berbeda dari rancangan awal handoff yang mensyaratkan izin `adjustment.view` dan menolak akses Kasir.
+- Adjustment manual mengubah stok saat disimpan dan tidak dapat diedit/dihapus; koreksi dilakukan dengan adjustment baru. Data dan endpoint dokumen legacy tetap ada dan UI lamanya tersedia melalui `/inventory/adjustments-legacy` bagi pemegang izin lama.
+- Backend aditif: `GET /api/stock-adjustments/meta` mengembalikan tipe dan alasan; `GET /api/stock-adjustments` mengembalikan daftar berpaginasi dengan filter `q`, `type`, `reason_code`, `source`, `date_from`, `date_to`, `sort`, `page`, dan `per_page`; `GET /api/stock-adjustments/{id}` mengembalikan detail; `POST /api/stock-adjustments` menerima `product_id`, `type`, integer `quantity`, `reason_code`, `notes?`, `expiry_date?`, dan UUID `client_request_id`. POST sukses `201`; idempotensi permintaan yang sama `200`.
+- `StockAdjustmentService::record()` menjadi jalur pencatatan yang mendukung `source=opname`/`opname_session_id` untuk Handoff #6. Perubahan saldo tetap melalui `InventoryService::recordDirectAdjustment()`; pengurangan mengikuti FEFO. Produk yang melacak kedaluwarsa memerlukan tanggal pada penambahan; batch internal tetap dipakai agar FEFO tidak rusak, tanpa menampilkan ID/kode batch di UI.
+- UI: `AdjustmentOpnamePage`, `DirectAdjustmentsPage`, form/detail responsif, filter dan paginasi, validasi stok/jumlah/catatan/tanggal, idempotensi UUID, dan `ProductPicker` bersama untuk pencarian/barcode. `ProductPicker` tidak menampilkan stok pada hasil pencarian secara default.
+- Pemeriksaan implementasi menemukan perbedaan penting dengan asumsi handoff: produk hanya menyimpan `track_expiry`, bukan tanggal kedaluwarsa; tanggal berasal dari batch. Karena itu model expiry-bucket dan penyimpanan batch lama dipertahankan. Penambahan stok produk bertanggal kedaluwarsa meminta tanggal, sedangkan pengurangan tetap dialokasikan FEFO.
+- Validasi 6 Nov 2026: `DirectStockAdjustmentTest` + `StockAdjustmentTest` — 19 test, 153 assertions lulus; Pint untuk berkas PHP yang diubah lulus. Frontend typecheck, production build, dan seluruh 237 test Vitest lulus. Pemeriksaan Pint seluruh backend masih melaporkan berkas lama yang tidak terkait; UAT browser tetap menunggu. Ringkasan kontrak backend ada di `BACKEND_PROGRESS.md`.
+
 **Terbaru (28 Okt 2026): backend suite lulus 238 test; UI Dashboard dan Tagihan HRD telah dikonfirmasi pengguna, Manajemen Pengguna dan Transfer Stok siap diuji.** UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan juga sudah diuji pengguna. `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway belum dibuat, sementara unggah/unduh lampiran tersedia dan menunggu uji klik. Penerimaan, UI PR/PO dan Adjustment/Opname menunggu uji klik. Akses Finance receive-only pada antrean setoran lulus test backend; UAT UI Finance masih belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|
 | Auth, kategori, supplier, produk | HANDOFF bagian 6 | ✅ | auth, categories, suppliers, products |
 | Inventory (stok awal, stok per batch, pergerakan) | 1 | ✅ | inventory |
-| Adjustment & Opname | 1 | ✅ backend / 🟡 UI | `inventory/AdjustmentsPage.tsx` (menunggu uji klik) |
+| Adjustment & Opname | Handoff #1 | ✅ backend / 🟡 UI | `inventory/DirectAdjustmentsPage.tsx`, kerangka tab, dan placeholder Opname (menunggu UAT browser) |
 | Transfer stok antarposisi / putaway | 1 | ✅ | `inventory/TransfersPage.tsx` (menunggu uji klik; katalog posisi rak belum ada) |
 | Dashboard dan laporan | 11 | ✅ | `reports/DashboardPage.tsx` (filter sudah dikonfirmasi pengguna) |
 | Tagihan HRD | 8 | ✅ | `billing/BillingPage.tsx` (uji klik pengguna berjalan lancar) |

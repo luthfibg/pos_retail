@@ -16,7 +16,7 @@ export function AppLayout() {
     queryKey: ['settings', 'inventory-menus'],
     queryFn: settingsApi.inventoryMenus,
   });
-  const groups = getVisibleNavGroups(can, isAdmin, inventoryMenus.data);
+  const groups = getVisibleNavGroups(can, isAdmin, inventoryMenus.data, me?.roles ?? []);
   // Hanya grup dropdown yang bisa terbuka; menu tunggal (standalone) adalah tautan langsung.
   const dropdowns = groups.filter((group) => !group.standalone);
   const activeGroup = dropdowns.find((group) =>

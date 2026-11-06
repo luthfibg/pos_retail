@@ -321,6 +321,7 @@ export interface Product {
   restock_quantity: Decimal;
   status: ProductStatus;
   stock_sellable: Decimal;
+  store_floor_stock_sellable?: Decimal;
   stock_status: StockStatus;
 }
 
@@ -514,6 +515,59 @@ export interface StockAdjustmentInput {
     shelf_position_id?: number;
     qty_counted: Decimal;
   }>;
+}
+
+export type DirectAdjustmentType = 'increase' | 'decrease';
+export type DirectAdjustmentReasonCode =
+  | 'damaged'
+  | 'expired'
+  | 'lost'
+  | 'found'
+  | 'input_correction'
+  | 'own_use'
+  | 'sample'
+  | 'other'
+  | 'opname_result';
+
+export interface DirectAdjustmentReason {
+  code: DirectAdjustmentReasonCode;
+  label: string;
+  requires_notes: boolean;
+  selectable: boolean;
+}
+
+export interface DirectAdjustmentMeta {
+  types: Array<{ code: DirectAdjustmentType; label: string }>;
+  reasons: DirectAdjustmentReason[];
+}
+
+export interface DirectAdjustment {
+  id: number;
+  number: string;
+  product: { id: number; name: string; barcode: string };
+  type: DirectAdjustmentType;
+  quantity: number;
+  reason_code: DirectAdjustmentReasonCode;
+  reason_label: string;
+  notes: string | null;
+  stock_before: Decimal;
+  stock_after: Decimal;
+  source: 'manual' | 'opname';
+  opname_session_id: number | null;
+  stock_movement_id: number | null;
+  stock_movement_ids?: number[];
+  created_by: { id: number; name: string };
+  created_at: string;
+}
+
+export interface DirectAdjustmentInput {
+  product_id: number;
+  type: DirectAdjustmentType;
+  quantity: number;
+  reason_code: Exclude<DirectAdjustmentReasonCode, 'opname_result'>;
+  notes?: string;
+  expiry_date?: string;
+  client_request_id: string;
 }
 
 export type StockTransferStatus = 'draft' | 'posted' | 'cancelled';

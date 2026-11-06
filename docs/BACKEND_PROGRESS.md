@@ -4,6 +4,8 @@
 
 **Diperbarui:** 5 November 2026 · **Validasi mesin kasir:** `RegisterTest` 4, `ShiftTest` 8, `CashDepositTest` 16, `SaleTest` 17, `SeederTest` 3, dan `AdminModelTest` 9 lulus; Pint, frontend typecheck, 6 tes pengaturan, dan production build lulus. `RbacTest` masih memiliki satu kegagalan lama: ekspektasi daftar permission Kasir belum memasukkan `supplier_return.create`. Suite penuh sebelumnya: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
+Progres implementasi Adjustment langsung Handoff #1: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #1”.
+
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 
 ## Cara membaca status

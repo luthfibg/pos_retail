@@ -39,7 +39,7 @@ function menuFor(role: string): string[] {
   const permissions = new Set(PERMISSIONS[role]);
   const can = (permission: string) => permissions.has(permission);
   // Sama dengan AppLayout: shift.review menandai peran pengawas, yang tidak melihat menu khusus kasir.
-  return getVisibleNavGroups(can, can('shift.review')).flatMap((group) => group.items.map((item) => item.to)).sort();
+  return getVisibleNavGroups(can, can('shift.review'), undefined, [role]).flatMap((group) => group.items.map((item) => item.to)).sort();
 }
 
 describe('menu per role (model standar retail)', () => {
@@ -87,10 +87,10 @@ describe('menu per role (model standar retail)', () => {
 });
 
 /** Bentuk sidebar: tautan langsung ditulis `Nama`, dropdown ditulis `Grup > Menu 1, Menu 2` (urut seperti tampilan). */
-function sidebarFor(permissions: string[] | 'all', isAdmin?: boolean): string[] {
+function sidebarFor(permissions: string[] | 'all', isAdmin?: boolean, roles: string[] = []): string[] {
   const set = new Set(permissions === 'all' ? [] : permissions);
   const can = (permission: string) => permissions === 'all' || set.has(permission);
-  const groups: NavGroup[] = getVisibleNavGroups(can, isAdmin ?? can('shift.review'));
+  const groups: NavGroup[] = getVisibleNavGroups(can, isAdmin ?? can('shift.review'), undefined, roles);
   return groups.map((group) => {
     const labels = group.items.map((item) => item.label);
     return group.standalone ? labels.join('') : `${group.label} > ${labels.join(', ')}`;
@@ -98,11 +98,11 @@ function sidebarFor(permissions: string[] | 'all', isAdmin?: boolean): string[] 
 }
 
 describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
-  it('Kasir melihat Penerimaan Barang dan Retur Supplier di dropdown Inventory', () => {
-    expect(sidebarFor(PERMISSIONS.Kasir ?? [])).toEqual([
+  it('Kasir melihat Penerimaan Barang dan Retur Barang di dropdown Inventory', () => {
+    expect(sidebarFor(PERMISSIONS.Kasir ?? [], false, ['Kasir'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Penerimaan Barang, Retur Supplier, Adjustment & Opname, Riwayat Stok',
+      'Inventory > Penerimaan Barang, Retur Barang, Adjustment & Opname, Pergerakan Stok',
       'Penjualan > Kasir Jaga Saya, Kasir, Penjualan',
       'Data Master > Produk, Karyawan',
     ]);
@@ -112,7 +112,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Finance ?? [])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Riwayat Stok',
+      'Pergerakan Stok',
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk',
       'Data Master > Produk, Karyawan',
     ]);
@@ -122,7 +122,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Purchasing ?? [])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Riwayat Stok',
+      'Pergerakan Stok',
       'Data Master > Kategori, Produk, Supplier',
     ]);
   });
@@ -130,17 +130,17 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
   it('Accounting', () => {
     expect(sidebarFor(PERMISSIONS.Accounting ?? [])).toEqual([
       'Dashboard',
-      'Riwayat Stok',
+      'Pergerakan Stok',
       'Keuangan > Laporan Kasir Jaga, Laporan Piutang',
       'Produk',
     ]);
   });
 
   it('Owner', () => {
-    expect(sidebarFor(PERMISSIONS.Owner ?? [])).toEqual([
+    expect(sidebarFor(PERMISSIONS.Owner ?? [], undefined, ['Owner'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Retur Supplier, Adjustment & Opname, Riwayat Stok',
+      'Inventory > Retur Barang, Adjustment & Opname, Pergerakan Stok',
       'Laporan Kasir Jaga',
       'Data Master > Produk, Karyawan',
       'Pengaturan',
@@ -148,10 +148,10 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
   });
 
   it('Admin (model simple) memegang semua izin dan tidak melihat menu khusus kasir', () => {
-    expect(sidebarFor('all', true)).toEqual([
+    expect(sidebarFor('all', true, ['Admin'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Penerimaan Barang, Retur Supplier, Adjustment & Opname, Riwayat Stok',
+      'Inventory > Penerimaan Barang, Retur Barang, Adjustment & Opname, Pergerakan Stok',
       'Penjualan',
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
       'Data Master > Kategori, Produk, Supplier, Karyawan',
