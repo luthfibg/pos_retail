@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 5 November 2026 · **Validasi mesin kasir:** `RegisterTest` 4, `ShiftTest` 8, `CashDepositTest` 16, `SaleTest` 17, `SeederTest` 3, dan `AdminModelTest` 9 lulus; Pint, frontend typecheck, 6 tes pengaturan, dan production build lulus. `RbacTest` masih memiliki satu kegagalan lama: ekspektasi daftar permission Kasir belum memasukkan `supplier_return.create`. Suite penuh sebelumnya: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa). · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+**Diperbarui:** 6 November 2026 · **Validasi konsolidasi Adjustment:** `StockAdjustmentTest` 12/76, `StockAuthorityTest` 11/123, `SupplierReturnTest` 8/77, dan `RbacTest` 7/15 lulus; Pint untuk PHP yang diubah, frontend typecheck, 233 tes frontend, dan production build lulus. Suite backend penuh terakhir yang tercatat: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa); kegagalan `RbacTest` yang terkait daftar permission telah diperbaiki dan dites terarah. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 Progres implementasi Adjustment langsung Handoff #1: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #1”.
 
@@ -84,12 +84,10 @@ Troubleshooting exchange 401: backend menulis `Platform CLI login ticket issued.
 | GET | `/api/inventory/transfers/{id}` | `stock_transfer.create` | Detail draft/posted/cancelled |
 | POST | `/api/inventory/transfers/{id}/post` | `stock_transfer.create` | Posting atomik dan memindahkan saldo |
 | POST | `/api/inventory/transfers/{id}/cancel` | `stock_transfer.create` | Batalkan draft (opsional `reason`) |
-| GET | `/api/inventory/adjustments` | `inventory.adjust.request` atau `inventory.adjust.approve` | Daftar adjustment/opname yang diizinkan; approver dapat melihat antrean |
-| POST | `/api/inventory/adjustments` | `inventory.adjust.request` | Buat draft adjustment/opname dengan snapshot saldo |
-| GET | `/api/inventory/adjustments/{id}` | `inventory.adjust.request` atau `inventory.adjust.approve` | Detail dokumen |
-| POST | `/api/inventory/adjustments/{id}/request` | `inventory.adjust.request` | Ajukan draft untuk persetujuan |
-| POST | `/api/inventory/adjustments/{id}/approve` | `inventory.adjust.approve` | Setujui dan posting atomik, atau tolak dengan alasan |
-| POST | `/api/inventory/adjustments/{id}/cancel` | `inventory.adjust.request` | Batalkan draft/permintaan sebelum posting |
+| GET | `/api/inventory/adjustments/meta` | Admin, Owner, Kasir | Metadata jenis dan alasan adjustment langsung |
+| GET | `/api/inventory/adjustments` | Admin, Owner, Kasir | Daftar adjustment langsung yang sudah mengubah stok |
+| POST | `/api/inventory/adjustments` | Admin, Owner, Kasir | Catat adjustment langsung dan posting stok secara atomik |
+| GET | `/api/inventory/adjustments/{id}` | Admin, Owner, Kasir | Detail dokumen adjustment |
 
 Daftar produk (`GET /api/products`) sudah memuat `stock_sellable` dan `stock_status`; angka itu kini terisi dari saldo nyata.
 
@@ -165,33 +163,23 @@ Semua endpoint transfer memakai permission `stock_transfer.create` (role Kasir/A
 - Daftar menerima filter `status` (`draft|posted|cancelled`), awalan nomor dokumen melalui `q`, dan `per_page` (1–100, default 25). Detail memuat nama lokasi, pembuat/pemosting, waktu posting, serta rincian produk, batch, posisi dan qty.
 - Error validasi mengikuti format 422 standar; kegagalan stok menunjuk `items.N.qty`.
 
-### Adjustment dan opname (tahap 2.7) ✅
+### Adjustment langsung (Handoff #1) ✅
 
-Endpoint baca memakai permission `inventory.adjust.request` atau `inventory.adjust.approve`; pemohon hanya dapat melihat dokumen yang dia ajukan, sedangkan pemegang permission approve dapat membaca antrean dan detail dokumen di tokonya. Mutasi tetap memakai permission khusus: create/request/cancel menggunakan `inventory.adjust.request`, approve/reject menggunakan `inventory.adjust.approve`.
+Adjustment manual langsung memperbarui stok ketika disimpan; dokumen tidak memiliki tahap draft/pengajuan/persetujuan dan tidak dapat diedit atau dibatalkan. Endpoint utama hanya tersedia pada `/api/inventory/adjustments`; route `/api/stock-adjustments` dan endpoint workflow legacy telah dihapus.
 
-`POST /api/inventory/adjustments` menerima draft:
-```json
-{
-  "reason": "opname",
-  "note": "Hitung stok rak A",
-  "items": [
-    { "product_id": 12, "batch_id": 7, "location_id": 1, "shelf_position_id": 3, "qty_counted": "5" }
-  ]
-}
-```
-- `reason`: `opname|loss|damage|expired|other`. `items`: 1–200 baris; `qty_counted` wajib nonnegatif, maksimal 3 desimal. Batch dan posisi opsional; lokasi wajib aktif dan milik toko yang sama. Batch harus milik produk, posisi (jika ada) harus berada di lokasi. Batch wajib untuk produk yang melacak tanggal kedaluwarsa.
-- Setiap kombinasi produk/batch/lokasi/posisi hanya boleh muncul sekali. Draft menyimpan `qty_before` (saldo sellable saat dibuat), `qty_counted`, dan `qty_diff = qty_counted - qty_before`. Pembuatan tidak mengubah atau mereservasi saldo. Draft tidak dapat diedit; batalkan lalu buat ulang jika salah.
-- `POST .../{id}/request` mengubah `draft` menjadi `requested`. Pemohon dapat membatalkan draft/permintaan sebelum disetujui; `reason` pembatalan opsional.
-- `POST .../{id}/approve` secara default menyetujui. Persetujuan dan posting saldo dilakukan dalam transaksi yang sama; respons akhir berstatus `posted`. Untuk keputusan `reject`, kirim `{ "decision": "reject", "note": "..." }`; alasan penolakan wajib dan stok tidak berubah.
-- Persetujuan untuk alasan `loss` atau `expired` wajib menyertakan `approver_username` dan `approver_password` milik akun Admin/pemegang `inventory.adjust.approve` sendiri. Alasan lain cukup dengan sesi approver yang berizin. Kegagalan autentikasi ulang menghasilkan 422 `approver_password`; catatan autentikasi ulang gagal/berhasil masuk audit.
-- Saat posting, saldo sellable saat ini harus tetap sama dengan `qty_before`. Jika ada transaksi lain sejak draft dibuat, posting ditolak dengan 422 `items.N.qty_counted`; buat dokumen baru berdasarkan saldo terbaru. Seluruh baris dan saldo diperiksa sebelum ada movement, dan transaksi seluruhnya rollback bila satu baris gagal.
-- Selisih positif menambah sellable; selisih negatif mengurangi sellable tanpa mengizinkan stok negatif. Alasan `damage` memindahkan selisih dari bucket sellable ke damaged (total stok tetap); alasan `loss`/`expired` menghapus stok dengan movement `write_off`; selisih lain memakai movement `adjustment`. HPP tidak berubah dan bucket quarantine tidak disentuh.
-- Pembuatan, pengajuan, persetujuan, posting, penolakan, dan pembatalan dicatat pada audit (`stock_adjustment.create|request|approve|post|reject|cancel`). Dokumen posted tidak dapat diubah atau dibatalkan; koreksi memerlukan dokumen adjustment baru.
-- Opname pada tahap ini dicatat sebagai adjustment dengan `reason: "opname"`; skema/migration Paket 1 tidak menyediakan sesi opname terpisah. Tidak ada migration baru dan tidak ada permission baru.
-- Daftar menerima `status` (`draft|requested|posted|rejected|cancelled`), `reason`, awalan nomor dokumen melalui `q`, dan `per_page` (1–100, default 25). Nomor dokumen `ADJ-...`; jumlah, snapshot saldo, dan selisih dikembalikan sebagai string desimal.
+| Method | Path | Fungsi |
+|---|---|---|
+| GET | `/api/inventory/adjustments/meta` | Jenis dan alasan yang dapat dipilih |
+| GET | `/api/inventory/adjustments` | Daftar terpaginasikan; filter `q`, `type`, `reason_code`, `source`, `date_from`, `date_to`, `sort`, `per_page` |
+| POST | `/api/inventory/adjustments` | Mencatat adjustment dan pergerakan stok secara atomik |
+| GET | `/api/inventory/adjustments/{id}` | Detail dokumen dan movement terkait |
+
+Body POST menerima `product_id`, `type` (`increase|decrease`), integer `quantity` positif, `reason_code`, `notes?`, `expiry_date?`, dan UUID wajib `client_request_id`. Alasan tersedia: `damaged`, `expired`, `lost`, `found`, `input_correction`, `own_use`, `sample`, dan `other` (catatan wajib); `opname_result` hanya untuk pencatatan internal sesi opname. Produk yang melacak kedaluwarsa wajib diberi tanggal saat stok ditambah. Pengurangan memakai alokasi FEFO dan gagal tanpa perubahan bila stok tidak cukup. HPP tidak berubah. POST sukses `201`; kunci idempotensi yang sama mengembalikan dokumen yang sudah tercatat dengan `200`.
+
+Adjustment langsung hanya dapat digunakan Admin, Owner, atau Kasir pada toko aktif. Izin `inventory.adjust.request` dan relasi grant/override-nya dihapus melalui migration. Izin `inventory.adjust.approve` tetap dipakai untuk write-off retur supplier. Migration pembersihan menghapus header dan item adjustment legacy yang `reason_code`-nya `NULL`; adjustment baru serta data opname dengan reason code, audit log, dan riwayat movement tetap dipertahankan.
 
 ### Yang belum ada untuk Inventory
-Denah rak ⏳. Retur supplier dan write-off kini tersedia di bagian 15. `InventoryService` juga menyediakan `receive`, `sell` FEFO, `voidSale`, `transfer`, dan `adjust`; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
+Denah rak ⏳. Retur supplier dan write-off kini tersedia di bagian 15. `InventoryService` menyediakan penerimaan, penjualan FEFO, void penjualan, transfer, dan pencatatan stok adjustment langsung; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
 
 ---
 
@@ -820,9 +808,9 @@ Layar yang bisa dibuat (workspace Pengaturan): kartu "Model administrasi" dengan
 
 ## 13. Matriks Kewenangan Stok ✅
 
-> Status: `StockAuthorityTest` dan tes workflow retur lulus. Matriks memuat 10 aturan, termasuk retur supplier per lokasi. Permission `supplier_return.create` diturunkan dari matriks; jalankan `php artisan db:seed --class=PermissionSeeder` pada database yang sudah ada agar permission tersedia.
+> Status: `StockAuthorityTest` dan tes workflow retur lulus. Matriks memuat 8 aturan, termasuk retur supplier per lokasi. Permission `supplier_return.create` diturunkan dari matriks; jalankan `php artisan db:seed --class=PermissionSeeder` pada database yang sudah ada agar permission tersedia.
 
-Tiap toko menentukan **role mana** yang boleh melakukan operasi stok. Berlaku di toko mana pun: dengan/tanpa Gudang dan pada model administrasi `simple` maupun `standard`. Ada 10 aturan:
+Tiap toko menentukan **role mana** yang boleh melakukan operasi stok. Berlaku di toko mana pun: dengan/tanpa Gudang dan pada model administrasi `simple` maupun `standard`. Ada 8 aturan:
 
 | Kunci aturan | Operasi | Permission yang diturunkan |
 |---|---|---|
@@ -830,10 +818,9 @@ Tiap toko menentukan **role mana** yang boleh melakukan operasi stok. Berlaku di
 | `receipt.store_floor` / `receipt.warehouse` | Penerimaan barang dari PO ke lokasi toko / gudang | `goods_receipt.create` |
 | `supplier_return.store_floor` / `supplier_return.warehouse` | Retur supplier dari lokasi toko / gudang | `supplier_return.create` |
 | `transfer.store_floor` / `transfer.warehouse` | Transfer/putaway; **gudang** bila lokasi asal ATAU tujuan adalah gudang | `stock_transfer.create` |
-| `adjustment_request.store_floor` / `adjustment_request.warehouse` | Membuat dan mengajukan adjustment/opname untuk lokasi toko / gudang | `inventory.adjust.request` |
-| `adjustment_approve` | Menyetujui/menolak adjustment (stok langsung berubah saat disetujui) | `inventory.adjust.approve` |
+| `adjustment_approve` | Menyetujui write-off retur supplier | `inventory.adjust.approve` |
 
-**Default** (bila belum disetel): model `simple` → stok awal `[Admin]`, penerimaan/retur/transfer/ajuan `[Admin, Kasir]`, persetujuan `[Admin]`. Model `standard` → stok awal `[Owner]`, penerimaan/retur/transfer/ajuan `[Kasir]`, persetujuan `[Owner]`.
+**Default** (bila belum disetel): model `simple` → stok awal `[Admin]`, penerimaan/retur/transfer `[Admin, Kasir]`, write-off retur `[Admin]`. Model `standard` → stok awal `[Owner]`, penerimaan/retur/transfer `[Kasir]`, write-off retur `[Owner]`.
 
 **Cara kerja:** permission yang dikendalikan matriks **tidak diambil dari role_permissions**, melainkan diturunkan dari matriks ini (`PermissionResolver`). Karena itu `can:` pada route, `permissions` di `GET /api/auth/me`, dan menu frontend otomatis mengikuti. Penerimaan, retur, transfer, dan ajuan adjustment diperiksa ulang menurut **jenis lokasi** (toko/gudang); override per pengguna (`user_permissions`) tetap berlaku di atas matriks (`allow` menambah, `deny` mencabut).
 
@@ -861,11 +848,11 @@ Tiap toko menentukan **role mana** yang boleh melakukan operasi stok. Berlaku di
 - Saat model administrasi beralih (`PUT /api/settings/admin-model`), role `Admin` ⇄ `Owner` pada aturan yang sudah disetel ikut diganti otomatis.
 
 ### Cara frontend mengambilnya
-1. **Layar pengaturan** (workspace Pengaturan → "Kewenangan Stok", tampil bila `settings.manage`): `GET /api/settings/stock-authority`; tampilkan `rules` sebagai matriks (baris = aturan, kolom = `assignable_roles`, sel = checkbox dari `roles`). Kelompokkan `receipt/transfer/adjustment_request` per `scope` ("Toko" / "Gudang"); beri label "belum berlaku" bila `applies=false`; tampilkan `warnings`; tombol "Kembalikan default" mengirim `roles: null`. Simpan dengan satu `PUT` berisi hanya aturan yang diubah, lalu pakai respons untuk menyegarkan tampilan dan **muat ulang `GET /api/auth/me`** agar menu mengikuti.
+1. **Layar pengaturan** (workspace Pengaturan → "Kewenangan Stok", tampil bila `settings.manage`): `GET /api/settings/stock-authority`; tampilkan `rules` sebagai matriks (baris = aturan, kolom = `assignable_roles`, sel = checkbox dari `roles`). Kelompokkan `receipt/transfer` per `scope` ("Toko" / "Gudang"); beri label "belum berlaku" bila `applies=false`; tampilkan `warnings`; tombol "Kembalikan default" mengirim `roles: null`. Simpan dengan satu `PUT` berisi hanya aturan yang diubah, lalu pakai respons untuk menyegarkan tampilan dan **muat ulang `GET /api/auth/me`** agar menu mengikuti.
 2. **Menu dan tombol di semua layar**: tetap pakai `permissions` dari `GET /api/auth/me` (mis. `supplier_return.create` untuk menu retur supplier). Untuk pilihan lokasi, `GET /api/auth/me` memuat `stock_authority` per aturan dan per lokasi.
 3. **Penanganan error**: 403 pada create/post (pesan di atas) → tampilkan pesan, jangan ulangi. Ikuti `GET /api/auth/me` yang baru bila pengaturan diubah saat sesi berjalan.
 
-Layar yang bisa dibuat: "Kewenangan Stok" di workspace Pengaturan; filter pilihan lokasi pada `/goods-receipts`, `/inventory/transfers`, `/inventory/adjustments`; menu Stok Awal muncul bagi pemegang `inventory.opening_balance`.
+Layar yang bisa dibuat: "Kewenangan Stok" di workspace Pengaturan; filter pilihan lokasi pada `/goods-receipts` dan `/inventory/transfers`; menu Stok Awal muncul bagi pemegang `inventory.opening_balance`. Adjustment langsung menggunakan akses Admin/Owner/Kasir dan tidak diatur lewat matriks lokasi.
 
 ### Perubahan lain pada tahap ini
 - Route stok awal (`POST /api/inventory/opening-balances`) memakai `can:inventory.opening_balance`.

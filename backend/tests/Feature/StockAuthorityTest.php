@@ -63,10 +63,9 @@ class StockAuthorityTest extends SeededTestCase
         $data = $this->getJson('/api/settings/stock-authority')->assertOk()->assertJsonPath('data.admin_model', 'simple')
             ->assertJsonPath('data.warehouse_enabled', false)->json('data');
 
-        $this->assertCount(10, $data['rules']);
+        $this->assertCount(8, $data['rules']);
         $this->assertSame(['opening_balance', 'receipt.store_floor', 'receipt.warehouse', 'supplier_return.store_floor',
-            'supplier_return.warehouse', 'transfer.store_floor', 'transfer.warehouse', 'adjustment_request.store_floor',
-            'adjustment_request.warehouse', 'adjustment_approve'], array_column($data['rules'], 'key'));
+            'supplier_return.warehouse', 'transfer.store_floor', 'transfer.warehouse', 'adjustment_approve'], array_column($data['rules'], 'key'));
 
         $rules = $this->rules();
         $this->assertSame(['Admin'], $rules['opening_balance']['roles']);
@@ -174,7 +173,6 @@ class StockAuthorityTest extends SeededTestCase
 
         $this->putJson('/api/settings/stock-authority', ['rules' => [
             ['key' => 'transfer.warehouse', 'roles' => ['Admin']],
-            ['key' => 'adjustment_request.warehouse', 'roles' => ['Admin']],
         ]])->assertOk();
 
         $this->actAs('kasir-s');
@@ -182,14 +180,13 @@ class StockAuthorityTest extends SeededTestCase
             $this->postJson('/api/inventory/transfers', ['from_location_id' => $from, 'to_location_id' => $to, 'items' => [['product_id' => $p, 'qty' => '1']]])
                 ->assertForbidden();
         }
-        $this->postJson('/api/inventory/adjustments', ['reason' => 'opname', 'items' => [['product_id' => $p, 'location_id' => $warehouse, 'qty_counted' => '3']]])
-            ->assertForbidden();
-        $this->postJson('/api/inventory/adjustments', ['reason' => 'opname', 'items' => [['product_id' => $p, 'location_id' => $floor, 'qty_counted' => '3']]])
+        $this->postJson('/api/inventory/adjustments', ['product_id' => $p, 'type' => 'increase', 'quantity' => 1, 'reason_code' => 'found', 'client_request_id' => fake()->uuid()])
             ->assertCreated();
 
         $this->actAs('admin-uji');
         $this->assertNotSame(403, $this->postJson('/api/inventory/transfers', ['from_location_id' => $floor, 'to_location_id' => $warehouse, 'items' => [['product_id' => $p, 'qty' => '1']]])->status());
-        $this->postJson('/api/inventory/adjustments', ['reason' => 'opname', 'items' => [['product_id' => $p, 'location_id' => $warehouse, 'qty_counted' => '3']]])->assertCreated();
+        $this->postJson('/api/inventory/adjustments', ['product_id' => $p, 'type' => 'increase', 'quantity' => 1, 'reason_code' => 'found', 'client_request_id' => fake()->uuid()])
+            ->assertCreated();
     }
 
     public function test_opening_balance_can_be_delegated_to_purchasing(): void
@@ -209,25 +206,6 @@ class StockAuthorityTest extends SeededTestCase
 
         $this->actAs('buy-s');
         $this->postJson('/api/inventory/opening-balances', $body)->assertCreated();
-    }
-
-    public function test_adjustment_approval_can_be_moved_off_the_admin(): void
-    {
-        $this->staff();
-        $this->user('Finance', 'fin-s');
-        $this->putJson('/api/settings/stock-authority', $this->rule('adjustment_approve', ['Finance']))->assertOk();
-
-        $this->actAs('admin-uji');
-        $this->getJson('/api/inventory/adjustments')->assertOk(); // Admin masih boleh membaca lewat izin ajuan
-        $p = $this->product();
-        $id = $this->postJson('/api/inventory/adjustments', ['reason' => 'opname', 'items' => [['product_id' => $p, 'location_id' => $this->locationId('store_floor'), 'qty_counted' => '2']]])
-            ->assertCreated()->json('data.id');
-        $this->postJson("/api/inventory/adjustments/{$id}/request")->assertOk();
-        $this->postJson("/api/inventory/adjustments/{$id}/approve", [])->assertForbidden();
-
-        $this->actAs('fin-s');
-        $this->getJson('/api/inventory/adjustments')->assertOk();
-        $this->postJson("/api/inventory/adjustments/{$id}/approve", [])->assertOk()->assertJsonPath('data.status', 'posted');
     }
 
     public function test_validation_warnings_audit_and_noop(): void
@@ -276,8 +254,6 @@ class StockAuthorityTest extends SeededTestCase
         $this->assertSame(['Kasir'], $rules['transfer.store_floor']['roles']);
         $this->assertSame(['Owner'], $rules['opening_balance']['roles']);                      // default model standar
         $this->assertSame(['Owner'], $rules['adjustment_approve']['roles']);
-        $this->assertSame(['Kasir'], $rules['adjustment_request.store_floor']['roles']);
-
         $me = $this->getJson('/api/auth/me')->assertOk();
         $this->assertTrue($me->json('stock_authority')['opening_balance']);
         $this->assertTrue($me->json('stock_authority')['receipt.store_floor']);

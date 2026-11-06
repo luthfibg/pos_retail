@@ -16,18 +16,12 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
     Route::post('opening-balances', [InventoryController::class, 'openingBalance'])
         ->middleware('can:inventory.opening_balance');
 
-    // Adjustment dan opname; perubahan saldo terjadi setelah persetujuan.
+    // Adjustment langsung; stok dicatat segera dan setiap dokumen dapat dibuka kembali.
+    Route::get('adjustments/meta', [StockAdjustmentController::class, 'meta']);
     Route::get('adjustments', [StockAdjustmentController::class, 'index']);
-    Route::post('adjustments', [StockAdjustmentController::class, 'store'])
-        ->middleware('can:inventory.adjust.request');
+    Route::post('adjustments', [StockAdjustmentController::class, 'store']);
     Route::get('adjustments/{adjustment}', [StockAdjustmentController::class, 'show'])
         ->whereNumber('adjustment');
-    Route::post('adjustments/{adjustment}/request', [StockAdjustmentController::class, 'request'])
-        ->whereNumber('adjustment')->middleware('can:inventory.adjust.request');
-    Route::post('adjustments/{adjustment}/approve', [StockAdjustmentController::class, 'approve'])
-        ->whereNumber('adjustment')->middleware('can:inventory.adjust.approve');
-    Route::post('adjustments/{adjustment}/cancel', [StockAdjustmentController::class, 'cancel'])
-        ->whereNumber('adjustment')->middleware('can:inventory.adjust.request');
 
     // Transfer stok; sumber/tujuan tervalidasi per toko dan stok berpindah saat posting.
     Route::get('transfers', [StockTransferController::class, 'index'])->middleware('can:stock_transfer.create');
@@ -38,11 +32,4 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
         ->whereNumber('transfer')->middleware('can:stock_transfer.create');
     Route::post('transfers/{transfer}/cancel', [StockTransferController::class, 'cancel'])
         ->whereNumber('transfer')->middleware('can:stock_transfer.create');
-});
-
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('stock-adjustments/meta', [StockAdjustmentController::class, 'directMeta']);
-    Route::get('stock-adjustments', [StockAdjustmentController::class, 'directIndex']);
-    Route::post('stock-adjustments', [StockAdjustmentController::class, 'directStore']);
-    Route::get('stock-adjustments/{adjustment}', [StockAdjustmentController::class, 'directShow'])->whereNumber('adjustment');
 });

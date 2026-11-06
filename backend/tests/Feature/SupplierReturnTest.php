@@ -213,22 +213,13 @@ class SupplierReturnTest extends SeededTestCase
     {
         $fixture = $this->fixture();
         $this->receiveStock($fixture, '5', '2500.50');
-        $batchId = (int) DB::table('product_batches')->where('product_id', $fixture['product_id'])->value('id');
-        DB::transaction(fn () => app(InventoryService::class)->adjust(
-            storeId: $this->storeId(),
-            adjustmentId: 1,
-            reason: 'damage',
-            items: [[
-                'product_id' => $fixture['product_id'],
-                'batch_id' => $batchId,
-                'location_id' => $fixture['location_id'],
-                'shelf_position_id' => null,
-                'qty_before' => '5.000',
-                'qty_counted' => '3.000',
-                'qty_diff' => '-2.000',
-            ]],
-            actorId: $this->seededAdmin()->id,
-        ));
+        $this->postJson('/api/inventory/adjustments', [
+            'product_id' => $fixture['product_id'],
+            'type' => 'decrease',
+            'quantity' => 2,
+            'reason_code' => 'damaged',
+            'client_request_id' => fake()->uuid(),
+        ])->assertCreated();
         $id = $this->createReturn($fixture, '2', 'damaged');
         $this->postJson("/api/supplier-returns/{$id}/submit")->assertOk();
 

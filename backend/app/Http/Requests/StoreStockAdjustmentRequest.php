@@ -16,14 +16,15 @@ class StoreStockAdjustmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'reason' => ['required', Rule::in(['opname', 'loss', 'damage', 'expired', 'other'])],
-            'note' => ['nullable', 'string', 'max:500'],
-            'items' => ['required', 'array', 'min:1', 'max:200'],
-            'items.*.product_id' => ['required', 'integer', 'min:1'],
-            'items.*.batch_id' => ['nullable', 'integer', 'min:1'],
-            'items.*.location_id' => ['required', 'integer', 'min:1'],
-            'items.*.shelf_position_id' => ['nullable', 'integer', 'min:1'],
-            'items.*.qty_counted' => ['required', 'numeric', 'min:0', 'max:999999999', 'decimal:0,3'],
+            'product_id' => ['required', 'integer', 'min:1'],
+            'type' => ['required', Rule::in(['increase', 'decrease'])],
+            'quantity' => ['required', 'integer', 'min:1', 'max:999999999'],
+            'reason_code' => ['required', Rule::in([
+                'damaged', 'expired', 'lost', 'found', 'input_correction', 'own_use', 'sample', 'other',
+            ])],
+            'notes' => ['nullable', 'required_if:reason_code,other', 'string', 'max:500'],
+            'expiry_date' => ['nullable', 'date'],
+            'client_request_id' => ['required', 'uuid'],
         ];
     }
 }

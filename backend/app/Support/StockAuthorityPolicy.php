@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\DB;
  * disetel memakai default menurut model administrasi toko (simple/standard). Tidak bergantung pada ada/tidaknya Gudang.
  *
  * Mekanisme: PermissionResolver menurunkan permission stok (goods_receipt.create, supplier_return.create, stock_transfer.create,
- * inventory.adjust.request, inventory.adjust.approve, inventory.opening_balance) DARI MATRIKS ini, bukan dari role_permissions,
+ * inventory.adjust.approve, inventory.opening_balance) DARI MATRIKS ini, bukan dari role_permissions,
  * sehingga middleware `can:` yang ada dan menu frontend (dari permissions di /api/auth/me) otomatis mengikuti. Penerimaan,
- * retur, transfer, dan pengajuan adjustment punya lingkup lokasi (toko/gudang); lingkup diperiksa lagi di service lewat assertScope().
+ * retur, dan transfer punya lingkup lokasi (toko/gudang); lingkup diperiksa lagi di service lewat assertScope().
  * Kelas ini sengaja tanpa dependensi container (hanya DB) agar aman dipakai PermissionResolver.
  */
 final class StockAuthorityPolicy
@@ -37,19 +37,14 @@ final class StockAuthorityPolicy
             'label' => 'Transfer/putaway di toko', 'description' => 'Memindahkan stok antar posisi rak di toko.'],
         'transfer.warehouse' => ['action' => 'transfer', 'scope' => 'warehouse', 'permission' => 'stock_transfer.create',
             'label' => 'Transfer/putaway dari/ke gudang', 'description' => 'Memindahkan stok yang melibatkan gudang (asal atau tujuan).'],
-        'adjustment_request.store_floor' => ['action' => 'adjustment_request', 'scope' => 'store_floor', 'permission' => 'inventory.adjust.request',
-            'label' => 'Ajukan adjustment/opname toko', 'description' => 'Membuat dan mengajukan koreksi stok/opname untuk lokasi toko.'],
-        'adjustment_request.warehouse' => ['action' => 'adjustment_request', 'scope' => 'warehouse', 'permission' => 'inventory.adjust.request',
-            'label' => 'Ajukan adjustment/opname gudang', 'description' => 'Membuat dan mengajukan koreksi stok/opname untuk lokasi gudang.'],
         'adjustment_approve' => ['action' => 'adjustment_approve', 'scope' => null, 'permission' => 'inventory.adjust.approve',
-            'label' => 'Setujui adjustment/opname', 'description' => 'Menyetujui atau menolak adjustment/opname; menyetujui berarti stok langsung berubah.'],
+            'label' => 'Setujui write-off retur supplier', 'description' => 'Menyetujui pencatatan barang retur supplier yang ditolak dan dihapus dari stok.'],
     ];
 
     private const ACTION_LABELS = [
         'receipt' => 'menerima barang',
         'supplier_return' => 'mengajukan retur supplier',
         'transfer' => 'memindahkan stok',
-        'adjustment_request' => 'mengajukan adjustment stok',
     ];
 
     /** @return list<string> permission yang dikendalikan matriks (bukan role_permissions) */
@@ -69,8 +64,8 @@ final class StockAuthorityPolicy
     public static function defaults(string $model): array
     {
         $byAction = $model === 'standard'
-            ? ['opening_balance' => ['Owner'], 'receipt' => ['Kasir'], 'supplier_return' => ['Kasir'], 'transfer' => ['Kasir'], 'adjustment_request' => ['Kasir'], 'adjustment_approve' => ['Owner']]
-            : ['opening_balance' => ['Admin'], 'receipt' => ['Admin', 'Kasir'], 'supplier_return' => ['Admin', 'Kasir'], 'transfer' => ['Admin', 'Kasir'], 'adjustment_request' => ['Admin', 'Kasir'], 'adjustment_approve' => ['Admin']];
+            ? ['opening_balance' => ['Owner'], 'receipt' => ['Kasir'], 'supplier_return' => ['Kasir'], 'transfer' => ['Kasir'], 'adjustment_approve' => ['Owner']]
+            : ['opening_balance' => ['Admin'], 'receipt' => ['Admin', 'Kasir'], 'supplier_return' => ['Admin', 'Kasir'], 'transfer' => ['Admin', 'Kasir'], 'adjustment_approve' => ['Admin']];
 
         $out = [];
         foreach (self::RULES as $key => $rule) {

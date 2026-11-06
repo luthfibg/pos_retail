@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Services\PermissionResolver;
 use App\Support\PermissionCatalog;
+use App\Support\StockAuthorityPolicy;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -60,7 +61,11 @@ class RbacTest extends TestCase
 
         $codes = app(PermissionResolver::class)->codes($cashier);
 
-        $expected = PermissionCatalog::cashier();
+        $storeId = (int) DB::table('stores')->value('id');
+        $expected = array_values(array_unique([
+            ...PermissionCatalog::cashier(),
+            ...StockAuthorityPolicy::permissionsFor($storeId, ['Kasir']),
+        ]));
         sort($expected);
         $this->assertSame($expected, $codes);
     }

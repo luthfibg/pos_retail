@@ -8,8 +8,7 @@ export const ACTION_TITLE: Record<string, string> = {
   receipt: 'Penerimaan barang',
   supplier_return: 'Retur supplier',
   transfer: 'Transfer / putaway',
-  adjustment_request: 'Ajuan adjustment / opname',
-  adjustment_approve: 'Persetujuan adjustment / opname',
+  adjustment_approve: 'Write-off retur supplier',
 };
 
 export function sameRoles(a: readonly string[], b: readonly string[]): boolean {

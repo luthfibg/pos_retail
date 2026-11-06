@@ -4,7 +4,7 @@ import { getVisibleNavGroups, type NavGroup } from './nav';
 /**
  * Menu yang dilihat tiap role pada model standar retail.
  * Matriks izin di bawah MENCERMINKAN `PermissionCatalog::roles()` di backend (ASUMSI, menunggu konfirmasi klien).
- * Izin stok (stok awal, penerimaan, transfer, ajuan/persetujuan adjustment) sebenarnya diturunkan dari matriks Kewenangan Stok;
+ * Izin stok (stok awal, penerimaan, transfer, dan retur supplier) sebenarnya diturunkan dari matriks Kewenangan Stok;
  * daftar di bawah memakai DEFAULT model standar retail. Menu Stok Eksisting Toko dan Transfer Stok
  * disembunyikan sampai dikonfigurasi aktif pada Pengaturan.
  * Bila matriks backend berubah, perbarui bagian ini bersamaan agar perubahan menu terlihat saat review.
@@ -12,7 +12,7 @@ import { getVisibleNavGroups, type NavGroup } from './nav';
 const PERMISSIONS: Record<string, string[]> = {
   Kasir: [
     'product.create', 'shelf_layout.view', 'inventory.view', 'customer.create', 'customer.select', 'purchase_requisition.create',
-    'goods_receipt.create', 'supplier_return.create', 'stock_transfer.create', 'inventory.adjust.request', 'sales.create', 'receipt.reprint', 'shift.open',
+    'goods_receipt.create', 'supplier_return.create', 'stock_transfer.create', 'sales.create', 'receipt.reprint', 'shift.open',
     'shift.close', 'cash_movement.create', 'float.propose', 'cash_deposit.create', 'reports.view',
   ],
   Finance: [

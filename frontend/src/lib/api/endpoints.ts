@@ -6,7 +6,6 @@ import type {
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
   GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
   PurchaseOrderRequisitionItem, PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
-  StockAdjustment, StockAdjustmentInput, StockAdjustmentReason, StockAdjustmentStatus, StockAdjustmentSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, ProfitReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
@@ -15,7 +14,7 @@ import type {
   SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
   BankAccount, BankAccountSummary,
   AvailableRegister, Register,
-  DirectAdjustment, DirectAdjustmentInput, DirectAdjustmentMeta, DirectAdjustmentReasonCode, DirectAdjustmentType,
+  Adjustment, AdjustmentInput, AdjustmentMeta, AdjustmentReasonCode, AdjustmentType,
 } from './types';
 
 export const authApi = {
@@ -149,22 +148,22 @@ export const productApi = {
   ) => api<{ data: Product }>(`/products/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
 };
 
-export const directAdjustmentApi = {
-  meta: () => api<{ data: DirectAdjustmentMeta }>('/stock-adjustments/meta').then((r) => r.data),
+export const adjustmentApi = {
+  meta: () => api<{ data: AdjustmentMeta }>('/inventory/adjustments/meta').then((r) => r.data),
   list: (filters: {
     q?: string;
-    type?: DirectAdjustmentType | '';
-    reason_code?: DirectAdjustmentReasonCode | '';
+    type?: AdjustmentType | '';
+    reason_code?: AdjustmentReasonCode | '';
     source?: 'manual' | 'opname' | '';
     date_from?: string;
     date_to?: string;
     sort?: 'newest' | 'oldest';
     page?: number;
     per_page?: number;
-  } = {}) => api<Paginated<DirectAdjustment>>('/stock-adjustments', { query: { ...filters } }),
-  get: (id: number) => api<{ data: DirectAdjustment }>(`/stock-adjustments/${id}`).then((r) => r.data),
-  create: (input: DirectAdjustmentInput) =>
-    api<{ data: DirectAdjustment }>('/stock-adjustments', { method: 'POST', body: input }).then((r) => r.data),
+  } = {}) => api<Paginated<Adjustment>>('/inventory/adjustments', { query: { ...filters } }),
+  get: (id: number) => api<{ data: Adjustment }>(`/inventory/adjustments/${id}`).then((r) => r.data),
+  create: (input: AdjustmentInput) =>
+    api<{ data: Adjustment }>('/inventory/adjustments', { method: 'POST', body: input }).then((r) => r.data),
 };
 
 export const categoryApi = {
@@ -351,30 +350,6 @@ export const inventoryApi = {
   movements: (f: MovementFilters = {}) => api<Paginated<Movement>>('/inventory/movements', { query: { ...f } }),
   openingBalance: (input: OpeningBalanceInput) =>
     api<{ data: OpeningBalanceResult }>('/inventory/opening-balances', { method: 'POST', body: input }).then((r) => r.data),
-  adjustments: (f: {
-    status?: StockAdjustmentStatus;
-    reason?: StockAdjustmentReason;
-    q?: string;
-    page?: number;
-    per_page?: number;
-  } = {}) => api<Paginated<StockAdjustmentSummary>>('/inventory/adjustments', { query: { ...f } }),
-  adjustment: (id: number) =>
-    api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}`).then((r) => r.data),
-  createAdjustment: (input: StockAdjustmentInput) =>
-    api<{ data: StockAdjustment }>('/inventory/adjustments', { method: 'POST', body: input }).then((r) => r.data),
-  requestAdjustment: (id: number) =>
-    api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}/request`, { method: 'POST' }).then((r) => r.data),
-  approveAdjustment: (id: number, input: {
-    decision: 'approve' | 'reject';
-    note?: string;
-    approver_username?: string;
-    approver_password?: string;
-  }) => api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}/approve`, { method: 'POST', body: input }).then((r) => r.data),
-  cancelAdjustment: (id: number, reason?: string) =>
-    api<{ data: StockAdjustment }>(`/inventory/adjustments/${id}/cancel`, {
-      method: 'POST',
-      body: reason ? { reason } : {},
-    }).then((r) => r.data),
   transfers: (f: {
     status?: StockTransferStatus;
     q?: string;

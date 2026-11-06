@@ -54,7 +54,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/inventory/opening` | Stok Eksisting Toko (Admin) | `inventory.adjust.approve` | 1 | ✅ | Menu tersembunyi secara default; dapat ditampilkan lewat Pengaturan > Menu Inventory |
 | `/inventory/movements` | Riwayat Stok | `inventory.view` | 1 | ✅ | |
 | `/inventory/transfers` | Transfer antar lokasi/posisi: Draft, detail, posting, pembatalan | `stock_transfer.create` | 1 | 🟡 | Menu tersembunyi secara default; dapat ditampilkan lewat Pengaturan > Menu Inventory. Implementasi awal tersedia; katalog posisi rak belum tersedia di API sehingga ID posisi tujuan diisi opsional; menunggu uji klik |
-| `/inventory/adjustments` | Adjustment & Opname: Draft snapshot, pengajuan, approval/rejection dan posting | `inventory.adjust.request`, `inventory.adjust.approve` | 2.7 | 🟡 | Implementasi dan test logika tersedia; menunggu uji klik |
+| `/inventory/adjustments` | Adjustment langsung: catat perubahan stok, riwayat, filter, dan detail; tab Opname masih placeholder | Admin, Owner, Kasir | Handoff #1 | 🟡 | UI memakai endpoint utama `/api/inventory/adjustments`; simpan langsung memposting stok tanpa draft/persetujuan |
 | `/discounts` → `/settings#discounts` | **Diskon** (Admin): daftar + filter, tambah, ubah, aktif/nonaktif | `discount.manage` | 9 | ✅ | Test frontend dan backend terkonfirmasi lulus |
 | `/settings/vat` → `/settings#vat` | **Pengaturan PPN** (Admin): saklar, tarif, harga termasuk/tidak, dialog konfirmasi | `settings.manage` | 9 | ✅ | Test frontend dan backend lulus; keputusan bisnis R-04 tetap menunggu klien |
 | `/settings/float-policy` → `/settings#float-policy` | **Kebijakan Endapan** (Admin): nominal/persentase, basis, minimum/maksimum, pembulatan | `float.configure` | 7.1 | ✅ | Wajib diatur agar penutupan shift dapat menghasilkan dokumen setoran |
@@ -132,7 +132,7 @@ Pada 28 Okt 2026, setelah tahap Manajemen Pengguna, `npm run typecheck`, `npm te
 
 1. ✅ **Riwayat penjualan** (bagian 5 dan 7.2): pengguna telah menguji daftar/filter, detail, cetak ulang SALINAN, dan void Admin; uji klik berjalan lancar pada 27 Okt 2026.
 2. ✅ **Permintaan/PO** (bagian 6.1–6.2): Kasir membuat/mengajukan Permintaan; Finance meloloskan atau mengembalikan dengan catatan; Admin/Purchasing memilih supplier, item, dan rekening lalu mengotorisasi PO bersama Owner satu kali. PO dicetak sebelum dikonfirmasi terkirim. Mendukung role gabungan maupun role terpisah lewat permission. Implementasi dan test lulus; menunggu uji klik pengguna.
-3. **Adjustment/opname** (bagian 1, backend 2.7 sudah selesai): draft snapshot, pengajuan, approval/rejection, re-auth untuk loss/expired, posting atomik.
+3. **Adjustment/opname** (Handoff #1): adjustment langsung melalui `/api/inventory/adjustments`; tab Opname masih menunggu Handoff #2.
 4. 🟡 **Tagihan HRD** (bagian 8): `/billing` mendukung periode buka/ubah/tutup, rincian kredit per karyawan, buat/cetak invoice dengan transaksi dan subtotal tiap karyawan serta total gabungan ke HRD, terbitkan, serahkan ke HRD, dan pembayaran bertahap. Pengguna mengonfirmasi uji klik berjalan lancar.
 5. 🟡 **Manajemen Pengguna** (bagian 10): `/users` mengelola akun toko dan tombol profil menyediakan ganti sandi sendiri; menunggu uji klik.
 6. **Transfer stok** (backend 2.6 sudah siap): UI `/inventory/transfers` tersedia; uji klik menunggu, bersama beberapa layar lain yang sudah tersedia.
@@ -154,6 +154,7 @@ Lihat `FRONTEND_REQUESTS.md`. **FR-01** pratinjau penjualan sudah diintegrasikan
 
 ## Riwayat
 
+- **2026-11-06** — Halaman Adjustment memakai satu daftar/form pada `/inventory/adjustments`; tombol buat hanya tampil sekali pada ukuran layar aktif. UI/route Adjustment legacy dan endpoint draft/ajuan/persetujuan dihapus, endpoint utama `/api/inventory/adjustments` dipakai untuk pencatatan langsung. Tab Opname tetap placeholder Handoff #2. Typecheck, build, seluruh 233 tes frontend, dan tes backend Adjustment/Kewenangan/Retur/RBAC terarah lulus; uji klik menunggu.
 - **2026-11-06** — Pemilihan produk untuk Retur Keluar tetap dilakukan dari checkbox master Produk dan dipertahankan saat mencari/berpindah halaman. Form mengisi kuantitas langsung untuk semua produk terpilih tanpa tombol tambah per barang, menyediakan opsi simpan draft baru atau gabungkan ke draft Retur Keluar supplier yang sama, dan penggabungan dibatasi/diotorisasi backend secara atomik.
 - **2026-11-06** — Form Retur Keluar menghapus pilihan bucket asal; jumlah tersedia menggabungkan saldo rusak dan layak jual, lalu backend mengalokasikan stok rusak lebih dulu secara otomatis. Cetak retur kini memakai lembar A4 di luar modal agar isi dokumen tampil saat dicetak. Typecheck, build, tes form terarah, dan tes backend `SupplierReturnTest` lulus.
 - **2026-11-05** — Retur supplier dibagi menjadi Retur Masuk dari GR draft dan Retur Keluar dari master Produk. GR membedakan barang rusak yang dibawa kembali dari yang masuk karantina; barang pengganti dibuat sebagai GR draft per PO asal. Status GR `posted` tetap berlabel **Sudah Masuk Stok** dan teks status pada tabel riwayat diberi warna.

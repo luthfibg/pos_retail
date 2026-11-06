@@ -466,59 +466,8 @@ export interface OpeningBalanceResult {
   items: { product_id: number; batch_id: number; qty: Decimal }[];
 }
 
-export type StockAdjustmentReason = 'opname' | 'loss' | 'damage' | 'expired' | 'other';
-export type StockAdjustmentStatus = 'draft' | 'requested' | 'posted' | 'rejected' | 'cancelled';
-
-export interface StockAdjustmentSummary {
-  id: number;
-  doc_number: string;
-  reason: StockAdjustmentReason;
-  status: StockAdjustmentStatus;
-  requested_by: number;
-  requested_by_name: string;
-  approved_by: number | null;
-  approved_by_name: string | null;
-  approved_at: string | null;
-  reauth_at: string | null;
-  note: string | null;
-  created_at: string;
-}
-
-export interface StockAdjustmentItem {
-  id: number;
-  product_id: number;
-  sku: string;
-  product_name: string;
-  batch_id: number | null;
-  batch_code: string | null;
-  expiry_date: string | null;
-  location_id: number;
-  location_name: string;
-  shelf_position_id: number | null;
-  shelf_position: string | null;
-  qty_before: Decimal;
-  qty_counted: Decimal;
-  qty_diff: Decimal;
-}
-
-export interface StockAdjustment extends StockAdjustmentSummary {
-  items: StockAdjustmentItem[];
-}
-
-export interface StockAdjustmentInput {
-  reason: StockAdjustmentReason;
-  note?: string;
-  items: Array<{
-    product_id: number;
-    batch_id?: number;
-    location_id: number;
-    shelf_position_id?: number;
-    qty_counted: Decimal;
-  }>;
-}
-
-export type DirectAdjustmentType = 'increase' | 'decrease';
-export type DirectAdjustmentReasonCode =
+export type AdjustmentType = 'increase' | 'decrease';
+export type AdjustmentReasonCode =
   | 'damaged'
   | 'expired'
   | 'lost'
@@ -529,25 +478,25 @@ export type DirectAdjustmentReasonCode =
   | 'other'
   | 'opname_result';
 
-export interface DirectAdjustmentReason {
-  code: DirectAdjustmentReasonCode;
+export interface AdjustmentReason {
+  code: AdjustmentReasonCode;
   label: string;
   requires_notes: boolean;
   selectable: boolean;
 }
 
-export interface DirectAdjustmentMeta {
-  types: Array<{ code: DirectAdjustmentType; label: string }>;
-  reasons: DirectAdjustmentReason[];
+export interface AdjustmentMeta {
+  types: Array<{ code: AdjustmentType; label: string }>;
+  reasons: AdjustmentReason[];
 }
 
-export interface DirectAdjustment {
+export interface Adjustment {
   id: number;
   number: string;
   product: { id: number; name: string; barcode: string };
-  type: DirectAdjustmentType;
+  type: AdjustmentType;
   quantity: number;
-  reason_code: DirectAdjustmentReasonCode;
+  reason_code: AdjustmentReasonCode;
   reason_label: string;
   notes: string | null;
   stock_before: Decimal;
@@ -560,11 +509,11 @@ export interface DirectAdjustment {
   created_at: string;
 }
 
-export interface DirectAdjustmentInput {
+export interface AdjustmentInput {
   product_id: number;
-  type: DirectAdjustmentType;
+  type: AdjustmentType;
   quantity: number;
-  reason_code: Exclude<DirectAdjustmentReasonCode, 'opname_result'>;
+  reason_code: Exclude<AdjustmentReasonCode, 'opname_result'>;
   notes?: string;
   expiry_date?: string;
   client_request_id: string;

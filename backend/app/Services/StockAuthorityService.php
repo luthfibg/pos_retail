@@ -9,8 +9,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Konfigurasi matriks kewenangan stok per toko (settings.manage). Lihat StockAuthorityPolicy untuk mekanisme.
- *  - 10 aturan: stok awal, penerimaan dan retur supplier (toko/gudang), transfer (toko/gudang),
- *    ajuan adjustment (toko/gudang), persetujuan adjustment
+ *  - 8 aturan: stok awal, penerimaan dan retur supplier (toko/gudang), transfer (toko/gudang),
+ *    persetujuan write-off retur supplier
  *  - tiap aturan minimal satu role, dan role harus tersedia pada model administrasi toko (mis. Owner tidak pada model simple)
  *  - tidak bergantung pada warehouse_enabled: aturan gudang tetap dapat disetel saat Gudang nonaktif (baru berlaku saat aktif)
  *  - `roles: null` mengembalikan aturan ke default menurut model; perubahan dicatat di audit
