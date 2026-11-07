@@ -472,10 +472,10 @@ function GoodsReceiptDetailDialog({
           {receipt.status === 'draft' && receipt.items.some((item) => Number(item.qty_damaged) > 0) && (
             <button
               type="button"
-              onClick={() => navigate(`/supplier-returns?return_type=incoming&gr_id=${receipt.id}&create=1`)}
+              onClick={() => navigate(`/supplier-returns?gr_id=${receipt.id}&create=1`)}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium"
             >
-              Buat Retur Masuk dari GR ini
+              Buat Retur Barang dari GR ini
             </button>
           )}
 

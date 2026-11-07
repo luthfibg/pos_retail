@@ -39,15 +39,10 @@ const STATUS_LABEL: Record<SupplierReturnStatus, string> = {
   written_off: 'Sudah write-off',
   cancelled: 'Dibatalkan',
 };
-function returnStatusLabel(returnType: 'incoming' | 'outgoing', status: SupplierReturnStatus): string {
-  if (returnType === 'incoming' && status === 'submitted') return 'Sudah dikirim ke supplier';
-  return STATUS_LABEL[status];
-}
 function sumQty(left: string | null, right: string | null): string {
   return (Number(left ?? 0) + Number(right ?? 0)).toFixed(3);
 }
-const INCOMING_STATUSES: SupplierReturnStatus[] = ['draft', 'submitted', 'rejected', 'replacement_received', 'cancelled'];
-const OUTGOING_STATUSES: SupplierReturnStatus[] = ['draft', 'submitted', 'accepted', 'rejected', 'replacement_received', 'written_off', 'cancelled'];
+const RETURN_STATUSES = Object.keys(STATUS_LABEL) as SupplierReturnStatus[];
 
 export function SupplierReturnsPage() {
   const { can } = useAuth();
@@ -61,9 +56,6 @@ export function SupplierReturnsPage() {
       .filter((id) => Number.isSafeInteger(id) && id > 0),
   )]);
   const [initialReceiptId] = useState(() => Number(searchParams.get('gr_id')) || null);
-  const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>(
-    searchParams.get('return_type') === 'outgoing' ? 'outgoing' : 'incoming',
-  );
   const [queryInput, setQueryInput] = useState('');
   const [queryText, setQueryText] = useState('');
   const [status, setStatus] = useState<SupplierReturnStatus | ''>('');
@@ -107,33 +99,17 @@ export function SupplierReturnsPage() {
     }
   }, [initialProductIds.length, initialReceiptId, searchParams, setSearchParams]);
 
-  const tabStatuses = activeTab === 'incoming' ? INCOMING_STATUSES : OUTGOING_STATUSES;
   const returns = useQuery({
-    queryKey: ['supplier-returns', { queryText, status, activeTab }],
+    queryKey: ['supplier-returns', { queryText, status }],
     queryFn: async () => {
-      const requestedStatuses = status ? [status] : tabStatuses;
-      const groups = await Promise.all(requestedStatuses.map(async (returnStatus) => {
-        const firstPage = await supplierReturnApi.list({
-          q: queryText || undefined,
-          return_type: activeTab,
-          status: returnStatus,
-          page: 1,
-          per_page: 100,
-        });
-        const otherPages = await Promise.all(Array.from(
-          { length: firstPage.last_page - 1 },
-          (_, index) => supplierReturnApi.list({
-            q: queryText || undefined,
-            return_type: activeTab,
-            status: returnStatus,
-            page: index + 2,
-            per_page: 100,
-          }),
-        ));
-        return [...firstPage.data, ...otherPages.flatMap((result) => result.data)];
-      }));
+      const filters = { q: queryText || undefined, status: status || undefined, per_page: 100 };
+      const firstPage = await supplierReturnApi.list({ ...filters, page: 1 });
+      const otherPages = await Promise.all(Array.from(
+        { length: firstPage.last_page - 1 },
+        (_, index) => supplierReturnApi.list({ ...filters, page: index + 2 }),
+      ));
 
-      return groups.flat().sort((a, b) => (
+      return [...firstPage.data, ...otherPages.flatMap((result) => result.data)].sort((a, b) => (
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || b.id - a.id
       ));
     },
@@ -148,12 +124,6 @@ export function SupplierReturnsPage() {
     setPage(1);
   }
 
-  function selectTab(nextTab: 'incoming' | 'outgoing') {
-    setActiveTab(nextTab);
-    setStatus('');
-    setPage(1);
-  }
-
   return (
     <>
       <div className="no-print space-y-5 p-6">
@@ -162,34 +132,13 @@ export function SupplierReturnsPage() {
           <h1 className="text-xl font-semibold">Retur Barang</h1>
         </div>
         {canCreate && (
-          <button type="button" onClick={() => { selectTab('outgoing'); setCreateOpen(true); }} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">
-            Buat Retur Keluar
+          <button type="button" onClick={() => setCreateOpen(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">
+            Buat Retur Barang
           </button>
         )}
       </header>
 
-      <div role="tablist" aria-label="Jenis retur barang" className="flex overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'incoming'}
-          onClick={() => selectTab('incoming')}
-          className={`flex-1 border-b-2 px-4 py-3 text-sm ${activeTab === 'incoming' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}
-        >
-          Retur Masuk
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'outgoing'}
-          onClick={() => selectTab('outgoing')}
-          className={`flex-1 border-b-2 px-4 py-3 text-sm ${activeTab === 'outgoing' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}
-        >
-          Retur Keluar
-        </button>
-      </div>
-
-      <section role="tabpanel" className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <form onSubmit={search} className="flex flex-wrap items-end gap-3">
           <Field label="Nomor dokumen">
             <input className={`${inputCls} w-52`} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="RET-…" />
@@ -197,7 +146,7 @@ export function SupplierReturnsPage() {
           <Field label="Status">
             <select className={`${inputCls} w-56`} value={status} onChange={(event) => { setStatus(event.target.value as SupplierReturnStatus | ''); setPage(1); }}>
               <option value="">Semua status</option>
-              {tabStatuses.map((value) => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
+              {RETURN_STATUSES.map((value) => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
             </select>
           </Field>
           <button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm">Terapkan</button>
@@ -226,7 +175,7 @@ export function SupplierReturnsPage() {
                     <tr key={item.id}>
                       <td className="px-3 py-2 font-mono font-medium">{item.doc_number}</td>
                       <td className="px-3 py-2">{item.supplier_name}</td>
-                      <td className="px-3 py-2">{returnStatusLabel(item.return_type, item.status)}</td>
+                      <td className="px-3 py-2">{STATUS_LABEL[item.status]}</td>
                       <td className="px-3 py-2">{item.requested_by_name}</td>
                       <td className="px-3 py-2">{formatDateTime(item.created_at)}</td>
                       {canWriteOff && <td className="px-3 py-2 text-right">{item.loss_amount ? formatRupiah(item.loss_amount) : '—'}</td>}
@@ -259,8 +208,8 @@ export function SupplierReturnsPage() {
           initialProductsLoading={initialProductsLoading}
           initialProductsError={initialProductsError}
           initialProductsIncomplete={initialProductsIncomplete}
-          incomingReceipt={activeTab === 'incoming' ? initialReceipt.data : undefined}
-          incomingReceiptId={activeTab === 'incoming' ? initialReceiptId : null}
+          incomingReceipt={initialReceipt.data}
+          incomingReceiptId={initialReceiptId}
           incomingReceiptError={initialReceipt.error}
           incomingReceiptLoading={initialReceipt.isLoading}
           onClose={() => setCreateOpen(false)}
@@ -452,7 +401,7 @@ function SupplierReturnCreateDialog({
   const close = () => { if (!create.isPending && !merge.isPending) onClose(); };
 
   return (
-    <Modal title={incomingReceipt ? 'Buat Retur Masuk' : 'Buat Draft Retur Supplier'} onClose={close}>
+    <Modal title="Buat Retur Barang" onClose={close}>
       {incomingReceiptId && !incomingReceipt && (
         <div className="space-y-3 p-5">
           <ErrorNotice error={incomingReceiptError} />
@@ -501,7 +450,7 @@ function SupplierReturnCreateDialog({
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
             <button type="button" onClick={close} disabled={create.isPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
             <button type="submit" disabled={create.isPending || incomingReceipt.status !== 'draft'} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-              {create.isPending ? 'Menyimpan…' : 'Buat Draft Retur Masuk'}
+              {create.isPending ? 'Menyimpan…' : 'Buat Draft Retur Barang'}
             </button>
           </div>
         </form>
@@ -755,7 +704,7 @@ function SupplierReturnDetailDialog({
           <>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
               <p><span className="text-slate-500">Supplier:</span> {returnDoc.supplier_name}</p>
-              <p><span className="text-slate-500">Status:</span> {returnStatusLabel(returnDoc.return_type, returnDoc.status)}</p>
+              <p><span className="text-slate-500">Status:</span> {STATUS_LABEL[returnDoc.status]}</p>
               {returnDoc.goods_receipt_doc_number && <p><span className="text-slate-500">GR asal:</span> {returnDoc.goods_receipt_doc_number}</p>}
               {returnDoc.invoice_no && <p><span className="text-slate-500">Faktur supplier:</span> {returnDoc.invoice_no}</p>}
               <p><span className="text-slate-500">Pemohon:</span> {returnDoc.requested_by_name}</p>
@@ -778,8 +727,8 @@ function SupplierReturnDetailDialog({
                   <tr>
                     <th className="px-3 py-2">Produk</th>
                     <th className="px-3 py-2">PO asal / lokasi / batch</th>
-                    <th className="px-3 py-2">{returnDoc.return_type === 'incoming' ? 'Penerimaan / penanganan' : 'Sumber stok'}</th>
-                    <th className="px-3 py-2 text-right">{returnDoc.return_type === 'incoming' ? 'Qty rusak' : 'Jumlah barang'}</th>
+                    <th className="px-3 py-2">Rincian barang</th>
+                    <th className="px-3 py-2 text-right">Jumlah retur</th>
                     <th className="px-3 py-2 text-right">Harga Modal</th>
                     <th className="px-3 py-2">Barang pengganti</th>
                   </tr>
@@ -789,7 +738,7 @@ function SupplierReturnDetailDialog({
                     <tr key={item.id}>
                       <td className="px-3 py-2">{item.product_name}<span className="block font-mono text-xs text-slate-500">{item.sku}</span></td>
                       <td className="px-3 py-2">{item.source_po_doc_number ?? 'PO tidak tercatat'}<span className="block text-xs text-slate-500">{item.location_name} · {item.batch_code ?? 'Tanpa batch'}{item.shelf_position ? ` · ${item.shelf_position}` : ''}</span></td>
-                      <td className="px-3 py-2">{returnDoc.return_type === 'incoming'
+                      <td className="px-3 py-2">{item.goods_receipt_item_id !== null
                         ? <>Total datang {formatQty(sumQty(item.qty_received_safe, item.qty_damaged_at_receipt))}<span className="block text-xs text-slate-500">Aman {formatQty(item.qty_received_safe ?? '0')} · Rusak {formatQty(item.qty_damaged_at_receipt ?? item.qty)}</span><span className="block text-xs text-slate-500">{item.disposition === 'quarantine' ? 'Masuk karantina' : 'Dikembalikan ke supplier'}</span></>
                         : item.source_bucket === 'sellable' ? 'Sellable' : 'Rusak'}</td>
                       <td className="px-3 py-2 text-right">{formatQty(item.qty)} {item.unit_name}</td>
@@ -805,9 +754,9 @@ function SupplierReturnDetailDialog({
               <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak retur</button>
               {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'draft' && (
                 <button type="button" disabled={anyPending} onClick={() => {
-                  if (window.confirm('Tandai retur masuk ini sudah dicetak dan dikirim ke supplier?')) submitReturn.mutate();
+                  if (window.confirm('Tandai retur ini sudah dicetak dan dikirim ke supplier?')) submitReturn.mutate();
                 }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-                  {submitReturn.isPending ? 'Menyimpan…' : 'Tandai sudah dikirim'}
+                  {submitReturn.isPending ? 'Menyimpan…' : 'Ajukan retur ke supplier'}
                 </button>
               )}
               {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'submitted' && (
@@ -977,7 +926,7 @@ function SupplierReturnPrintSheet({
   returnDoc: SupplierReturn;
   storeName: string;
 }) {
-  const incoming = returnDoc.return_type === 'incoming';
+  const hasReceiptItems = returnDoc.items.some((item) => item.goods_receipt_item_id !== null);
 
   return (
     <div className="print-only print-doc">
@@ -985,12 +934,12 @@ function SupplierReturnPrintSheet({
         <header className="mb-4 flex items-start justify-between gap-6 border-b-2 border-black pb-3">
           <div>
             <div className="text-base font-bold">{storeName}</div>
-            <h1 className="text-xl font-bold tracking-wide">{incoming ? 'RETUR MASUK' : 'RETUR KELUAR'}</h1>
+            <h1 className="text-xl font-bold tracking-wide">RETUR BARANG</h1>
           </div>
           <div className="text-right text-xs leading-5">
             <div className="font-mono text-sm font-bold">{returnDoc.doc_number}</div>
             <div>Dibuat: {formatDateTime(returnDoc.created_at)}</div>
-            <div>Status: {returnStatusLabel(returnDoc.return_type, returnDoc.status)}</div>
+            <div>Status: {STATUS_LABEL[returnDoc.status]}</div>
           </div>
         </header>
         <section className="mb-4 grid grid-cols-2 gap-2 text-sm">
@@ -1004,10 +953,10 @@ function SupplierReturnPrintSheet({
             <tr>
               <th>No</th>
               <th>Barang</th>
-              {incoming && <th>PO asal</th>}
-              <th className="text-right">{incoming ? 'Qty rusak' : 'Jumlah barang'}</th>
+              {hasReceiptItems && <th>PO asal</th>}
+              <th className="text-right">Jumlah retur</th>
               <th className="text-right">Harga Modal</th>
-              {incoming && <th>Penanganan</th>}
+              {hasReceiptItems && <th>Penanganan</th>}
             </tr>
           </thead>
           <tbody>
@@ -1015,10 +964,10 @@ function SupplierReturnPrintSheet({
               <tr key={item.id}>
                 <td>{index + 1}</td>
                 <td>{item.product_name}<span className="block font-mono text-xs">{item.sku}</span></td>
-                {incoming && <td>{item.source_po_doc_number ?? '—'}</td>}
+                {hasReceiptItems && <td>{item.source_po_doc_number ?? '—'}</td>}
                 <td className="text-right">{formatQty(item.qty)} {item.unit_name}</td>
                 <td className="text-right">{item.unit_cost ? formatRupiah(item.unit_cost) : '—'}</td>
-                {incoming && <td>{item.disposition === 'quarantine' ? 'Masuk karantina' : 'Dikembalikan ke supplier'}</td>}
+                {hasReceiptItems && <td>{item.disposition === 'quarantine' ? 'Masuk karantina' : 'Dikembalikan ke supplier'}</td>}
               </tr>
             ))}
           </tbody>
