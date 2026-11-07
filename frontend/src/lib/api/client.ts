@@ -13,6 +13,7 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public errors?: Record<string, string[]>,
+    public conflictingSessions?: Array<{ id: number; number: string }>,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -79,10 +80,14 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   const payload: unknown = res.status === 204 ? null : await res.json().catch(() => null);
 
   if (!res.ok) {
-    const p = (payload ?? {}) as { message?: string; errors?: Record<string, string[]> };
+    const p = (payload ?? {}) as {
+      message?: string;
+      errors?: Record<string, string[]>;
+      conflicting_sessions?: Array<{ id: number; number: string }>;
+    };
     // 401 pada request ber-token = sesi habis. Login yang salah membalas 422, bukan 401.
     if (res.status === 401 && token) onUnauthorized?.();
-    throw new ApiError(res.status, p.message ?? `Permintaan gagal (${res.status}).`, p.errors);
+    throw new ApiError(res.status, p.message ?? `Permintaan gagal (${res.status}).`, p.errors, p.conflicting_sessions);
   }
 
   return payload as T;

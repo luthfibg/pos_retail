@@ -360,6 +360,78 @@ export interface Category {
   products_count: number;
 }
 
+export type OpnameScopeType = 'all' | 'categories';
+export type OpnameSessionStatus = 'in_progress' | 'pending_approval' | 'posted' | 'cancelled';
+
+export interface OpnameSessionSummary {
+  id: number;
+  number: string;
+  name: string | null;
+  scope_type: OpnameScopeType;
+  scope_summary: string;
+  status: OpnameSessionStatus;
+  total_products: number;
+  counted_products: number;
+  started_at: string;
+  created_by: { id: number; name: string };
+}
+
+export interface OpnameSession extends OpnameSessionSummary {
+  notes: string | null;
+  scope_categories: Array<{ id: number; name: string }>;
+  cancelled_at: string | null;
+  cancelled_by: { id: number; name: string } | null;
+  cancel_reason: string | null;
+}
+
+export type OpnameItemStatus = 'uncounted' | 'counted' | 'matched' | 'variance';
+export type OpnameNodeStatus = 'not_started' | 'partial' | 'done';
+
+export interface OpnameProgressNode {
+  id: number | string;
+  name: string;
+  parent_id: number | null;
+  depth: number;
+  product_count: number;
+  counted_count: number;
+  status: OpnameNodeStatus;
+  direct_product_count: number;
+  direct_counted_count: number;
+  variance_count?: number;
+  children: OpnameProgressNode[];
+}
+
+export interface OpnameProgressTree {
+  session: Pick<OpnameSessionSummary, 'id' | 'number' | 'status'>;
+  display: { reveals_system_qty: boolean };
+  summary: { total_products: number; counted_products: number };
+  nodes: OpnameProgressNode[];
+}
+
+export interface OpnameItem {
+  id: number;
+  product_id: number;
+  name: string;
+  barcode: string;
+  category_path: string[];
+  status: OpnameItemStatus;
+  counted_qty: Decimal | null;
+  system_qty?: Decimal;
+}
+
+export interface OpnameDisplaySetting {
+  show_system_qty: boolean;
+}
+
+export interface OpnameCategoryOption {
+  id: number;
+  parent_id: number | null;
+  name: string;
+  product_count: number;
+  locked_by: { id: number; number: string } | null;
+  children: OpnameCategoryOption[];
+}
+
 export type PaymentTerms = 'prepaid' | 'credit' | 'cod';
 
 export interface Supplier {

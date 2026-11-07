@@ -6,13 +6,14 @@ const only = (...permissions: string[]) => (permission: string) => permissions.i
 
 describe('settingsSections', () => {
   it('pemegang semua izin melihat semua bagian dalam urutan kategori', () => {
-    expect(visibleSections(all).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'inventory-menus', 'bank-accounts', 'stock-authority', 'vat', 'discounts', 'float-policy', 'registers', 'users', 'approval-auth']);
+    expect(visibleSections(all).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'inventory-menus', 'bank-accounts', 'stock-authority', 'opname', 'vat', 'discounts', 'float-policy', 'registers', 'users', 'approval-auth']);
   });
 
   it('bagian mengikuti izin masing-masing', () => {
     expect(visibleSections(only('discount.manage')).map((section) => section.id)).toEqual(['discounts']);
     expect(visibleSections(only('user.manage')).map((section) => section.id)).toEqual(['users', 'approval-auth']);
     expect(visibleSections(only('inventory.adjust.approve')).map((section) => section.id)).toEqual(['approval-auth']);
+    expect(visibleSections(only('opname.settings.manage')).map((section) => section.id)).toEqual(['opname']);
     expect(visibleSections(only('float.configure')).map((section) => section.id)).toEqual(['float-policy']);
     expect(visibleSections(only('register.manage')).map((section) => section.id)).toEqual(['registers']);
     expect(visibleSections(only('settings.manage')).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'inventory-menus', 'bank-accounts', 'stock-authority', 'vat', 'approval-auth']);
@@ -24,7 +25,7 @@ describe('settingsSections', () => {
     expect(visibleSections(all, 'nama toko').map((section) => section.id)).toEqual(['store-name']);
     expect(visibleSections(all, 'rekening bank').map((section) => section.id)).toEqual(['bank-accounts']);
     expect(visibleSections(all, 'SANDI').map((section) => section.id)).toEqual(['users']);
-    expect(visibleSections(all, 'opname').map((section) => section.id)).toEqual(['stock-authority']);
+    expect(visibleSections(all, 'opname').map((section) => section.id)).toEqual(['stock-authority', 'opname']);
     expect(visibleSections(all, 'Permintaan otomatis').map((section) => section.id)).toEqual(['stock-monitoring']);
     expect(visibleSections(all, 'endapan').map((section) => section.id)).toEqual(['float-policy']);
     expect(visibleSections(all, 'kunci').map((section) => section.id)).toEqual(['approval-auth']);

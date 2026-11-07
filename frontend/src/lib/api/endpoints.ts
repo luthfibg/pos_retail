@@ -15,6 +15,8 @@ import type {
   BankAccount, BankAccountSummary,
   AvailableRegister, Register,
   Adjustment, AdjustmentInput, AdjustmentMeta, AdjustmentReasonCode, AdjustmentType,
+  OpnameCategoryOption, OpnameSession, OpnameSessionSummary, OpnameSessionStatus, OpnameScopeType,
+  OpnameDisplaySetting, OpnameItem, OpnameProgressTree,
 } from './types';
 
 export const authApi = {
@@ -164,6 +166,53 @@ export const adjustmentApi = {
   get: (id: number) => api<{ data: Adjustment }>(`/inventory/adjustments/${id}`).then((r) => r.data),
   create: (input: AdjustmentInput) =>
     api<{ data: Adjustment }>('/inventory/adjustments', { method: 'POST', body: input }).then((r) => r.data),
+};
+
+export const opnameApi = {
+  list: (filters: {
+    q?: string;
+    status?: OpnameSessionStatus | '';
+    date_from?: string;
+    date_to?: string;
+    sort?: 'newest' | 'oldest';
+    page?: number;
+    per_page?: number;
+  } = {}) => api<Paginated<OpnameSessionSummary>>('/stock-opname-sessions', { query: { ...filters } }),
+  get: (id: number) =>
+    api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}`).then((r) => r.data),
+  tree: (id: number) =>
+    api<OpnameProgressTree>(`/stock-opname-sessions/${id}/tree`),
+  items: (id: number, filters: {
+    category_id?: number;
+    scope?: 'direct' | 'all';
+    q?: string;
+    only_uncounted?: boolean;
+    page?: number;
+    per_page?: number;
+  } = {}) => api<Paginated<OpnameItem>>(`/stock-opname-sessions/${id}/items`, { query: { ...filters } }),
+  scopeOptions: () =>
+    api<{ data: OpnameCategoryOption[]; total_products: number }>('/stock-opname/scope-options'),
+  start: (input: {
+    scope_type: OpnameScopeType;
+    category_ids?: number[];
+    name?: string;
+    notes?: string;
+    client_request_id: string;
+  }) => api<{ data: OpnameSessionSummary }>('/stock-opname-sessions', { method: 'POST', body: input }).then((r) => r.data),
+  cancel: (id: number, reason: string) =>
+    api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/cancel`, {
+      method: 'POST',
+      body: { reason },
+    }).then((r) => r.data),
+};
+
+export const opnameSettingsApi = {
+  get: () => api<{ data: OpnameDisplaySetting }>('/settings/opname').then((r) => r.data),
+  update: (show_system_qty: boolean) =>
+    api<{ data: OpnameDisplaySetting }>('/settings/opname', {
+      method: 'PUT',
+      body: { show_system_qty },
+    }).then((r) => r.data),
 };
 
 export const categoryApi = {

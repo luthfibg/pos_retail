@@ -5,6 +5,8 @@
 **Diperbarui:** 6 November 2026 · **Validasi konsolidasi Adjustment:** `StockAdjustmentTest` 12/76, `StockAuthorityTest` 11/123, `SupplierReturnTest` 8/77, dan `RbacTest` 7/15 lulus; Pint untuk PHP yang diubah, frontend typecheck, 233 tes frontend, dan production build lulus. Suite backend penuh terakhir yang tercatat: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa); kegagalan `RbacTest` yang terkait daftar permission telah diperbaiki dan dites terarah. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 Progres implementasi Adjustment langsung Handoff #1: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #1”.
+Sesi opname Handoff #2 (skema, service, endpoint, izin, test, dan kontrak UI): lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #2”.
+Peta progres opname, kebijakan hitung buta, pengaturan, dan kontrak UI Handoff #3: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #3”.
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 

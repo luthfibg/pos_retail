@@ -16,6 +16,7 @@ const FloatPolicy = lazy(() => import('@/features/shifts/FloatPolicyPage').then(
 const Users = lazy(() => import('@/features/users/UsersPage').then((module) => ({ default: module.UsersPage })));
 const ApprovalAuth = lazy(() => import('./ApprovalAuthSettingsPage').then((module) => ({ default: module.ApprovalAuthSettingsPage })));
 const Registers = lazy(() => import('./RegisterSettingsPage').then((module) => ({ default: module.RegisterSettingsPage })));
+const Opname = lazy(() => import('./OpnameSettingsPage').then((module) => ({ default: module.OpnameSettingsPage })));
 
 function SectionBody({ id }: { id: SectionId }) {
   switch (id) {
@@ -26,6 +27,7 @@ function SectionBody({ id }: { id: SectionId }) {
     case 'inventory-menus': return <InventoryMenus embedded />;
     case 'bank-accounts': return <BankAccounts embedded />;
     case 'stock-authority': return <StockAuthority embedded />;
+    case 'opname': return <Opname embedded />;
     case 'vat': return <Vat embedded />;
     case 'discounts': return <Discounts embedded />;
     case 'float-policy': return <FloatPolicy embedded />;

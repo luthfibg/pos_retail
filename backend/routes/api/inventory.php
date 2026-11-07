@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\OpnameDisplaySettingController;
+use App\Http\Controllers\OpnameSessionController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\StockTransferController;
 use Illuminate\Support\Facades\Route;
@@ -32,4 +34,20 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
         ->whereNumber('transfer')->middleware('can:stock_transfer.create');
     Route::post('transfers/{transfer}/cancel', [StockTransferController::class, 'cancel'])
         ->whereNumber('transfer')->middleware('can:stock_transfer.create');
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('settings/opname', [OpnameDisplaySettingController::class, 'show'])->middleware('can:opname.settings.manage');
+    Route::put('settings/opname', [OpnameDisplaySettingController::class, 'update'])->middleware('can:opname.settings.manage');
+    Route::get('stock-opname-sessions', [OpnameSessionController::class, 'index'])->middleware('can:opname.view');
+    Route::get('stock-opname-sessions/{session}', [OpnameSessionController::class, 'show'])
+        ->whereNumber('session')->middleware('can:opname.view');
+    Route::get('stock-opname-sessions/{session}/tree', [OpnameSessionController::class, 'tree'])
+        ->whereNumber('session')->middleware('can:opname.view');
+    Route::get('stock-opname-sessions/{session}/items', [OpnameSessionController::class, 'items'])
+        ->whereNumber('session')->middleware('can:opname.view');
+    Route::post('stock-opname-sessions', [OpnameSessionController::class, 'store'])->middleware('can:opname.create');
+    Route::post('stock-opname-sessions/{session}/cancel', [OpnameSessionController::class, 'cancel'])
+        ->whereNumber('session')->middleware('can:opname.cancel');
+    Route::get('stock-opname/scope-options', [OpnameSessionController::class, 'scopeOptions'])->middleware('can:opname.view');
 });

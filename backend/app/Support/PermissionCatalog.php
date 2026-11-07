@@ -28,6 +28,10 @@ final class PermissionCatalog
             'shelf_layout.view' => 'Melihat denah rak',
             'inventory.view' => 'Melihat stok dan pergerakan stok',
             'inventory.opening_balance' => 'Memasukkan stok awal (dikendalikan matriks kewenangan stok)',
+            'opname.view' => 'Melihat sesi stock opname',
+            'opname.create' => 'Memulai sesi stock opname',
+            'opname.cancel' => 'Membatalkan sesi stock opname',
+            'opname.settings.manage' => 'Mengubah pengaturan sesi stock opname',
             'discount.manage' => 'Kelola diskon',
             'customer.create' => 'Menambah data karyawan (status menunggu verifikasi)',
             'customer.verify' => 'Memverifikasi karyawan',
@@ -117,6 +121,7 @@ final class PermissionCatalog
             'user.manage', 'role.manage', 'settings.manage', 'audit_log.view',
             'product.activate', 'price.change', 'discount.manage',
             'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve',
+            'opname.view', 'opname.create', 'opname.cancel', 'opname.settings.manage',
             'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
             'shift.review', 'register.manage', 'float.configure', 'reports.view', 'reports.profit.view',
@@ -147,7 +152,7 @@ final class PermissionCatalog
     public static function accounting(): array
     {
         return [
-            'inventory.view', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close',
+            'inventory.view', 'opname.view', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close',
             'invoice.generate', 'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'reports.view',
             'reports.profit.view',
         ];

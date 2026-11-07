@@ -1,6 +1,6 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 3 November 2026 (suite backend terakhir: **294 lulus, 3 gagal** pada test lama yang tidak terkait alokasi PO; ID shift baru memakai `KASIR-JAGA-DDMMYYYY-slug-nama-kasir`; detail di `BACKEND_PROGRESS.md`) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 7 November 2026 (suite backend penuh terakhir: **341 lulus, 4 gagal** pada ekspektasi jumlah data platform, fixture tanggal laporan, dan test akses supplier Kasir; validasi terarah Handoff #3 lulus; detail di bawah) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
 
 | Tanda | Arti |
 |---|---|
@@ -241,13 +241,58 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 - Pemeriksaan implementasi menemukan perbedaan penting dengan asumsi handoff: produk hanya menyimpan `track_expiry`, bukan tanggal kedaluwarsa; tanggal berasal dari batch. Karena itu model expiry-bucket dan penyimpanan batch lama dipertahankan. Penambahan stok produk bertanggal kedaluwarsa meminta tanggal, sedangkan pengurangan tetap dialokasikan FEFO.
 - Validasi konsolidasi (6 Nov 2026): `StockAdjustmentTest` 12 test/76 assertions, `StockAuthorityTest` 11/123, `SupplierReturnTest` 8/77, dan `RbacTest` 7/15 lulus; Pint untuk PHP yang diubah lulus. Frontend typecheck, production build, dan seluruh 233 test Vitest lulus. UAT browser tetap menunggu. Ringkasan kontrak backend ada di `BACKEND_PROGRESS.md`.
 
+### Adjustment & Opname — Handoff #2 (7 Nov 2026)
+
+**Status:** fondasi sesi opname backend dan UI selesai; test terarah lulus. UAT browser pada 375/768/1280 px belum dilakukan. Layar menghitung, simpan hitungan, posting, persetujuan, serta adjustment otomatis tetap untuk Handoff #3–#6.
+
+**Pemeriksaan awal (bagian 3 handoff):**
+- Handoff #1 terpasang: tab/rute Adjustment, placeholder Opname, `ProductPicker`, tabel `stock_adjustments.opname_session_id` nullable, dan `StockAdjustmentService::record()`. Test lama jalur `source=opname` kini memakai ID sesi valid agar FK baru tetap ditegakkan; Adjustment manual tidak berubah.
+- Kategori hierarkis lewat `categories.parent_id`; produk aktif (`products.status = active`) dapat terhubung di level kategori mana pun. Endpoint kategori lama datar dengan `products_count` langsung, sehingga pohon dan hitungan turunan ditambahkan khusus lewat `scope-options`. Kedalaman tidak dibatasi oleh skema; utilitas kategori yang ada membatasi penelusuran siklus sampai 50 tingkat.
+- Saldo tersimpan per lokasi/posisi/batch dan bucket `sellable`, `quarantine`, `damaged`. `InventoryService::productStock()` hanya membaca satu produk per panggilan; sesi memakai satu query agregat massal di transaksi yang sama. Snapshot opname adalah jumlah ketiga bucket pada seluruh lokasi, termasuk produk bersaldo nol. Produk nonaktif dikecualikan; `ProductService` menolak menonaktifkan produk yang masih bersaldo positif.
+- Penomoran mengikuti `NumberSequence` + `DocumentNumber` (`OPN-YYMMDD-######`); respons memakai envelope `data`, pagination Laravel, dan galat validasi 422. Permission mengikuti `PermissionCatalog`; tanggal waktu disimpan UTC dan ditampilkan dalam zona toko dari `/auth/me` (fallback WIB).
+- Migrasi memeriksa bahwa seluruh `stock_adjustments.opname_session_id` lama masih `NULL` sebelum menambahkan FK. Untuk database yang telah ada, jalankan `php artisan db:seed --class="Database\Seeders\PermissionSeeder"` setelah migrasi agar permission opname dan grant role tersinkron.
+
+**Backend selesai:**
+- Tabel `stock_opname_sessions`, `stock_opname_session_categories`, `stock_opname_items` (termasuk kolom hitung nullable untuk handoff berikutnya), indeks, FK, dan FK `stock_adjustments.opname_session_id`.
+- `OpnameSessionService::start()`, `cancel()`, `search()`, `find()`, `scopeOptions()`, serta `resolveScopeProducts()` yang dapat dipakai ulang. Mulai sesi mengunci baris toko untuk serialisasi permintaan, menolak irisan berdasarkan produk sesi aktif, memakai idempotensi UUID, dan menulis sesi/cakupan/item secara atomik dalam chunk 500. Tidak ada perubahan stok saat mulai atau batal.
+- `GET /api/stock-opname-sessions`: `data[]` ringkasan + metadata pagination; filter `page`, `per_page` (maks. 100), `status`, `q`, `date_from`, `date_to`, `sort`.
+- `GET /api/stock-opname-sessions/{id}`: ringkasan + catatan, kategori cakupan, dan data pembatalan. Keduanya tidak mengembalikan item, `system_qty_at_start`, atau kolom hitung.
+- `POST /api/stock-opname-sessions`: body `scope_type`, `category_ids?`, `name?`, `notes?`, `client_request_id`; baru `201`, idempoten `200`, irisan `422` dengan `conflicting_sessions: [{id, number}]`.
+- `POST /api/stock-opname-sessions/{id}/cancel`: body `{reason}` wajib; hanya status `in_progress` dapat dibatalkan.
+- `GET /api/stock-opname/scope-options`: `{data: pohon kategori, total_products}`; node berisi `id`, `parent_id`, `name`, `product_count` aktif termasuk turunan, `locked_by`, dan `children`.
+- Izin: `opname.view` untuk Admin, Owner, Accounting; `opname.create` dan `opname.cancel` untuk Admin, Owner. Kasir tidak mendapat izin Opname. Untuk mempertahankan akses Adjustment dari Handoff #1, Kasir tetap melihat menu Adjustment langsung (tanpa tab/akses Opname).
+
+**UI selesai:** daftar sesi responsif dengan pencarian/filter status, skeleton/kosong/error, pagination desktop dan “Muat lagi” mobile; modal Mulai Opname layar penuh di HP dengan pohon kategori, kunci sesi, jumlah produk, UUID idempoten dan tautan sesi konflik; detail deep-link dengan ringkasan dan pembatalan beralasan. Rute `/inventory/adjustments/opname/:sessionId` disiapkan sebagai slot Handoff #3. Accounting dapat membuka Opname saja; Kasir tetap hanya Adjustment.
+
+**Validasi:** `OpnameSessionTest` 10 test/72 assertions (termasuk FK, atomisitas, permissions, filters, dan 5.000 produk), `StockAdjustmentTest` 12/76, `RbacTest` 7/15, `SeederTest` 3/21, Pint, `npm run build`, dan `npm test` (233 test) lulus. Start 5.000 produk terukur **1,570–4,675 detik** pada beberapa run; run terakhir 4,675 detik. Perintah: dari `backend`, `php artisan test --filter=OpnameSessionTest` dan `php artisan test --filter=StockAdjustmentTest`; jalankan `php artisan test` untuk suite penuh. Test suite backend penuh tidak dijalankan pada sesi ini. Berikutnya: Handoff #3 (kerangka layar hitung, peta progres baca-saja, dan pengaturan tampil/sembunyi stok), lalu UAT browser.
+
+### Adjustment & Opname — Handoff #3 (7 Nov 2026)
+
+**Status:** implementasi backend dan workspace baca-saja selesai; test opname, Pint, frontend typecheck/build, dan 233 test Vitest lulus. UAT browser pada 375/768/1280 px belum dilakukan. Form hitungan, scan, rekomendasi, posting, persetujuan, dan adjustment otomatis tetap untuk Handoff #4–#6.
+
+**Pemeriksaan awal dan keputusan yang diterapkan:**
+- `categories.parent_id` mendukung kedalaman bebas dan produk dapat berada langsung di kategori mana pun; tidak ditemukan kolom `sort_order`, jadi node kategori diurutkan alfabetis untuk hasil stabil. Pengujian kategori berpindah menunjukkan FK mencegah hard-delete; kategori yang tidak cocok dengan snapshot ditampilkan sebagai “Lainnya” dan item tetap memakai jalur nama snapshot.
+- Pengaturan toko memakai tabel `settings` dengan nilai JSON, dan `AuditLogger` tersedia. Agar Owner hanya memperoleh akses opname yang diminta (bukan perluasan akses konfigurasi), pengaturan memakai izin khusus `opname.settings.manage` untuk Admin/Owner. Nilai awal `opname.show_system_qty=false`.
+- Tidak ada komponen accordion khusus yang perlu dipakai; node memakai tombol native dengan `aria-expanded`/`role=tree`, React Query untuk fetch/refetch, dan safe-area menggunakan pola CSS `env(safe-area-inset-bottom)` yang sudah didukung aplikasi.
+
+**Backend selesai:**
+- `OpnameDisplayPolicy` menjadi sumber kebijakan tunggal: ketika setting mati, endpoint pohon tidak mengirim `variance_count`, endpoint item tidak mengirim `system_qty`, dan status produk hanya `uncounted`/`counted`; ketika aktif, status `matched`/`variance` dan angka stok sistem dikirim.
+- `GET /api/stock-opname-sessions/{id}/tree` mengembalikan sesi, kebijakan tampilan, ringkasan progres, kategori hierarkis, jumlah produk langsung/turunan, status `not_started|partial|done`, dan jumlah selisih hanya saat angka stok ditampilkan.
+- `GET /api/stock-opname-sessions/{id}/items` mendukung `category_id`, `scope=direct|all`, `q` minimal dua karakter, `only_uncounted`, paginasi, jalur kategori, dan prioritas barcode persis; menggunakan snapshot nama/barcode item. Kedua endpoint baca memerlukan `opname.view`.
+- `GET/PUT /api/settings/opname` memakai izin `opname.settings.manage`; perubahan nilai dicatat melalui audit. `OpnameSessionService` kini menghitung `counted_products` per kelompok pada daftar dan detail.
+- `php artisan opname:simulate-counts {sessionId} {--percent=30} {--variance=10} {--reset}` tersedia hanya di environment `local`/`testing`; tidak ada endpoint HTTP penulis hitungan. Contoh: `php artisan opname:simulate-counts 123 --percent=40 --variance=15`; bersihkan fixture dengan `php artisan opname:simulate-counts 123 --reset`, kemudian batalkan sesi uji agar produk tidak terkunci.
+
+**UI selesai:** detail sesi menjadi workspace responsif. HP memakai tiga tampilan `?view=input|daftar|ringkasan` (default Input) dan bottom bar safe-area; tablet bisa melipat daftar; desktop menampilkan dua panel dan membuka Ringkasan dari header. Peta progres mendukung hierarki bebas, lazy-load/paginasi 100 produk, filter belum dihitung, pencarian nama/barcode beserta `category_path`, pemilihan konteks aktif, skeleton/kosong/error, tombol muat ulang, refetch 15 detik saat tab terlihat/fokus, status sesi nonaktif, dan placeholder input saja. `OpnameWorkspaceContext` menyediakan `activeNodeId`, `setActiveNodeId`, serta data tree untuk Handoff #4/#5. Bagian “Opname” pada Pengaturan menyediakan toggle dengan konfirmasi; hanya Admin/Owner yang melihatnya.
+
+**Validasi:** `OpnameSessionTest` 17 test/160 assertions dan `StockAdjustmentTest` 12/76 lulus, begitu pula Pint dan frontend build/typecheck serta 233 test Vitest. Suite backend penuh: 341 lulus, 4 gagal (`PlatformStoreManagementTest` dua ekspektasi data tenant, `ReportTest` fixture kedaluwarsa, dan `SupplierTest` ekspektasi Kasir ditolak meski controller supplier yang ada memberi akses baca untuk `product.create`). Pada uji sesi 5.000 produk terakhir: pembuatan sesi **1,459 s**, tree **0,048 s**, dan items 100 baris **0,110 s**; target tree <1 s dan items <300 ms terpenuhi. UAT browser serta pembatalan/reset fixture melalui browser lokal tetap perlu dilakukan pengguna.
+
 **Terbaru (28 Okt 2026): backend suite lulus 238 test; UI Dashboard dan Tagihan HRD telah dikonfirmasi pengguna, Manajemen Pengguna dan Transfer Stok siap diuji.** UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan juga sudah diuji pengguna. `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway belum dibuat, sementara unggah/unduh lampiran tersedia dan menunggu uji klik. Penerimaan, UI PR/PO dan Adjustment/Opname menunggu uji klik. Akses Finance receive-only pada antrean setoran lulus test backend; UAT UI Finance masih belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|
 | Auth, kategori, supplier, produk | HANDOFF bagian 6 | ✅ | auth, categories, suppliers, products |
 | Inventory (stok awal, stok per batch, pergerakan) | 1 | ✅ | inventory |
-| Adjustment & Opname | Handoff #1 | ✅ backend / 🟡 UI | `inventory/AdjustmentsPage.tsx`, kerangka tab, dan placeholder Opname (menunggu UAT browser) |
+| Adjustment & Opname | Handoff #2 | ✅ backend / ✅ UI fondasi | `inventory/AdjustmentsPage.tsx`, daftar dan detail sesi Opname; UAT browser menunggu |
 | Transfer stok antarposisi / putaway | 1 | ✅ | `inventory/TransfersPage.tsx` (menunggu uji klik; katalog posisi rak belum ada) |
 | Dashboard dan laporan | 11 | ✅ | `reports/DashboardPage.tsx` (filter sudah dikonfirmasi pengguna) |
 | Tagihan HRD | 8 | ✅ | `billing/BillingPage.tsx` (uji klik pengguna berjalan lancar) |

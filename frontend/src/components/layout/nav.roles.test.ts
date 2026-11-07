@@ -24,14 +24,14 @@ const PERMISSIONS: Record<string, string[]> = {
     'purchase_requisition.create', 'purchase_order.create', 'purchase_order.send', 'reports.view',
   ],
   Accounting: [
-    'inventory.view', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close', 'invoice.generate',
+    'inventory.view', 'opname.view', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close', 'invoice.generate',
     'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'reports.view',
   ],
   Owner: [
     'user.manage', 'role.manage', 'settings.manage', 'audit_log.view', 'inventory.opening_balance', 'product.activate', 'price.change', 'discount.manage',
     'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve', 'customer.select', 'customer.update',
     'customer.verify', 'customer.set_limit', 'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
-    'shift.review', 'float.configure', 'reports.view',
+    'shift.review', 'float.configure', 'reports.view', 'opname.view', 'opname.create', 'opname.cancel',
   ],
 };
 
@@ -45,7 +45,7 @@ function menuFor(role: string): string[] {
 describe('menu per role (model standar retail)', () => {
   it('Kasir melihat menu operasional toko', () => {
     expect(menuFor('Kasir')).toEqual([
-      '/customers', '/dashboard', '/goods-receipts', '/inventory/adjustments', '/inventory/movements',
+      '/customers', '/dashboard', '/goods-receipts', '/inventory/adjustments/adjustment', '/inventory/movements',
       '/pos', '/products', '/purchase-requisitions', '/sales', '/shift', '/supplier-returns',
     ]);
   });
@@ -63,8 +63,7 @@ describe('menu per role (model standar retail)', () => {
   });
 
   it('Accounting melihat laporan piutang dan laporan kasir jaga', () => {
-    // Catatan: verifikasi surat jalan/faktur (`goods_receipt.verify_documents`) belum punya menu; lihat catatan di FRONTEND_PROGRESS.
-    expect(menuFor('Accounting')).toEqual(['/billing', '/dashboard', '/inventory/movements', '/products', '/shifts']);
+    expect(menuFor('Accounting')).toEqual(['/billing', '/dashboard', '/inventory/adjustments', '/inventory/movements', '/products', '/shifts']);
   });
 
   it('Owner melihat persetujuan, kebijakan, pengaturan, dan model administrasi', () => {
@@ -102,7 +101,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Kasir ?? [], false, ['Kasir'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Penerimaan Barang, Retur Barang, Adjustment & Opname, Pergerakan Stok',
+      'Inventory > Penerimaan Barang, Retur Barang, Adjustment, Pergerakan Stok',
       'Penjualan > Kasir Jaga Saya, Kasir, Penjualan',
       'Data Master > Produk, Karyawan',
     ]);
@@ -130,7 +129,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
   it('Accounting', () => {
     expect(sidebarFor(PERMISSIONS.Accounting ?? [])).toEqual([
       'Dashboard',
-      'Pergerakan Stok',
+      'Inventory > Adjustment & Opname, Pergerakan Stok',
       'Keuangan > Laporan Kasir Jaga, Laporan Piutang',
       'Produk',
     ]);

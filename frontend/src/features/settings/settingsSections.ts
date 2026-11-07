@@ -2,8 +2,8 @@
  * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
  * Izin hanya untuk tampilan; backend tetap penentu akhir.
  */
-export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'inventory-menus' | 'bank-accounts' | 'stock-authority' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
-export type GroupId = 'store' | 'sales' | 'cash' | 'accounts';
+export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'inventory-menus' | 'bank-accounts' | 'stock-authority' | 'opname' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
+export type GroupId = 'store' | 'inventory' | 'sales' | 'cash' | 'accounts';
 
 export interface SettingsSection {
   id: SectionId;
@@ -18,6 +18,7 @@ export interface SettingsSection {
 
 export const GROUPS: ReadonlyArray<{ id: GroupId; label: string }> = [
   { id: 'store', label: 'Toko' },
+  { id: 'inventory', label: 'Opname' },
   { id: 'sales', label: 'Penjualan & harga' },
   { id: 'cash', label: 'Kas' },
   { id: 'accounts', label: 'Akun' },
@@ -58,6 +59,11 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     id: 'stock-authority', group: 'store', title: 'Kewenangan stok', permission: 'settings.manage', defaultOpen: false,
     description: 'Siapa yang boleh mencatat stok eksisting toko, penerimaan, transfer, serta mengajukan dan menyetujui adjustment/opname.',
     keywords: ['inventory', 'opname', 'adjustment', 'penerimaan', 'transfer', 'stok eksisting toko', 'wewenang', 'role'],
+  },
+  {
+    id: 'opname', group: 'inventory', title: 'Opname', permission: 'opname.settings.manage', defaultOpen: true,
+    description: 'Atur apakah petugas melihat angka stok sistem saat melakukan stock opname.',
+    keywords: ['inventory', 'stok', 'stock opname', 'hitung buta', 'selisih', 'ambang persetujuan'],
   },
   {
     id: 'vat', group: 'sales', title: 'PPN', permission: 'settings.manage', defaultOpen: true,

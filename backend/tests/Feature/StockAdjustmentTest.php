@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\InventoryService;
+use App\Services\OpnameSessionService;
 use App\Services\StockAdjustmentService;
 use Illuminate\Support\Facades\DB;
 use Mockery;
@@ -264,20 +265,24 @@ class StockAdjustmentTest extends SeededTestCase
     {
         $fixture = $this->fixture();
         $admin = $this->actAsAdmin();
+        $session = app(OpnameSessionService::class)->start($admin, $this->storeId(), [
+            'scope_type' => 'all',
+            'client_request_id' => fake()->uuid(),
+        ])['session'];
 
         $result = app(StockAdjustmentService::class)->record($admin, $this->storeId(), [
             'product_id' => $fixture['product_id'],
             'type' => 'increase',
             'quantity' => 1,
             'reason_code' => 'opname_result',
-        ], 'opname', 42);
+        ], 'opname', $session['id']);
 
         $this->assertSame('opname', $result['adjustment']['source']);
-        $this->assertSame(42, $result['adjustment']['opname_session_id']);
+        $this->assertSame($session['id'], $result['adjustment']['opname_session_id']);
         $this->assertDatabaseHas('stock_adjustments', [
             'id' => $result['adjustment']['id'],
             'reason_code' => 'opname_result',
-            'opname_session_id' => 42,
+            'opname_session_id' => $session['id'],
         ]);
     }
 

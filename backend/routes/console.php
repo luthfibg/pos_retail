@@ -2,6 +2,8 @@
 
 use App\Models\User;
 use App\Services\PlatformCliLoginTicket;
+use App\Support\Decimal;
+use Carbon\Carbon;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -227,3 +229,87 @@ Artisan::command('platform:operator-login {--no-browser : Siapkan tiket tanpa me
 
     return 0;
 })->purpose('Login operator dan buka UI daftar tenant');
+
+Artisan::command('opname:simulate-counts {sessionId} {--percent=30} {--variance=10} {--reset}', function () {
+    if (! app()->environment(['local', 'testing'])) {
+        $this->error('Perintah simulasi opname hanya boleh dijalankan pada environment local atau testing.');
+
+        return 1;
+    }
+
+    $sessionId = (int) $this->argument('sessionId');
+    $session = DB::table('stock_opname_sessions')->where('id', $sessionId)->first(['id', 'created_by']);
+    if ($session === null) {
+        $this->error("Sesi opname {$sessionId} tidak ditemukan.");
+
+        return 1;
+    }
+
+    if ($this->option('reset')) {
+        DB::table('stock_opname_items')->where('session_id', $sessionId)->update([
+            'counted_qty' => null,
+            'system_qty_at_count' => null,
+            'counted_at' => null,
+            'counted_by' => null,
+        ]);
+        $this->info("Data hitungan sesi {$sessionId} dikosongkan.");
+
+        return 0;
+    }
+
+    $percent = filter_var($this->option('percent'), FILTER_VALIDATE_INT);
+    $variancePercent = filter_var($this->option('variance'), FILTER_VALIDATE_INT);
+    if ($percent === false || $percent < 0 || $percent > 100 || $variancePercent === false || $variancePercent < 0 || $variancePercent > 100) {
+        $this->error('Nilai --percent dan --variance harus berupa bilangan bulat antara 0 dan 100.');
+
+        return 1;
+    }
+
+    $items = DB::table('stock_opname_items')->where('session_id', $sessionId)->orderBy('id')->get([
+        'id', 'system_qty_at_start',
+    ]);
+    $countTotal = (int) round($items->count() * $percent / 100);
+    $varianceTotal = (int) round($countTotal * $variancePercent / 100);
+    $counted = $items->take($countTotal)->values();
+    $now = Carbon::now('UTC')->format('Y-m-d H:i:s.v');
+
+    DB::transaction(function () use ($sessionId, $session, $counted, $varianceTotal, $now) {
+        $processed = 0;
+        foreach ($counted->chunk(400) as $chunk) {
+            $countedCases = [];
+            $systemCases = [];
+            $ids = [];
+            $bindings = [];
+            foreach ($chunk as $index => $item) {
+                $id = (int) $item->id;
+                $systemQty = (string) $item->system_qty_at_start;
+                $countedQty = $systemQty;
+                if ($processed + $index < $varianceTotal) {
+                    $countedQty = Decimal::qtyString(Decimal::qty($systemQty) + 1000);
+                }
+                $ids[] = $id;
+                $countedCases[] = 'WHEN ? THEN ?';
+                $systemCases[] = 'WHEN ? THEN ?';
+                $bindings[] = $id;
+                $bindings[] = $countedQty;
+                $bindings[] = $id;
+                $bindings[] = $systemQty;
+            }
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $sql = 'UPDATE stock_opname_items SET counted_qty = CASE id '.implode(' ', $countedCases).' ELSE counted_qty END, '
+                .'system_qty_at_count = CASE id '.implode(' ', $systemCases).' ELSE system_qty_at_count END, '
+                .'counted_at = ?, counted_by = ?, updated_at = ? WHERE session_id = ? AND id IN ('.$placeholders.')';
+            $bindings[] = $now;
+            $bindings[] = (int) $session->created_by;
+            $bindings[] = $now;
+            $bindings[] = $sessionId;
+            array_push($bindings, ...$ids);
+            DB::update($sql, $bindings);
+            $processed += count($ids);
+        }
+    });
+
+    $this->info("Ditandai {$counted->count()} produk dihitung, termasuk {$varianceTotal} produk dengan selisih.");
+
+    return 0;
+})->purpose('Mengisi progres hitungan simulasi untuk sesi opname lokal/test');
