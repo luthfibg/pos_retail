@@ -310,7 +310,6 @@ export const goodsReceiptApi = {
     api<{ data: GoodsReceiptLocation[] }>('/goods-receipts/receiving-locations').then((r) => r.data),
   list: (f: {
     q?: string;
-    status?: GoodsReceipt['status'];
     document_status?: GoodsReceipt['document_status'];
     page?: number;
     per_page?: number;
@@ -334,6 +333,7 @@ export const goodsReceiptApi = {
     invoice_no?: string;
     note?: string;
     post?: boolean;
+    complete_po?: boolean;
     items: GoodsReceiptItemInput[];
   }) => api<{ data: GoodsReceipt }>('/goods-receipts', { method: 'POST', body: input }).then((r) => r.data),
   post: (id: number) =>

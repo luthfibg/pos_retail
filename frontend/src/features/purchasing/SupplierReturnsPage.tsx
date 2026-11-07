@@ -9,7 +9,6 @@ import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { ProductOption } from '@/features/inventory/openingForm';
 import {
-  goodsReceiptApi,
   inventoryApi,
   productApi,
   supplierReturnApi,
@@ -17,7 +16,6 @@ import {
 import type {
   ApprovalAuthMode,
   ProductSupplier,
-  GoodsReceipt,
   SupplierReturn,
   SupplierReturnStatus,
 } from '@/lib/api/types';
@@ -55,13 +53,12 @@ export function SupplierReturnsPage() {
       .map((id) => Number(id))
       .filter((id) => Number.isSafeInteger(id) && id > 0),
   )]);
-  const [initialReceiptId] = useState(() => Number(searchParams.get('gr_id')) || null);
   const [queryInput, setQueryInput] = useState('');
   const [queryText, setQueryText] = useState('');
   const [status, setStatus] = useState<SupplierReturnStatus | ''>('');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(() => canCreate && searchParams.get('create') === '1'
-    && (initialProductIds.length > 0 || initialReceiptId !== null));
+    && initialProductIds.length > 0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const initialProductQueries = useQueries({
@@ -70,11 +67,6 @@ export function SupplierReturnsPage() {
       queryFn: () => productApi.get(id),
       enabled: createOpen,
     })),
-  });
-  const initialReceipt = useQuery({
-    queryKey: ['goods-receipt', initialReceiptId],
-    queryFn: () => goodsReceiptApi.get(initialReceiptId!),
-    enabled: createOpen && initialReceiptId !== null,
   });
   const initialProducts = initialProductQueries.flatMap((query) => query.data
     ? [{
@@ -93,11 +85,12 @@ export function SupplierReturnsPage() {
     && (initialProductsLoading || initialProducts.length !== initialProductIds.length);
 
   useEffect(() => {
-    if ((initialProductIds.length > 0 || initialReceiptId !== null)
-      && (searchParams.has('create') || searchParams.has('products') || searchParams.has('gr_id'))) {
+    if ((initialProductIds.length > 0
+      && (searchParams.has('create') || searchParams.has('products')))
+      || searchParams.has('gr_id')) {
       setSearchParams({}, { replace: true });
     }
-  }, [initialProductIds.length, initialReceiptId, searchParams, setSearchParams]);
+  }, [initialProductIds.length, searchParams, setSearchParams]);
 
   const returns = useQuery({
     queryKey: ['supplier-returns', { queryText, status }],
@@ -208,10 +201,6 @@ export function SupplierReturnsPage() {
           initialProductsLoading={initialProductsLoading}
           initialProductsError={initialProductsError}
           initialProductsIncomplete={initialProductsIncomplete}
-          incomingReceipt={initialReceipt.data}
-          incomingReceiptId={initialReceiptId}
-          incomingReceiptError={initialReceipt.error}
-          incomingReceiptLoading={initialReceipt.isLoading}
           onClose={() => setCreateOpen(false)}
           onCreated={(created) => {
             setCreateOpen(false);
@@ -240,10 +229,6 @@ function SupplierReturnCreateDialog({
   initialProductsLoading,
   initialProductsError,
   initialProductsIncomplete,
-  incomingReceipt,
-  incomingReceiptId,
-  incomingReceiptError,
-  incomingReceiptLoading,
   onClose,
   onCreated,
 }: {
@@ -253,10 +238,6 @@ function SupplierReturnCreateDialog({
   initialProductsLoading: boolean;
   initialProductsError: unknown;
   initialProductsIncomplete: boolean;
-  incomingReceipt?: GoodsReceipt;
-  incomingReceiptId: number | null;
-  incomingReceiptError: unknown;
-  incomingReceiptLoading: boolean;
   onClose: () => void;
   onCreated: (created: SupplierReturn) => void;
 }) {
@@ -267,8 +248,6 @@ function SupplierReturnCreateDialog({
   const [initialSupplierApplied, setInitialSupplierApplied] = useState(false);
   const [mergeReturnId, setMergeReturnId] = useState<number | null>(null);
   const [note, setNote] = useState('');
-  const [invoiceNo, setInvoiceNo] = useState('');
-  const [incomingDispositions, setIncomingDispositions] = useState<Record<number, 'direct_return' | 'quarantine'>>({});
   const [errors, setErrors] = useState<{ general?: string; rows: Record<number, string> }>({ rows: {} });
 
   const initialStockQueries = useQueries({
@@ -310,16 +289,6 @@ function SupplierReturnCreateDialog({
     && Object.keys(validation.rows).length === 0;
 
   useEffect(() => {
-    if (incomingReceipt) {
-      setIncomingDispositions(Object.fromEntries(
-        incomingReceipt.items
-          .filter((item) => Number(item.qty_damaged) > 0)
-          .map((item) => [item.id, item.damage_disposition ?? 'direct_return']),
-      ));
-    }
-  }, [incomingReceipt]);
-
-  useEffect(() => {
     if (!initialSupplierApplied && !initialProductsLoading) {
       setInitialSupplierApplied(true);
       if (initialProductSuppliers.length === 1) setSupplierId(initialProductSuppliers[0]!.id);
@@ -332,22 +301,6 @@ function SupplierReturnCreateDialog({
 
   const create = useMutation({
     mutationFn: () => {
-      if (incomingReceipt) {
-        return supplierReturnApi.create({
-          return_type: 'incoming',
-          supplier_id: incomingReceipt.supplier_id,
-          goods_receipt_id: incomingReceipt.id,
-          invoice_no: invoiceNo.trim() || undefined,
-          note: note.trim() || undefined,
-          items: incomingReceipt.items
-            .filter((item) => Number(item.qty_damaged) > 0)
-            .map((item) => ({
-              goods_receipt_item_id: item.id,
-              disposition: incomingDispositions[item.id] ?? item.damage_disposition ?? 'direct_return',
-              source_bucket: 'damaged',
-            })),
-        });
-      }
       const selectedSupplier = supplierId;
       if (selectedSupplier === null) throw new Error('Supplier produk belum dipilih.');
       return supplierReturnApi.create(buildSupplierReturnInput(selectedSupplier, outgoingRows, note));
@@ -390,10 +343,6 @@ function SupplierReturnCreateDialog({
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (incomingReceipt) {
-      create.mutate();
-      return;
-    }
     setErrors(validation);
     if (outgoingReady) create.mutate();
   }
@@ -402,60 +351,6 @@ function SupplierReturnCreateDialog({
 
   return (
     <Modal title="Buat Retur Barang" onClose={close}>
-      {incomingReceiptId && !incomingReceipt && (
-        <div className="space-y-3 p-5">
-          <ErrorNotice error={incomingReceiptError} />
-          {incomingReceiptLoading && <p className="text-sm text-slate-500">Memuat GR draft…</p>}
-          {!incomingReceiptLoading && !incomingReceiptError && <p className="text-sm text-red-700">GR tidak tersedia atau bukan draft yang dapat diretur.</p>}
-        </div>
-      )}
-      {incomingReceipt && (
-        <form onSubmit={submit} className="space-y-4 p-5">
-          <ErrorNotice error={incomingReceiptError ?? create.error} />
-          <div className="grid gap-2 rounded-md bg-slate-50 p-3 text-sm sm:grid-cols-2">
-            <p><span className="text-slate-500">GR:</span> {incomingReceipt.doc_number}</p>
-            <p><span className="text-slate-500">PO:</span> {incomingReceipt.po_doc_number}</p>
-            <p><span className="text-slate-500">Supplier:</span> {incomingReceipt.supplier_name}</p>
-            <p><span className="text-slate-500">Faktur supplier:</span> {incomingReceipt.invoice_no || 'Belum dicatat'}</p>
-          </div>
-          <div className="space-y-2">
-            {incomingReceipt.items.filter((item) => Number(item.qty_damaged) > 0).map((item) => (
-              <div key={item.id} className="rounded-md border border-slate-200 p-3 text-sm">
-                <p className="font-medium">{item.name} <span className="font-mono text-xs text-slate-500">{item.sku}</span></p>
-                <p className="mt-1 text-slate-600">Jumlah diterima aman: {formatQty(item.qty_received)} {item.unit_name}</p>
-                <p className="text-slate-600">Jumlah rusak: {formatQty(item.qty_damaged)} {item.unit_name}</p>
-                <Field label="Penanganan barang rusak">
-                  <select
-                    className={inputCls}
-                    value={incomingDispositions[item.id] ?? item.damage_disposition ?? 'direct_return'}
-                    onChange={(event) => setIncomingDispositions((current) => ({
-                      ...current,
-                      [item.id]: event.target.value as 'direct_return' | 'quarantine',
-                    }))}
-                  >
-                    <option value="direct_return">Dikembalikan langsung ke supplier</option>
-                    <option value="quarantine">Tetap di toko, masuk karantina</option>
-                  </select>
-                </Field>
-                {item.note && <p className="mt-1">Catatan: {item.note}</p>}
-              </div>
-            ))}
-          </div>
-          <Field label="Nomor faktur supplier" hint="Otomatis mengikuti GR, dapat disesuaikan untuk dokumen retur.">
-            <input className={inputCls} maxLength={60} value={invoiceNo || incomingReceipt.invoice_no || ''} onChange={(event) => setInvoiceNo(event.target.value)} />
-          </Field>
-          <Field label="Catatan retur (opsional)">
-            <textarea className={inputCls} rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
-          </Field>
-          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-            <button type="button" onClick={close} disabled={create.isPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-            <button type="submit" disabled={create.isPending || incomingReceipt.status !== 'draft'} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-              {create.isPending ? 'Menyimpan…' : 'Buat Draft Retur Barang'}
-            </button>
-          </div>
-        </form>
-      )}
-      {!incomingReceipt && incomingReceiptId === null && (
       <form onSubmit={submit} className="space-y-4 p-5">
         <ErrorNotice error={initialProductsError ?? mergeCandidates.error ?? create.error ?? merge.error} />
         {errors.general && <p role="alert" className="text-sm text-red-700">{errors.general}</p>}
@@ -566,7 +461,6 @@ function SupplierReturnCreateDialog({
           </>
         )}
       </form>
-      )}
     </Modal>
   );
 }

@@ -244,6 +244,95 @@ class SupplierReturnService
     }
 
     /**
+     * Creates the linked return draft as part of a final goods receipt transaction.
+     */
+    public function createFromGoodsReceipt(User $actor, int $storeId, int $goodsReceiptId): ?int
+    {
+        $receipt = DB::table('goods_receipts')
+            ->where('store_id', $storeId)
+            ->where('id', $goodsReceiptId)
+            ->lockForUpdate()
+            ->first();
+
+        if ($receipt === null) {
+            throw ValidationException::withMessages(['goods_receipt_id' => ['Penerimaan tidak ditemukan.']]);
+        }
+
+        $damagedItems = DB::table('goods_receipt_items as gri')
+            ->join('products as p', 'p.id', '=', 'gri.product_id')
+            ->where('gri.gr_id', $goodsReceiptId)
+            ->where('gri.qty_damaged', '>', 0)
+            ->orderBy('gri.id')
+            ->lockForUpdate()
+            ->get([
+                'gri.id', 'gri.po_item_id', 'gri.product_id', 'gri.qty_damaged',
+                'gri.unit_cost', 'p.unit_cost as product_unit_cost',
+            ]);
+
+        if ($damagedItems->isEmpty()) {
+            return null;
+        }
+
+        if (DB::table('supplier_returns')
+            ->where('goods_receipt_id', $goodsReceiptId)
+            ->where('return_type', 'incoming')
+            ->whereNotIn('status', ['cancelled'])
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'goods_receipt_id' => ['Penerimaan ini sudah memiliki dokumen Retur Barang.'],
+            ]);
+        }
+
+        $id = DB::table('supplier_returns')->insertGetId([
+            'store_id' => $storeId,
+            'doc_number' => DocumentNumber::format('RET', $this->sequences->next($storeId, 'RET')),
+            'supplier_id' => $receipt->supplier_id,
+            'return_type' => 'incoming',
+            'goods_receipt_id' => $goodsReceiptId,
+            'invoice_no' => $receipt->invoice_no,
+            'status' => 'draft',
+            'requested_by' => $actor->id,
+            'note' => null,
+        ]);
+
+        foreach ($damagedItems as $item) {
+            DB::table('goods_receipt_items')->where('id', $item->id)
+                ->update(['damage_disposition' => 'quarantine']);
+            $returnItemId = DB::table('supplier_return_items')->insertGetId([
+                'supplier_return_id' => $id,
+                'goods_receipt_item_id' => $item->id,
+                'source_po_item_id' => $item->po_item_id,
+                'product_id' => $item->product_id,
+                'batch_id' => null,
+                'location_id' => $receipt->receiving_location_id,
+                'shelf_position_id' => null,
+                'source_bucket' => 'damaged',
+                'disposition' => 'quarantine',
+                'qty' => $item->qty_damaged,
+                'unit_cost' => $item->product_unit_cost ?? $item->unit_cost,
+            ]);
+            DB::table('goods_receipt_items')->where('id', $item->id)
+                ->update(['supplier_return_item_id' => $returnItemId]);
+        }
+
+        $this->audit->log(
+            'supplier_return.incoming_create',
+            'supplier_return',
+            $id,
+            after: [
+                'goods_receipt_id' => $goodsReceiptId,
+                'return_type' => 'incoming',
+                'items_count' => $damagedItems->count(),
+                'automatic' => true,
+            ],
+            actorId: $actor->id,
+            storeId: $storeId,
+        );
+
+        return $id;
+    }
+
+    /**
      * Menambahkan produk ke draft retur keluar dan mengalokasikan stok secara atomik.
      *
      * @param  list<array{product_id: int, qty: string|int|float}>  $items
@@ -529,9 +618,9 @@ class SupplierReturnService
                     ->where('id', $return->goods_receipt_id)
                     ->lockForUpdate()
                     ->first(['status']);
-                if ($receipt === null || $receipt->status !== 'draft') {
+                if ($receipt === null || ! in_array($receipt->status, ['draft', 'posted'], true)) {
                     throw ValidationException::withMessages([
-                        'goods_receipt_id' => ['Retur Masuk hanya dapat dikirim selama GR asal masih draft.'],
+                        'goods_receipt_id' => ['Retur hanya dapat dikirim jika penerimaan asal masih aktif.'],
                     ]);
                 }
             }

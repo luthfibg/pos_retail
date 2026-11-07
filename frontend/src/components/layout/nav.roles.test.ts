@@ -145,11 +145,11 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     ]);
   });
 
-  it('Admin (model simple) memegang semua izin dan tidak melihat menu khusus kasir', () => {
+  it('Admin (model simple) memegang semua izin tetapi tidak melihat menu khusus kasir', () => {
     expect(sidebarFor('all', true, ['Admin'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Produk, Penerimaan Barang, Retur Barang, Adjustment & Opname, Pergerakan Stok',
+      'Inventory > Produk, Retur Barang, Adjustment & Opname, Pergerakan Stok',
       'Penjualan',
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
       'Data Master > Kategori, Supplier, Karyawan',

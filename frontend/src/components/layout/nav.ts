@@ -27,7 +27,7 @@ export interface NavGroup {
  *  6. Data Master    kategori -> supplier -> karyawan (pembeli kredit)
  *  7. Pengaturan     satu layar untuk semua konfigurasi
  *
- * Item disaring berdasarkan permission atau role dari /auth/me, jadi setiap role hanya melihat menunya sendiri.
+ * Item disaring berdasarkan permission dan batas role dari /auth/me, jadi setiap role hanya melihat menunya sendiri.
  * Urutan di dalam grup juga mengikuti alur.
  */
 export const NAV_GROUPS: NavGroup[] = [
@@ -55,7 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Inventory',
     items: [
       { to: '/products', label: 'Produk', permission: 'inventory.view' },
-      { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create' },
+      { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create', cashierOnly: true },
       { to: '/supplier-returns', label: 'Retur Barang', permission: ['supplier_return.create', 'inventory.adjust.approve'] },
       { to: '/inventory/opening', label: 'Stok Eksisting Toko', permission: 'inventory.opening_balance' },
       { to: '/inventory/transfers', label: 'Transfer Stok', permission: 'stock_transfer.create' },
@@ -109,7 +109,7 @@ export function getVisibleNavGroups(
     const items = group.items.filter((item) => {
       if (item.to === '/inventory/opening' && !inventoryMenus.show_opening_balance) return false;
       if (item.to === '/inventory/transfers' && !inventoryMenus.show_stock_transfer) return false;
-      if (isAdmin && item.cashierOnly) return false;
+      if (item.cashierOnly && (isAdmin || !roles.includes('Kasir'))) return false;
       const roleAllowed = item.roles?.some((role) => roles.includes(role)) ?? false;
       const permissionAllowed = item.permission
         ? Array.isArray(item.permission) ? item.permission.some(can) : can(item.permission)

@@ -20,16 +20,14 @@ const poItems: PurchaseOrderItem[] = [
 const line: GoodsReceiptLineForm = {
   key: '31',
   poItemId: 31,
-  qtyReceived: '5',
   qtyDamaged: '1',
-  damageDisposition: 'quarantine',
+  qtyShort: '2',
   expiryDate: '2027-01-01',
-  batchCode: 'B-1',
   note: '',
 };
 
 describe('validateGoodsReceiptLines', () => {
-  it('accepts valid received and damaged quantities within the PO remainder', () => {
+  it('accepts valid damaged and undelivered quantities within the PO remainder', () => {
     expect(validateGoodsReceiptLines(poItems, [line], { 12: true }, '2026-10-27')).toEqual({});
   });
 
@@ -38,31 +36,27 @@ describe('validateGoodsReceiptLines', () => {
     expect(validateGoodsReceiptLines(poItems, [{ ...line, expiryDate: '2026-10-26' }], { 12: true }, '2026-10-27')['31']?.expiryDate).toBeTruthy();
   });
 
-  it('rejects totals over the remaining ordered quantity without floating point arithmetic', () => {
+  it('rejects damaged and undelivered totals over the remaining order without floating point arithmetic', () => {
     expect(validateGoodsReceiptLines(
       poItems,
-      [{ ...line, qtyReceived: '7.999', qtyDamaged: '0.002' }],
+      [{ ...line, qtyDamaged: '6.999', qtyShort: '1.002' }],
       { 12: true },
       '2026-10-27',
-    )['31']?.qtyReceived).toBeTruthy();
+    )['31']?.qtyDamaged).toBeTruthy();
   });
 
-  it('aggregates split batch rows against the same remaining PO quantity', () => {
-    const splitLines = [
-      { ...line, qtyReceived: '4.500', qtyDamaged: '0' },
-      { ...line, key: '31-1', qtyReceived: '3.501', qtyDamaged: '0' },
-    ];
-    expect(validateGoodsReceiptLines(poItems, splitLines, { 12: true }, '2026-10-27')['31-1']?.qtyReceived).toBeTruthy();
+  it('requires at least some goods to be received', () => {
+    expect(validateGoodsReceiptLines(poItems, [{ ...line, qtyDamaged: '0', qtyShort: '8' }], { 12: true }, '2026-10-27')['31']?.qtyShort).toBeTruthy();
   });
 
-  it('builds API rows from non-empty quantities and preserves decimal strings', () => {
-    expect(buildGoodsReceiptItems([line])).toEqual([{
+  it('calculates good quantity from PO remainder, damaged and undelivered amounts', () => {
+    expect(buildGoodsReceiptItems(poItems, [line])).toEqual([{
       po_item_id: 31,
-      qty_received: '5',
+      qty_received: '5.000',
       qty_damaged: '1',
+      qty_short: '2',
       damage_disposition: 'quarantine',
       expiry_date: '2027-01-01',
-      batch_code: 'B-1',
       note: null,
     }]);
   });

@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-**Diperbarui:** 6 November 2026 · **Validasi konsolidasi Adjustment:** `StockAdjustmentTest` 12/76, `StockAuthorityTest` 11/123, `SupplierReturnTest` 8/77, dan `RbacTest` 7/15 lulus; Pint untuk PHP yang diubah, frontend typecheck, 233 tes frontend, dan production build lulus. Suite backend penuh terakhir yang tercatat: **294 lulus, 3 gagal** pada `PlatformStoreManagementTest` (ekspektasi jumlah setting lama), `RbacTest` (ekspektasi permission Kasir lama), dan `ReportTest` (fixture tanggal kedaluwarsa); kegagalan `RbacTest` yang terkait daftar permission telah diperbaiki dan dites terarah. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+**Diperbarui:** 7 November 2026 · Penerimaan PO final satu kali; `GoodsReceiptTest` 23/267, `SupplierReturnTest` 8/78, dan `PurchaseOrderTest` 19/184 lulus. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 Progres implementasi Adjustment langsung Handoff #1: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #1”.
 Sesi opname Handoff #2 (skema, service, endpoint, izin, test, dan kontrak UI): lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #2”.
@@ -484,27 +484,29 @@ Ledger rekening dan tabel alokasi lama tetap disimpan sebagai riwayat database, 
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
-| GET | `/api/goods-receipts` | `goods_receipt.create` | Daftar. Kasir: miliknya; Admin: semua. Query: `status`, `document_status`, `po_id`, `q`, `per_page` |
+| GET | `/api/goods-receipts` | `goods_receipt.create` | Daftar. Kasir: miliknya; Admin: semua. Query: `document_status`, `po_id`, `q`, `per_page`; respons tidak menampilkan status GR |
 | GET | `/api/goods-receipts/receiving-locations` | `goods_receipt.create` | Lokasi penerimaan aktif pada toko; gudang hanya ditampilkan saat `warehouse_enabled=true` |
-| POST | `/api/goods-receipts` | `goods_receipt.create` | Buat penerimaan dari PO; `receiving_location_id` opsional, default lokasi toko. Gudang hanya bila `warehouse_enabled=true`; `"post": true` = langsung posting |
+| POST | `/api/goods-receipts` | `goods_receipt.create` | `complete_po: true` menutup satu PO dalam satu GR, menghitung qty diterima otomatis, membuat Retur Barang untuk qty rusak, lalu memposting stok atomik. PO yang sudah memiliki GR aktif ditolak. |
 | GET | `/api/goods-receipts/{gr}` | `goods_receipt.create` | Detail + baris |
 | POST | `/api/goods-receipts/{gr}/post` | `goods_receipt.create` | **Posting**: stok bertambah, PO diperbarui (atomik) |
 | POST | `/api/goods-receipts/{gr}/cancel` | `goods_receipt.create` | Batalkan penerimaan **draft** |
 | POST | `/api/goods-receipts/{gr}/verify-documents` | `goods_receipt.verify_documents` | Verifikasi surat jalan + faktur (Admin) |
 
-Permintaan buat:
+Permintaan final:
 ```json
-{ "po_id": 9, "receiving_location_id": 3, "delivery_note_no": "SJ-001", "invoice_no": "INV-77", "note": null, "post": true,
+{ "po_id": 9, "complete_po": true, "post": true, "receiving_location_id": 3, "delivery_note_no": "SJ-001", "invoice_no": "INV-77", "note": null,
   "items": [
-    { "po_item_id": 31, "qty_received": "8", "qty_damaged": "2", "expiry_date": "2027-03-01", "batch_code": "L9", "shelf_position_id": null, "note": null }
+    { "po_item_id": 31, "qty_damaged": "2", "qty_short": "1", "expiry_date": "2027-03-01", "note": null }
   ] }
 ```
-- Satu `po_item_id` boleh muncul di beberapa baris (batch/kadaluarsa berbeda). **Diterima + rusak ≤ sisa pesanan**; melebihi → 422 `errors["items.N.qty_received"]`.
+- Pada `complete_po: true`, setiap baris PO dikirim tepat sekali. `qty_received` dihitung server = sisa PO - `qty_damaged` - `qty_short`; tidak boleh negatif. Nilai yang tidak dikirim ditutup/dibatalkan, PO berstatus `received`, dan receipt status `partial` jika ada qty short. GR dibuat final dan diposting dalam transaksi yang sama.
+- Satu PO hanya boleh memiliki satu penerimaan GR aktif. PO yang sudah memiliki GR non-cancelled tidak dapat diterima ulang; PO tersebut juga tidak ditampilkan dalam daftar receivable.
+- Untuk kompatibilitas dokumen lama, permintaan tanpa `complete_po` masih dapat membuat/posting GR dengan kontrak lama. Alur baru pada UI selalu memakai `complete_po: true`.
 - Produk `track_expiry` **wajib** `expiry_date` (untuk qty diterima); produk lain **tidak boleh**; tanggal yang sudah lewat ditolak (catat sebagai rusak).
 - Harga beli = harga di PO. `unit_cost` hanya boleh diubah pemegang `goods_receipt.verify_documents` (Kasir mengirim nilai berbeda → 403). Kasir **tidak** menerima `unit_cost`/`price_variance` pada respons (`null`).
-- `qty_damaged` hanya **dicatat** (untuk klaim/retur supplier, Paket 3); tidak menambah stok dan tidak mengurangi sisa pesanan.
-- Respons `data`: `id, doc_number ("GR-…"), po_id, po_doc_number, supplier_name, receiving_location_id, receiving_location_name, delivery_note_no, invoice_no, status (draft|posted|cancelled), document_status (pending|verified), received_by_name, posted_at, verified_by_name, verified_at`, `items[]` (`po_item_id, product_id, sku, name, qty_ordered, qty_received, qty_damaged, qty_short, unit_cost, po_unit_price, price_variance, expiry_date, batch_code, shelf_position_id`). `qty_short` = sisa pesanan setelah penerimaan ini (di baris pertama tiap baris PO).
-- Efek posting: batch baru + saldo + pergerakan `receipt` + pembaruan Harga Modal ke biaya masuk terbaru (lihat Inventory), qty PO terpenuhi, status PO `partially_received`/`received`. Bila ada barang rusak, Admin mendapat notifikasi `goods_receipt.damaged`.
+- `qty_damaged` otomatis dibuatkan dokumen Retur Barang berstatus Draft yang tertaut ke GR, dan masuk bucket karantina saat stok diposting. Dokumen retur dapat diajukan ke supplier setelah penerimaan tersimpan.
+- Respons `data` tidak mengirim status GR; memuat `id, doc_number ("GR-…"), po_id, po_doc_number, supplier_name, receiving_location_id, receiving_location_name, delivery_note_no, invoice_no, document_status (pending|verified), attachments_open, received_by_name, posted_at, verified_by_name, verified_at`, `items[]` (`po_item_id, product_id, sku, name, qty_ordered, qty_received, qty_damaged, qty_short, unit_cost, po_unit_price, price_variance, expiry_date, batch_code, shelf_position_id`). Pada GR final, `qty_short` adalah jumlah yang tidak dikirim; pada data GR legacy nilainya tetap sesuai snapshot kekurangan saat dibuat.
+- Efek posting final: batch baru + saldo + pergerakan `receipt` + pembaruan Harga Modal ke biaya masuk terbaru, qty PO diterima sesuai barang datang (baik maupun rusak), PO ditutup, dan qty tidak dikirim dibatalkan. Bila ada barang rusak, retur dan notifikasi `goods_receipt.damaged` dibuat.
 - Bila lokasi tujuan bertipe gudang, lokasi tersebut harus aktif dan `warehouse_enabled=true`; aturan diperiksa saat membuat **dan** memposting draft. Posisi rak per item opsional, tetapi bila diisi harus berada pada rak aktif di lokasi penerimaan. Stok tanpa posisi dapat dipindahkan/di-putaway memakai alur transfer stok.
 - UI dapat mengambil pilihan lokasi lewat `GET /api/goods-receipts/receiving-locations`; endpoint hanya mengembalikan lokasi aktif milik toko dan menyembunyikan gudang saat konfigurasi nonaktif.
 
@@ -918,16 +920,16 @@ ASUMSI: kunci per pengguna (bukan satu kunci bersama toko) agar dapat diaudit da
 
 Migration awal: `2026_11_04_000059_create_supplier_returns_tables.php`; migration alur baru: `2026_11_05_000069_add_supplier_return_workflows.php`. Jalankan `php artisan migrate`; pada database yang belum memiliki permission retur, jalankan `php artisan db:seed --class=PermissionSeeder`.
 
-Validasi terarah: `GoodsReceiptTest` 18 lulus (218 assertions) dan `SupplierReturnTest` 8 lulus (75 assertions). Suite backend penuh sebelumnya: 316 lulus, 5 gagal pada ekspektasi lama di `PlatformStoreManagementTest`, `RbacTest`, `ReportTest`, dan `SupplierTest`.
+Validasi terarah terbaru: `GoodsReceiptTest` 23 lulus (267 assertions), `SupplierReturnTest` 8 lulus (78 assertions), dan `PurchaseOrderTest` 19 lulus (184 assertions).
 
-Ada dua alur retur:
+Retur Barang ditampilkan sebagai satu daftar di frontend. Backend tetap menyimpan `return_type` untuk membedakan alur stok yang sudah berjalan:
 
-- **Retur Masuk** dimulai dari GR yang masih `draft`. Barang rusak harus dicatat ke seluruh baris rusak GR, dengan disposisi `direct_return` (dibawa kembali supplier, tidak dihitung sebagai penerimaan PO dan tidak masuk stok) atau `quarantine` (tetap dihitung diterima PO dan masuk bucket karantina saat GR diposting). Retur Masuk harus dikirim (`submitted`) sebelum GR dengan barang rusak dapat diposting. Dokumen retur menyimpan relasi GR/baris penerimaan, supplier, HPP, kuantitas rusak, disposisi, catatan dan nomor faktur supplier.
-- **Retur Keluar** dimulai dari barang rusak yang telah berada dalam stok. Kuantitas stok dialokasikan di backend ke lokasi/batch yang tersedia lalu dikarantina saat retur dikirim; supplier harus sama untuk seluruh dokumen. Barang yang diterima supplier menghasilkan **GR pengganti draft terpisah untuk setiap PO asal**. GR pengganti menambah stok dan menyelesaikan retur hanya setelah diposting; kuantitas penerimaan PO asal tidak ditambahkan untuk kedua kalinya. Jika PO asal tidak dapat ditelusuri, backend menolak membuat GR pengganti secara eksplisit.
+- **Barang rusak dari penerimaan PO** otomatis dibuat sebagai retur supplier berstatus Draft di transaksi final penerimaan. Satu PO hanya menghasilkan satu GR; jumlah masuk dihitung dari sisa PO dikurangi barang rusak dan jumlah tidak dikirim. Barang rusak dihitung dalam kuantitas PO yang diterima dan masuk bucket karantina. GR langsung diposting secara internal, tanpa field `status` pada respons API; PO ditutup dan tidak lagi ditawarkan ke daftar penerimaan. Dokumen retur tertaut pada GR, baris penerimaan, supplier, HPP, dan jumlah rusak.
+- **Retur stok** dimulai dari pilihan produk di master. Kuantitas stok dialokasikan di backend ke lokasi/batch yang tersedia lalu dikarantina saat retur dikirim; supplier harus sama untuk seluruh dokumen. Barang pengganti menghasilkan GR terpisah untuk setiap PO asal; pemrosesan penerimaannya menambah stok dan menyelesaikan retur tanpa menambahkan ulang kuantitas penerimaan PO asal. Jika PO asal tidak dapat ditelusuri, backend menolak membuat GR pengganti secara eksplisit.
 
 Alur Retur Keluar: `draft` → `submitted` → `accepted` → GR pengganti `draft` → `replacement_received` setelah seluruh GR diposting, atau `draft` → `submitted` → `rejected` → `written_off`. Penolakan supplier tetap mengarantina barang hingga pemegang `inventory.adjust.approve` menyetujui write-off dengan autentikasi ulang Owner/Admin. HPP retur disnapshot dari `products.unit_cost`; write-off mencatat nilai kerugian dan movement `write_off`.
 
-Retur Masuk berlanjut setelah supplier merespons: `draft` → `submitted` → `replacement_received` atau `rejected`. Keputusan hanya dapat dicatat setelah GR asal diposting. Jika diterima, barang karantina asal dikeluarkan dari karantina, barang pengganti langsung ditambahkan ke stok dengan movement `supplier_replacement_in`, dan kuantitas penerimaan PO tidak berubah. Baris retur menyimpan tautan batch karantina untuk pengeluaran yang tepat; tanggal kedaluwarsa dan kode batch pengganti mengikuti data baris GR asal. Jika ditolak, nilai kerugian dihitung dari HPP snapshot × jumlah retur dan disimpan pada `loss_amount`; barang karantina tetap ada dan tidak otomatis dihapus atau dijual.
+Retur kerusakan penerimaan berlanjut setelah supplier merespons: `draft` → `submitted` → `replacement_received` atau `rejected`. Keputusan hanya dapat dicatat setelah GR asal diposting. Jika diterima, barang karantina asal dikeluarkan dari karantina, barang pengganti langsung ditambahkan ke stok dengan movement `supplier_replacement_in`, dan kuantitas penerimaan PO tidak berubah. Baris retur menyimpan tautan batch karantina untuk pengeluaran yang tepat; tanggal kedaluwarsa dan kode batch pengganti mengikuti data baris GR asal. Jika ditolak, nilai kerugian dihitung dari HPP snapshot × jumlah retur dan disimpan pada `loss_amount`; barang karantina tetap ada dan tidak otomatis dihapus atau dijual.
 
 ### Endpoint (`auth:sanctum`)
 
@@ -979,6 +981,7 @@ Sinkronisasi dipanggil atomik dari stok awal, penjualan/void, penerimaan barang,
 - Tidak ada permission baru dan tidak ada migration baru pada tahap 2.7. Stok awal tetap memakai `inventory.adjust.approve` (ASUMSI sampai ada permission khusus).
 
 ## Riwayat
+- **2026-11-07** — Penerimaan PO menjadi final dan sekali saja: server menghitung jumlah diterima dari sisa PO dikurangi barang rusak/tidak dikirim, memposting stok, menutup PO, dan membuat retur karantina untuk barang rusak dalam transaksi atomik. API daftar/detail GR tidak mengirim `status`; GR hanya memuat status verifikasi dokumen. Tes `GoodsReceiptTest` (23/267), `SupplierReturnTest` (8/78), dan `PurchaseOrderTest` (19/184) lulus.
 - **2026-11-04** — Alur PR/PO disederhanakan menjadi Finance pass → create PO atomik (pilih rekening, reservasi dana, satu otorisasi Owner) → cetak lalu konfirmasi kirim. Tes `PurchaseOrderTest` + `PurchaseRequisitionTest`: 31 lulus; Pint lulus.
 - **2026-11-04** — Pemantauan stok per toko dengan ambang default 3.000, field `restock_quantity` di master produk, dan satu PR otomatis dinamis yang menghitung estimasi HPP/total; sinkronisasi atomik pada perubahan stok/master/setting, sementara Kasir hanya dapat meneruskan PR otomatis. Migration 000065. Validasi terarah 122 test (1.158 assertions) dan Pint lulus.
 - **2026-11-04** — Field HPP master disederhanakan menjadi `unit_cost` tunggal (`DECIMAL(18,4)`), diisi wajib saat produk dibuat, dapat dikoreksi Admin melalui edit, dan diganti dengan biaya terbaru saat penerimaan/stok masuk memiliki biaya. `last_cost` dihapus; snapshot biaya transaksi tetap disimpan. Label UI untuk nilai produk adalah **Harga Modal**; form stok awal diberi nama **Stok Eksisting Toko**. Migration 000066. Tes backend terarah 113/113 (1.051 assertions) dan Pint lulus.

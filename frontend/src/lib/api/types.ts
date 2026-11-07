@@ -1169,7 +1169,6 @@ export interface PurchaseOrder extends PurchaseOrderSummary {
   receipts: Array<{
     id: number;
     doc_number: string;
-    status: GoodsReceiptStatus;
     document_status: GoodsReceiptDocumentStatus;
     posted_at: string | null;
   }>;
@@ -1192,7 +1191,6 @@ export interface PurchaseOrderInput {
   }>;
 }
 
-export type GoodsReceiptStatus = 'draft' | 'checked' | 'posted' | 'cancelled';
 export type GoodsReceiptDocumentStatus = 'pending' | 'verified';
 
 export interface GoodsReceiptLocation {
@@ -1211,7 +1209,6 @@ export interface GoodsReceiptSummary {
   supplier_name: string;
   receiving_location_id: number;
   receiving_location_name: string;
-  status: GoodsReceiptStatus;
   document_status: GoodsReceiptDocumentStatus;
   received_by_name: string;
   posted_at: string | null;
@@ -1253,6 +1250,7 @@ export interface GoodsReceipt extends GoodsReceiptSummary {
   supplier_id: number;
   delivery_note_no: string | null;
   invoice_no: string | null;
+  attachments_open: boolean;
   received_by: number;
   verified_by: number | null;
   verified_by_name: string | null;
@@ -1266,6 +1264,7 @@ export interface GoodsReceiptItemInput {
   po_item_id: number;
   qty_received: Decimal;
   qty_damaged?: Decimal;
+  qty_short?: Decimal;
   damage_disposition?: 'direct_return' | 'quarantine' | null;
   expiry_date?: string | null;
   batch_code?: string | null;

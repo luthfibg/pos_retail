@@ -14,13 +14,27 @@ describe('sidebar navigation', () => {
 
   it('keeps cashier pages visible to a cashier', () => {
     const permissions = new Set(['sales.create', 'shift.open']);
-    const groups = getVisibleNavGroups((permission) => permissions.has(permission), false);
+    const groups = getVisibleNavGroups((permission) => permissions.has(permission), false, undefined, ['Kasir']);
     const paths = groups.flatMap((group) => group.items.map((item) => item.to));
 
     expect(paths).toContain('/pos');
     expect(paths).toContain('/shift');
     expect(paths).toContain('/sales');
     expect(paths).not.toContain('/billing');
+  });
+
+  it('restricts goods receipt menu to cashiers, even when another role has the permission', () => {
+    const can = (permission: string) => permission === 'goods_receipt.create';
+    const cashierPaths = getVisibleNavGroups(can, false, undefined, ['Kasir'])
+      .flatMap((group) => group.items.map((item) => item.to));
+    const purchasingPaths = getVisibleNavGroups(can, false, undefined, ['Purchasing'])
+      .flatMap((group) => group.items.map((item) => item.to));
+    const adminPaths = getVisibleNavGroups(can, true, undefined, ['Admin'])
+      .flatMap((group) => group.items.map((item) => item.to));
+
+    expect(cashierPaths).toContain('/goods-receipts');
+    expect(purchasingPaths).not.toContain('/goods-receipts');
+    expect(adminPaths).not.toContain('/goods-receipts');
   });
 
   it('shows billing only to users with period or invoice access', () => {
@@ -60,7 +74,7 @@ describe('sidebar navigation', () => {
   });
 
   it('shift dibuka sebelum kasir dipakai dan penerimaan serta retur berada di grup Inventory', () => {
-    const groups = getVisibleNavGroups(() => true, false);
+    const groups = getVisibleNavGroups(() => true, false, undefined, ['Kasir']);
     const paths = groups.flatMap((group) => group.items.map((item) => item.to));
     expect(paths.indexOf('/shift')).toBeLessThan(paths.indexOf('/pos'));
     expect(paths.indexOf('/pos')).toBeLessThan(paths.indexOf('/sales'));

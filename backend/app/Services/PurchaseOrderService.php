@@ -57,6 +57,15 @@ class PurchaseOrderService
         if (! $manager || ! empty($filters['receivable'])) {
             $query->whereIn('po.status', self::RECEIVABLE);
         }
+        if (! empty($filters['receivable'])) {
+            $query->whereNotExists(function ($receiptQuery) {
+                $receiptQuery->selectRaw('1')
+                    ->from('goods_receipts as existing_gr')
+                    ->whereColumn('existing_gr.po_id', 'po.id')
+                    ->whereNull('existing_gr.supplier_return_id')
+                    ->where('existing_gr.status', '<>', 'cancelled');
+            });
+        }
 
         foreach (['status', 'receipt_status'] as $column) {
             if (! empty($filters[$column])) {
@@ -734,11 +743,10 @@ class PurchaseOrderService
         $accountNumber = $bank === null ? '' : (string) $bank->account_number;
 
         $receipts = DB::table('goods_receipts')->where('po_id', $id)->orderBy('id')
-            ->get(['id', 'doc_number', 'status', 'document_status', 'posted_at'])
+            ->get(['id', 'doc_number', 'document_status', 'posted_at'])
             ->map(fn ($row) => [
                 'id' => (int) $row->id,
                 'doc_number' => $row->doc_number,
-                'status' => $row->status,
                 'document_status' => $row->document_status,
                 'posted_at' => $row->posted_at,
             ])->all();

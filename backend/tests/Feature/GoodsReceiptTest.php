@@ -76,7 +76,6 @@ class GoodsReceiptTest extends SeededTestCase
 
         $response = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, [], ['delivery_note_no' => 'SJ-001', 'post' => true]))
             ->assertCreated()
-            ->assertJsonPath('data.status', 'posted')
             ->assertJsonPath('data.document_status', 'pending')
             ->assertJsonPath('data.items.0.qty_received', '10.000')
             ->assertJsonPath('data.items.0.unit_cost', null);          // Kasir tidak melihat harga beli
@@ -95,41 +94,98 @@ class GoodsReceiptTest extends SeededTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'goods_receipt.post', 'actor_id' => $this->cashier->id]);
     }
 
-    public function test_partial_receipts_complete_the_order_and_block_overreceipt(): void
+    public function test_final_receipt_calculates_received_quantity_closes_shortage_and_creates_return(): void
+    {
+        $p = $this->product(['track_expiry' => 1]);
+        [$po, $item] = $this->sentPo($p);
+
+        $response = $this->postJson('/api/goods-receipts', [
+            'po_id' => $po,
+            'complete_po' => true,
+            'post' => true,
+            'items' => [[
+                'po_item_id' => $item,
+                'qty_damaged' => '2',
+                'qty_short' => '1',
+                'expiry_date' => $this->today(60),
+            ]],
+        ])->assertCreated()
+            ->assertJsonPath('data.document_status', 'pending')
+            ->assertJsonPath('data.items.0.qty_received', '7.000')
+            ->assertJsonPath('data.items.0.qty_damaged', '2.000')
+            ->assertJsonPath('data.items.0.qty_short', '1.000');
+
+        $receiptId = (int) $response->json('data.id');
+        $returnId = (int) DB::table('supplier_returns')->where('goods_receipt_id', $receiptId)->value('id');
+        $this->assertGreaterThan(0, $returnId);
+        $this->assertDatabaseHas('supplier_returns', [
+            'id' => $returnId,
+            'return_type' => 'incoming',
+            'status' => 'draft',
+        ]);
+        $this->assertDatabaseHas('supplier_return_items', [
+            'supplier_return_id' => $returnId,
+            'goods_receipt_item_id' => $response->json('data.items.0.id'),
+            'qty' => '2.000',
+            'disposition' => 'quarantine',
+        ]);
+        $this->assertSame(7.0, $this->stock($p));
+        $this->assertSame(2.0, (float) DB::table('inventory_balances')->where('product_id', $p)->sum('qty_quarantine'));
+        $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
+        $this->assertSame('partial', DB::table('purchase_orders')->where('id', $po)->value('receipt_status'));
+        $this->assertSame(9.0, (float) DB::table('purchase_order_items')->where('id', $item)->value('qty_received'));
+        $this->assertSame(1, DB::table('goods_receipts')->where('po_id', $po)->whereNull('supplier_return_id')->count());
+
+        $this->postJson('/api/goods-receipts', [
+            'po_id' => $po,
+            'complete_po' => true,
+            'post' => true,
+            'items' => [['po_item_id' => $item, 'qty_damaged' => '0', 'qty_short' => '0']],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['po_id']);
+    }
+
+    public function test_final_receipt_without_damage_posts_once_and_hides_po_from_receivable_list(): void
     {
         $p = $this->product();
         [$po, $item] = $this->sentPo($p);
 
-        $first = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '4'], ['post' => true]))
-            ->assertCreated()->assertJsonPath('data.items.0.qty_short', '6.000');
-        $this->assertSame('partially_received', DB::table('purchase_orders')->where('id', $po)->value('status'));
-        $this->assertSame('partial', DB::table('purchase_orders')->where('id', $po)->value('receipt_status'));
+        $this->postJson('/api/goods-receipts', [
+            'po_id' => $po,
+            'complete_po' => true,
+            'post' => true,
+            'items' => [['po_item_id' => $item, 'qty_damaged' => '0', 'qty_short' => '3']],
+        ])->assertCreated()->assertJsonPath('data.items.0.qty_received', '7.000');
 
-        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '7']))
-            ->assertUnprocessable()->assertJsonValidationErrors(['items.0.qty_received']);
-
-        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '6'], ['post' => true]))->assertCreated();
+        $this->getJson('/api/purchase-orders?receivable=1')->assertOk()->assertJsonMissing(['doc_number' => DB::table('purchase_orders')->where('id', $po)->value('doc_number')]);
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
-        $this->assertSame(10.0, $this->stock($p));
-        $this->assertNotSame($first->json('data.id'), null);
-
-        // PO selesai tidak menerima lagi
-        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '1']))
-            ->assertUnprocessable()->assertJsonValidationErrors(['po_id']);
+        $this->assertSame(7.0, $this->stock($p));
+        $this->assertSame(0, DB::table('supplier_returns')->where('goods_receipt_id', DB::table('goods_receipts')->where('po_id', $po)->value('id'))->count());
     }
 
-    public function test_two_drafts_cannot_overreceive_at_posting(): void
+    public function test_a_po_cannot_receive_a_second_goods_receipt(): void
+    {
+        $p = $this->product();
+        [$po, $item] = $this->sentPo($p);
+
+        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '4'], ['post' => true]))
+            ->assertCreated()->assertJsonPath('data.items.0.qty_short', '6.000');
+        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '1']))
+            ->assertUnprocessable()->assertJsonValidationErrors(['po_id']);
+        $this->assertSame(1, DB::table('goods_receipts')->where('po_id', $po)->whereNull('supplier_return_id')->count());
+    }
+
+    public function test_only_one_receipt_draft_can_exist_for_a_po(): void
     {
         $p = $this->product();
         [$po, $item] = $this->sentPo($p);
 
         $one = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '8']))->assertCreated()->json('data.id');
-        $two = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '8']))->assertCreated()->json('data.id');
+        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '8']))
+            ->assertUnprocessable()->assertJsonValidationErrors(['po_id']);
 
-        $this->postJson("/api/goods-receipts/{$one}/post")->assertOk()->assertJsonPath('data.status', 'posted');
-        $this->postJson("/api/goods-receipts/{$two}/post")->assertUnprocessable()->assertJsonValidationErrors(['items']);
+        $this->postJson("/api/goods-receipts/{$one}/post")->assertOk();
 
-        $this->assertSame('draft', DB::table('goods_receipts')->where('id', $two)->value('status'));
+        $this->assertSame('posted', DB::table('goods_receipts')->where('id', $one)->value('status'));
         $this->assertSame(8.0, $this->stock($p));
     }
 
@@ -318,13 +374,15 @@ class GoodsReceiptTest extends SeededTestCase
     public function test_unit_cost_defaults_to_po_price_and_only_verifier_may_override(): void
     {
         $p = $this->product();
-        [$po, $item] = $this->sentPo($p);
+        [$cashierPo, $cashierItem] = $this->sentPo($p);
+        [$adminPo, $adminItem] = $this->sentPo($p);
 
-        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['unit_cost' => '2500']))->assertForbidden();
-        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['unit_cost' => '2000', 'qty_received' => '4']))->assertCreated();
+        $this->postJson('/api/goods-receipts', $this->receipt($cashierPo, $cashierItem, ['unit_cost' => '2500'], ['complete_po' => true]))->assertForbidden();
 
         $this->actAsAdmin();
-        $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['unit_cost' => '2500', 'qty_received' => '6'], ['post' => true]))
+        $this->postJson('/api/goods-receipts', $this->receipt($cashierPo, $cashierItem, [], ['complete_po' => true]))
+            ->assertCreated()->assertJsonPath('data.items.0.unit_cost', '2000.00');
+        $this->postJson('/api/goods-receipts', $this->receipt($adminPo, $adminItem, ['unit_cost' => '2500'], ['complete_po' => true]))
             ->assertCreated()
             ->assertJsonPath('data.items.0.unit_cost', '2500.00')
             ->assertJsonPath('data.items.0.po_unit_price', '2000.00')
@@ -370,7 +428,6 @@ class GoodsReceiptTest extends SeededTestCase
 
         $response = $this->postJson('/api/goods-receipts', $warehouseReceipt)
             ->assertCreated()
-            ->assertJsonPath('data.status', 'posted')
             ->assertJsonPath('data.receiving_location_id', $warehouseId)
             ->assertJsonPath('data.receiving_location_name', 'Gudang')
             ->assertJsonPath('data.items.0.shelf_position_id', $positionId);
@@ -544,7 +601,7 @@ class GoodsReceiptTest extends SeededTestCase
         $this->getJson("/api/goods-receipts/{$draft}")->assertNotFound();
 
         Sanctum::actingAs($this->cashier, ['*']);
-        $this->postJson("/api/goods-receipts/{$draft}/cancel", ['reason' => 'salah hitung'])->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $this->postJson("/api/goods-receipts/{$draft}/cancel", ['reason' => 'salah hitung'])->assertOk()->assertJsonMissingPath('data.status');
         $this->postJson("/api/goods-receipts/{$draft}/post")->assertUnprocessable()->assertJsonValidationErrors(['status']);
 
         $posted = $this->postJson('/api/goods-receipts', $this->receipt($po, $item, ['qty_received' => '3'], ['post' => true]))->assertCreated()->json('data.id');
@@ -605,7 +662,7 @@ class GoodsReceiptTest extends SeededTestCase
         $this->postJson('/api/goods-receipts', [
             'po_id' => $po, 'delivery_note_no' => 'SJ-77', 'post' => true,
             'items' => [['po_item_id' => $poItem, 'qty_received' => '12']],
-        ])->assertCreated()->assertJsonPath('data.status', 'posted');
+        ])->assertCreated();
 
         $this->assertSame(12.0, $this->stock($p));
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
