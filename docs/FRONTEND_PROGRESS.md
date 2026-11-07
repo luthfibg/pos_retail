@@ -38,7 +38,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | Route | Layar | Izin | Bagian `BACKEND_PROGRESS` | Status | Catatan |
 |---|---|---|---|---|---|
 | `/login` | Login | — | HANDOFF 6 | ✅ | Throttle 429 ditangani |
-| (layout) | Sidebar: menu Kasir/Kasir Jaga Saya disembunyikan untuk Admin; kelompok menu abu tipis dan submenu putih; workspace kanan yang dapat discroll | permission | — | 🟡 | Sidebar tetap di viewport; menunggu verifikasi browser |
+| (layout) | Sidebar: menu Kasir/Kasir Jaga Saya disembunyikan untuk Admin; Produk berada di grup Inventory; kelompok menu abu tipis dan submenu putih; workspace kanan yang dapat discroll | permission | — | 🟡 | Sidebar tetap di viewport; menunggu verifikasi browser |
 | `/pos` | **Kasir**: scan/cari produk, keranjang, tunai dan kredit potong gaji, pemilih karyawan, konfirmasi, struk cetak, pengecualian kredit Admin | `sales.create` | 4, 5 | 🟡 | Integrasi pratinjau FR-01 selesai; uji klik integrasi terbaru menunggu pengguna |
 | `/shift` | Kasir Jaga Saya: buka, mulai hitung, tutup (hitung buta), catat kas masuk/keluar, setoran parsial dan serahkan setoran akhir | `shift.open`, `cash_deposit.create`, `cash_movement.create` | 4, 7 | 🟡 | UI parsial baru dibuat; menunggu verifikasi browser |
 | `/shifts` | Laporan Kasir Jaga (Admin) | `shift.review` | 4 | ✅ | Tombol tindakan memakai istilah "Periksa" |

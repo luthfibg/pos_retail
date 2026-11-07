@@ -21,10 +21,10 @@ export interface NavGroup {
  *
  *  1. Dashboard      beranda: ringkasan penjualan, kas, dan stok
  *  2. Pembelian      Permintaan -> pemeriksaan Finance -> otorisasi Owner saat PO
- *  3. Inventory      penerimaan/retur -> stok eksisting toko -> transfer/putaway -> adjustment & opname -> pergerakan stok
+ *  3. Inventory      produk -> penerimaan/retur -> stok eksisting toko -> transfer/putaway -> adjustment & opname -> pergerakan stok
  *  4. Penjualan      buka kasir jaga -> jual di kasir -> koreksi/cetak ulang struk
  *  5. Keuangan       periksa kasir jaga -> terima setoran -> tagih HRD
- *  6. Data Master    kategori -> produk -> supplier -> karyawan (pembeli kredit)
+ *  6. Data Master    kategori -> supplier -> karyawan (pembeli kredit)
  *  7. Pengaturan     satu layar untuk semua konfigurasi
  *
  * Item disaring berdasarkan permission atau role dari /auth/me, jadi setiap role hanya melihat menunya sendiri.
@@ -54,6 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Inventory',
     items: [
+      { to: '/products', label: 'Produk', permission: 'inventory.view' },
       { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create' },
       { to: '/supplier-returns', label: 'Retur Barang', permission: ['supplier_return.create', 'inventory.adjust.approve'] },
       { to: '/inventory/opening', label: 'Stok Eksisting Toko', permission: 'inventory.opening_balance' },
@@ -83,7 +84,6 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Data Master',
     items: [
       { to: '/categories', label: 'Kategori', permission: 'category.manage' },
-      { to: '/products', label: 'Produk', permission: 'inventory.view' },
       { to: '/suppliers', label: 'Supplier', permission: 'supplier.manage' },
       { to: '/customers', label: 'Karyawan', permission: 'customer.select' },
     ],
