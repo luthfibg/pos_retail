@@ -1192,6 +1192,7 @@ export interface PurchaseOrderInput {
 }
 
 export type GoodsReceiptDocumentStatus = 'pending' | 'verified';
+export type GoodsReceiptStatus = 'draft' | 'checked' | 'posted' | 'cancelled';
 
 export interface GoodsReceiptLocation {
   id: number;
@@ -1206,6 +1207,7 @@ export interface GoodsReceiptSummary {
   po_doc_number: string;
   supplier_return_id: number | null;
   supplier_return_doc_number: string | null;
+  status: GoodsReceiptStatus;
   supplier_name: string;
   receiving_location_id: number;
   receiving_location_name: string;

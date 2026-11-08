@@ -6,6 +6,7 @@ import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
+import { useAuth } from '@/features/auth/AuthProvider';
 import { goodsReceiptApi, productApi, purchaseOrderApi } from '@/lib/api/endpoints';
 import type { GoodsReceipt, PurchaseOrderItem } from '@/lib/api/types';
 import { formatDate, formatDateTime, formatQty, formatRupiah } from '@/lib/format';
@@ -146,7 +147,7 @@ export function GoodsReceiptsPage() {
                   <tr>
                     <th className="px-3 py-2">PO / Supplier</th>
                     <th className="px-3 py-2">Nomor GR</th>
-                    <th className="px-3 py-2">Dibuat oleh</th>
+                    <th className="px-3 py-2">Nama Kasir</th>
                     <th className="px-3 py-2">Aksi</th>
                   </tr>
                 </thead>
@@ -156,7 +157,7 @@ export function GoodsReceiptsPage() {
                       <td className="px-3 py-2">{receipt.po_doc_number}<div className="text-xs text-slate-500">{receipt.supplier_name}{receipt.supplier_return_doc_number ? ` · Pengganti ${receipt.supplier_return_doc_number}` : ''}</div></td>
                       <td className="px-3 py-2 font-mono font-medium">{receipt.doc_number}</td>
                       <td className="px-3 py-2">{receipt.received_by_name}</td>
-                      <td className="px-3 py-2"><button type="button" onClick={() => setSelectedReceiptId(receipt.id)} className="font-medium text-blue-700 hover:underline">Periksa Dokumen</button></td>
+                      <td className="px-3 py-2"><button type="button" onClick={() => setSelectedReceiptId(receipt.id)} className="font-medium text-blue-700 hover:underline">Detail / Proses</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -339,8 +340,10 @@ function GoodsReceiptDetailDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { can } = useAuth();
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentError, setAttachmentError] = useState('');
+  const [confirmPosting, setConfirmPosting] = useState(false);
   const attachmentInput = useRef<HTMLInputElement>(null);
   const detail = useQuery({ queryKey: ['goods-receipt', receiptId], queryFn: () => goodsReceiptApi.get(receiptId) });
   const receipt = detail.data;
@@ -373,8 +376,22 @@ function GoodsReceiptDetailDialog({
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
   });
-  const mutationError = upload.error ?? download.error;
-  const saving = upload.isPending || download.isPending;
+  const postReceipt = useMutation({
+    mutationFn: () => goodsReceiptApi.post(receiptId),
+    onSuccess: async () => {
+      setConfirmPosting(false);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['goods-receipt', receiptId] }),
+        qc.invalidateQueries({ queryKey: ['goods-receipts'] }),
+        qc.invalidateQueries({ queryKey: ['purchase-orders'] }),
+        qc.invalidateQueries({ queryKey: ['purchase-requisitions'] }),
+      ]);
+    },
+  });
+  const mutationError = upload.error ?? download.error ?? postReceipt.error;
+  const saving = upload.isPending || download.isPending || postReceipt.isPending;
+  const canPost = (receipt?.status === 'draft' || receipt?.status === 'checked')
+    && can('goods_receipt.create');
 
   return (
     <Modal title="Detail penerimaan" onClose={() => !saving && onClose()}>
@@ -387,7 +404,7 @@ function GoodsReceiptDetailDialog({
             <Detail label="Nomor GR" value={receipt.doc_number} />
             <Detail label="Nomor PO" value={receipt.po_doc_number} />
             <Detail label="Supplier" value={receipt.supplier_name} />
-            <Detail label="Dibuat oleh" value={receipt.received_by_name} />
+            <Detail label="Nama Kasir" value={receipt.received_by_name} />
           </div>
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <Detail label="Surat jalan" value={receipt.delivery_note_no || 'Belum dicatat'} />
@@ -412,6 +429,23 @@ function GoodsReceiptDetailDialog({
             </table>
           </div>
           {receipt.note && <p className="rounded-md bg-slate-50 p-3 text-sm">Catatan: {receipt.note}</p>}
+          {canPost && (
+            <section className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
+              <p className="text-sm">GR ini masih draft. Posting akan menambahkan jumlah diterima ke stok dan memperbarui PO.</p>
+              {confirmPosting ? (
+                <div className="flex justify-end gap-2">
+                  <button type="button" disabled={postReceipt.isPending} onClick={() => setConfirmPosting(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
+                  <button type="button" disabled={postReceipt.isPending} onClick={() => postReceipt.mutate()} className="rounded-md bg-amber-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+                    {postReceipt.isPending ? 'Memposting…' : 'Konfirmasi posting'}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => setConfirmPosting(true)} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Posting ke stok</button>
+                </div>
+              )}
+            </section>
+          )}
             <section className="space-y-3 rounded-md border border-slate-200 p-3">
               <div>
                 <h3 className="text-sm font-semibold">Lampiran dokumen</h3>

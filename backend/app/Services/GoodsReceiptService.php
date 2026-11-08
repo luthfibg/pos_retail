@@ -61,10 +61,6 @@ class GoodsReceiptService
             ->where('gr.store_id', $storeId)
             ->select('gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'u.name as received_by_name', 'l.name as receiving_location_name', 'sr.doc_number as supplier_return_doc_number');
 
-        if (! $this->canVerify($user, $storeId)) {
-            $query->where('gr.received_by', $user->id);
-        }
-
         foreach (['status', 'document_status'] as $column) {
             if (! empty($filters[$column])) {
                 $query->where("gr.{$column}", $filters[$column]);
@@ -87,6 +83,7 @@ class GoodsReceiptService
             'po_doc_number' => $row->po_doc_number,
             'supplier_return_id' => $row->supplier_return_id === null ? null : (int) $row->supplier_return_id,
             'supplier_return_doc_number' => $row->supplier_return_doc_number,
+            'status' => $row->status,
             'supplier_name' => $row->supplier_name,
             'receiving_location_id' => (int) $row->receiving_location_id,
             'receiving_location_name' => $row->receiving_location_name,
@@ -119,17 +116,7 @@ class GoodsReceiptService
     /** @return array<string, mixed>|null */
     public function find(User $user, int $storeId, int $id): ?array
     {
-        $detail = $this->load($storeId, $id, $this->canVerify($user, $storeId));
-
-        if ($detail === null) {
-            return null;
-        }
-
-        if (! $this->canVerify($user, $storeId) && $detail['received_by'] !== $user->id) {
-            return null;
-        }
-
-        return $detail;
+        return $this->load($storeId, $id, $this->canVerify($user, $storeId));
     }
 
     // ------------------------------------------------------------------ tulis
@@ -366,7 +353,7 @@ class GoodsReceiptService
     {
         $outcome = DB::transaction(function () use ($actor, $storeId, $id) {
             $gr = $this->lock($storeId, $id);
-            $this->assertAccess($actor, $storeId, $gr);
+            $this->assertCanPost($actor, $storeId, $gr);
 
             if (! in_array($gr->status, ['draft', 'checked'], true)) {
                 throw ValidationException::withMessages(['status' => ['Penerimaan ini sudah diposting atau dibatalkan.']]);
@@ -511,12 +498,6 @@ class GoodsReceiptService
                 }
             }
 
-            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
-                $actor,
-                $storeId,
-                $items->pluck('product_id')->map(fn ($productId) => (int) $productId)->unique()->values()->all(),
-            );
-
             // Replacement GRs replenish returned stock but do not fulfill the original PO again.
             if ($isReplacementReceipt) {
                 foreach ($replacementBatches as $returnItemId => $batchId) {
@@ -581,6 +562,12 @@ class GoodsReceiptService
                     DB::table('purchase_orders')->where('id', $po->id)->update(['status' => $poStatus, 'receipt_status' => $receiptStatus]);
                 }
             }
+
+            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
+                $actor,
+                $storeId,
+                $items->pluck('product_id')->map(fn ($productId) => (int) $productId)->unique()->values()->all(),
+            );
 
             DB::table('goods_receipts')->where('id', $id)->update(['status' => 'posted', 'posted_at' => $this->nowUtc()]);
 
@@ -717,6 +704,16 @@ class GoodsReceiptService
             (int) $gr->received_by === $actor->id || $this->canVerify($actor, $storeId),
             403,
             'Anda tidak berwenang mengelola penerimaan ini.',
+        );
+    }
+
+    private function assertCanPost(User $actor, int $storeId, object $gr): void
+    {
+        abort_unless(
+            (int) $gr->received_by === $actor->id
+                || $this->permissions->allows($actor, 'goods_receipt.create', $storeId),
+            403,
+            'Anda tidak berwenang memposting penerimaan ini.',
         );
     }
 
@@ -1008,6 +1005,7 @@ class GoodsReceiptService
             'supplier_return_doc_number' => $gr->supplier_return_doc_number,
             'supplier_id' => (int) $gr->supplier_id,
             'supplier_name' => $gr->supplier_name,
+            'status' => $gr->status,
             'delivery_note_no' => $gr->delivery_note_no,
             'invoice_no' => $gr->invoice_no,
             'receiving_location_id' => (int) $gr->receiving_location_id,

@@ -33,7 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('purchase-orders/{po}/cancel', [PurchaseOrderController::class, 'cancel'])->whereNumber('po')->middleware('can:purchase_order.create');
     Route::post('purchase-orders/{po}/close', [PurchaseOrderController::class, 'close'])->whereNumber('po')->middleware('can:purchase_order.create');
 
-    // Penerimaan barang. Kasir hanya melihat/mengelola penerimaannya sendiri (dicek di service).
+    // Penerimaan barang. Daftar dan detail mencakup semua GR dalam toko; perubahan tetap dibatasi di service.
     Route::get('goods-receipts', [GoodsReceiptController::class, 'index'])->middleware('can.any:goods_receipt.create,goods_receipt.verify_documents');
     Route::get('goods-receipts/receiving-locations', [GoodsReceiptController::class, 'receivingLocations'])
         ->middleware('can:goods_receipt.create');
