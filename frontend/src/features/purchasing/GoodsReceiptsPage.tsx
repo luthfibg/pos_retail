@@ -196,7 +196,6 @@ function CreateGoodsReceiptDialog({
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<GoodsReceiptLineForm[]>([]);
   const [lineErrors, setLineErrors] = useState<GoodsReceiptLineErrorMap>({});
-  const [confirming, setConfirming] = useState(false);
   const initialized = useRef(false);
   const po = useQuery({ queryKey: ['purchase-order', poId], queryFn: () => purchaseOrderApi.get(poId) });
   const expiryQueries = useQueries({
@@ -236,17 +235,18 @@ function CreateGoodsReceiptDialog({
         qc.invalidateQueries({ queryKey: ['goods-receipts'] }),
         qc.invalidateQueries({ queryKey: ['purchase-orders', 'receivable'] }),
         qc.invalidateQueries({ queryKey: ['purchase-order', poId] }),
+        qc.invalidateQueries({ queryKey: ['supplier-returns'] }),
       ]);
       onCreated(receipt);
     },
   });
 
-  function review(event: FormEvent) {
+  function submitReceipt(event: FormEvent) {
     event.preventDefault();
     create.reset();
     const errors = po.data ? validateGoodsReceiptLines(po.data.items, lines, tracksExpiry, todayWib()) : {};
     setLineErrors(errors);
-    if (po.data && Object.keys(errors).length === 0 && !expiryLoading && !expiryError) setConfirming(true);
+    if (po.data && Object.keys(errors).length === 0 && !expiryLoading && !expiryError) create.mutate();
   }
 
   function updateLine(id: string, key: keyof GoodsReceiptLineForm, value: string) {
@@ -262,7 +262,7 @@ function CreateGoodsReceiptDialog({
   return (
     <Modal title="Terima PO" onClose={() => !create.isPending && onClose()}>
       {po.isLoading ? <p className="p-5 text-sm text-slate-500">Memuat detail PO…</p> : po.error ? <div className="space-y-3 p-5"><ErrorNotice error={po.error} /></div> : po.data ? (
-        <form onSubmit={review} noValidate className="space-y-4 p-5">
+        <form onSubmit={submitReceipt} noValidate className="space-y-4 p-5">
           <div className="rounded-md bg-slate-50 p-3 text-sm">
             <div className="font-mono font-semibold">{po.data.doc_number}</div>
             <div>{po.data.supplier_name} · {po.data.status === 'approved' ? 'Disetujui' : po.data.status === 'partially_received' ? 'Sebagian diterima' : 'Dikirim'}</div>
@@ -312,20 +312,10 @@ function CreateGoodsReceiptDialog({
             <textarea className={inputCls} rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
           </Field>
           <ErrorNotice error={create.error} />
-          {confirming && (
-            <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
-              <div className="flex justify-end gap-2">
-                <button type="button" disabled={create.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2">Periksa lagi</button>
-                <button type="button" disabled={create.isPending || expiryLoading || Boolean(expiryError)} onClick={() => create.mutate()} className="rounded-md bg-slate-900 px-3 py-2 font-medium text-white disabled:opacity-60">{create.isPending ? 'Menyimpan…' : 'Konfirmasi penerimaan'}</button>
-              </div>
-            </div>
-          )}
-          {!confirming && (
-            <div className="flex justify-end gap-2">
-              <button type="button" disabled={create.isPending} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-              <button type="submit" disabled={lines.length === 0 || expiryLoading || Boolean(expiryError) || create.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{expiryLoading ? 'Memuat produk…' : 'Periksa penerimaan'}</button>
-            </div>
-          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" disabled={create.isPending} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
+            <button type="submit" disabled={lines.length === 0 || expiryLoading || Boolean(expiryError) || create.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{create.isPending ? 'Memproses…' : expiryLoading ? 'Memuat produk…' : 'Konfirmasi penerimaan'}</button>
+          </div>
         </form>
       ) : null}
     </Modal>

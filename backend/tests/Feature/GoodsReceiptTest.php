@@ -60,6 +60,7 @@ class GoodsReceiptTest extends SeededTestCase
             ])->all(),
         ])->assertCreated()
             ->assertJsonPath('data.return_type', 'incoming')
+            ->assertJsonPath('data.is_auto_generated', false)
             ->json('data.id');
 
         $this->postJson("/api/supplier-returns/{$returnId}/submit")
@@ -121,6 +122,7 @@ class GoodsReceiptTest extends SeededTestCase
         $this->assertDatabaseHas('supplier_returns', [
             'id' => $returnId,
             'return_type' => 'incoming',
+            'is_auto_generated' => 1,
             'status' => 'draft',
         ]);
         $this->assertDatabaseHas('supplier_return_items', [
@@ -129,6 +131,10 @@ class GoodsReceiptTest extends SeededTestCase
             'qty' => '2.000',
             'disposition' => 'quarantine',
         ]);
+        $this->actAsAdmin();
+        $this->getJson('/api/supplier-returns')
+            ->assertOk()
+            ->assertJsonPath('data.0.is_auto_generated', true);
         $this->assertSame(7.0, $this->stock($p));
         $this->assertSame(2.0, (float) DB::table('inventory_balances')->where('product_id', $p)->sum('qty_quarantine'));
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
@@ -158,6 +164,8 @@ class GoodsReceiptTest extends SeededTestCase
 
         $this->getJson('/api/purchase-orders?receivable=1')->assertOk()->assertJsonMissing(['doc_number' => DB::table('purchase_orders')->where('id', $po)->value('doc_number')]);
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
+        $receiptId = (int) DB::table('goods_receipts')->where('po_id', $po)->value('id');
+        $this->assertSame(0, DB::table('supplier_returns')->where('goods_receipt_id', $receiptId)->count());
         $this->assertSame(7.0, $this->stock($p));
         $this->assertSame(0, DB::table('supplier_returns')->where('goods_receipt_id', DB::table('goods_receipts')->where('po_id', $po)->value('id'))->count());
     }

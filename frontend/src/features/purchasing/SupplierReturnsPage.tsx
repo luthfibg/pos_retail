@@ -166,7 +166,10 @@ export function SupplierReturnsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {pageItems.map((item) => (
                     <tr key={item.id}>
-                      <td className="px-3 py-2 font-mono font-medium">{item.doc_number}</td>
+                      <td className="px-3 py-2 font-mono font-medium">
+                        {item.doc_number}
+                        {item.is_auto_generated && item.status === 'draft' && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 font-sans text-xs font-medium text-blue-800">Retur baru</span>}
+                      </td>
                       <td className="px-3 py-2">{item.supplier_name}</td>
                       <td className="px-3 py-2">{STATUS_LABEL[item.status]}</td>
                       <td className="px-3 py-2">{item.requested_by_name}</td>
@@ -599,6 +602,7 @@ function SupplierReturnDetailDialog({
             <div className="grid gap-2 text-sm sm:grid-cols-2">
               <p><span className="text-slate-500">Supplier:</span> {returnDoc.supplier_name}</p>
               <p><span className="text-slate-500">Status:</span> {STATUS_LABEL[returnDoc.status]}</p>
+              {returnDoc.is_auto_generated && returnDoc.status === 'draft' && <p><span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Retur baru</span></p>}
               {returnDoc.goods_receipt_doc_number && <p><span className="text-slate-500">GR asal:</span> {returnDoc.goods_receipt_doc_number}</p>}
               {returnDoc.invoice_no && <p><span className="text-slate-500">Faktur supplier:</span> {returnDoc.invoice_no}</p>}
               <p><span className="text-slate-500">Pemohon:</span> {returnDoc.requested_by_name}</p>

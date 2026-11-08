@@ -676,6 +676,7 @@ export interface SupplierReturnSummary {
   supplier_id: number;
   supplier_name: string;
   goods_receipt_id: number | null;
+  is_auto_generated: boolean;
   goods_receipt_doc_number: string | null;
   invoice_no: string | null;
   status: SupplierReturnStatus;
