@@ -128,7 +128,7 @@ export function GoodsReceiptsPage() {
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-semibold">Riwayat penerimaan</h2>
+            <h2 className="font-semibold">Terima</h2>
           </div>
           <form onSubmit={applyReceiptSearch} className="flex gap-2">
             <label className="sr-only" htmlFor="receipt-search">Cari nomor penerimaan</label>

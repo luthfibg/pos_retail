@@ -67,24 +67,20 @@ export function PartialDepositsPanel({ shift, hasDraft, checkingDraft }: { shift
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
       <div>
         <h2 className="font-semibold">Setoran parsial</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Buat saat kasir jaga berjalan untuk menyetor sebagian kas. Sistem menghitung jumlah setoran sesuai kebijakan endapan aktif.
-        </p>
       </div>
 
       <form onSubmit={review} noValidate className="grid gap-3 rounded-md bg-slate-50 p-4 sm:grid-cols-2">
         <div className="sm:col-span-2"><ErrorNotice error={create.error} /></div>
-        <Field label="Uang terhitung di laci (Rp)" error={errors.amount} hint="Masukkan hasil hitung kas saat ini, tanpa pemisah ribuan.">
+        <Field label="Uang terhitung di laci (Rp)" error={errors.amount}>
           <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.amount} onChange={(event) => update('amount', event.target.value)} />
         </Field>
-        <Field label="Catatan (opsional)" error={errors.note} hint="Maksimal 500 karakter.">
+        <Field label="Catatan (opsional)" error={errors.note}>
           <input className={inputCls} maxLength={500} value={values.note} onChange={(event) => update('note', event.target.value)} />
         </Field>
         <div className="sm:col-span-2">
           <button type="submit" disabled={create.isPending || hasDraft || checkingDraft} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
             Buat Draft setoran parsial
           </button>
-          {hasDraft && <p className="text-xs text-amber-800 sm:col-span-2">Selesaikan Draft parsial yang ada dengan menyerahkan atau membatalkannya sebelum membuat setoran baru.</p>}
         </div>
       </form>
 
@@ -116,9 +112,6 @@ export function PartialDepositsPanel({ shift, hasDraft, checkingDraft }: { shift
       {confirmCreate && (
         <Modal title="Buat Draft setoran parsial?" onClose={() => !create.isPending && setConfirmCreate(false)}>
           <div className="space-y-2 p-5 text-sm">
-            <p>Hitungan kas yang akan dipakai untuk menghitung setoran: <strong>{formatRupiah(values.amount.replace(',', '.'))}</strong>.</p>
-            <p>Draft belum memindahkan saldo. Serahkan uang dan catat penyerahan agar kas yang diharapkan pada kasir jaga diperbarui.</p>
-            <p className="text-amber-800">Satu Draft setoran parsial sekaligus. Kasir jaga tidak dapat ditutup sebelum Draft diserahkan atau dibatalkan.</p>
             <ErrorNotice error={create.error} />
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
@@ -172,14 +165,6 @@ function PartialDepositRow({ deposit, shift }: { deposit: CashDeposit; shift: Sh
       {action && (
         <Modal title={action === 'submit' ? 'Serahkan setoran parsial?' : 'Batalkan Draft setoran?'} onClose={() => !mutation.isPending && setAction(null)}>
           <div className="space-y-2 p-5 text-sm">
-            {action === 'submit' ? (
-              <>
-                <p>Pastikan uang sebesar <strong>{formatRupiah(deposit.deposit_amount)}</strong> diserahkan kepada Finance.</p>
-                <p>Setelah diserahkan, setoran mengurangi kas yang diharapkan pada kasir jaga dan tidak dapat dibatalkan.</p>
-              </>
-            ) : (
-              <p>Draft ini belum mengubah saldo. Pembatalan menghapus Draft dan membuka kemungkinan membuat setoran baru.</p>
-            )}
             <ErrorNotice error={mutation.error} />
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">

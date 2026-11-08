@@ -67,7 +67,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Penjualan',
     items: [
-      { to: '/shift', label: 'Kasir Jaga Saya', permission: 'shift.open', cashierOnly: true },
+      { to: '/shift', label: 'Kasir Jaga', permission: 'shift.open', cashierOnly: true },
       { to: '/pos', label: 'Kasir', permission: 'sales.create', cashierOnly: true },
       { to: '/sales', label: 'Penjualan', permission: 'sales.create' },
     ],

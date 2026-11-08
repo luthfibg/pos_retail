@@ -9,7 +9,6 @@ import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { formatDateTime, formatRupiah } from '@/lib/format';
-import { normalizeDecimal } from '@/features/products/productForm';
 import { buildCashMovementInput, validateCashMovement, type CashMovementErrors, type CashMovementFormValues } from './cashMovementForm';
 
 const EMPTY_FORM: CashMovementFormValues = { type: 'in', amount: '', reason: '' };
@@ -68,9 +67,6 @@ export function CashMovementsPanel({ shift }: { shift: Shift }) {
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
       <div>
         <h2 className="font-semibold">Kas masuk/keluar nonpenjualan</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Catat perubahan kas selain transaksi penjualan. Catatan yang sudah disimpan tidak dapat dihapus; koreksi dengan pergerakan berlawanan dan keterangan yang jelas.
-        </p>
       </div>
 
       {shift.status === 'open' ? (
@@ -82,11 +78,11 @@ export function CashMovementsPanel({ shift }: { shift: Shift }) {
               <option value="out">Kas keluar</option>
             </select>
           </Field>
-          <Field label="Nominal (Rp)" error={errors.amount ?? serverErrors.amount?.[0]} hint="Tanpa pemisah ribuan, mis. 50000 atau 50000,50.">
+          <Field label="Nominal (Rp)" error={errors.amount ?? serverErrors.amount?.[0]}>
             <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.amount} onChange={(event) => update('amount', event.target.value)} />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Keterangan" error={errors.reason ?? serverErrors.reason?.[0]} hint="Wajib, maksimal 255 karakter.">
+            <Field label="Keterangan" error={errors.reason ?? serverErrors.reason?.[0]}>
               <input className={inputCls} maxLength={255} value={values.reason} onChange={(event) => update('reason', event.target.value)} />
             </Field>
           </div>
@@ -96,11 +92,7 @@ export function CashMovementsPanel({ shift }: { shift: Shift }) {
             </button>
           </div>
         </form>
-      ) : (
-        <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-          Pencatatan kas hanya tersedia selama kasir jaga berstatus Berjalan. Riwayat di bawah tetap dapat dilihat.
-        </p>
-      )}
+      ) : null}
 
       <ErrorNotice error={query.error} />
       {query.isLoading ? (
@@ -139,9 +131,6 @@ export function CashMovementsPanel({ shift }: { shift: Shift }) {
       {confirming && (
         <Modal title={`Konfirmasi ${TYPE_LABEL[values.type].toLowerCase()}`} onClose={() => !mutation.isPending && setConfirming(false)}>
           <div className="space-y-2 p-5 text-sm">
-            <p>{TYPE_LABEL[values.type]} sebesar <strong>{formatRupiah(normalizeDecimal(values.amount))}</strong>.</p>
-            <p>Keterangan: <span className="whitespace-pre-wrap">{values.reason.trim()}</span></p>
-            <p className="text-amber-800">Pencatatan tidak dapat dihapus atau diedit. Jika salah, catat pergerakan berlawanan sebagai koreksi.</p>
             <ErrorNotice error={mutation.error} />
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">

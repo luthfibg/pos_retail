@@ -168,6 +168,136 @@ class PurchaseOrderTest extends SeededTestCase
             ->assertOk()->assertJsonPath('data.items.0.qty_available', '10.000');
     }
 
+    public function test_cancelled_po_releases_the_original_auto_pr_for_reuse_without_creating_a_duplicate(): void
+    {
+        $p = $this->product(['restock_quantity' => '5.000', 'unit_cost' => '2000.00']);
+        $pr = $this->pr($this->cashier->id, [$p => ['10', '2000']], 'converted');
+        DB::table('purchase_requisitions')->where('id', $pr)->update(['is_auto_generated' => 1]);
+        $po = $this->po($pr, $this->supplier(), [$p => ['10', '2000']], 'sent');
+        $this->setSetting('inventory_low_stock_threshold', '3.000');
+
+        $this->postJson("/api/purchase-orders/{$po}/cancel", ['reason' => 'Uji pembatalan PO'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'cancelled');
+
+        $this->assertSame('approved', DB::table('purchase_requisitions')->where('id', $pr)->value('status'));
+        $this->assertSame(1, DB::table('purchase_requisitions')->where('is_auto_generated', 1)->count());
+        $this->getJson("/api/purchase-requisitions/{$pr}/purchase-order-items")
+            ->assertOk()
+            ->assertJsonPath('data.items.0.qty_available', '10.000');
+    }
+
+    public function test_admin_can_preview_and_reset_active_po_workflows_without_deleting_history(): void
+    {
+        $admin = $this->actAsAdmin();
+        $supplier = $this->supplier();
+        $oldProduct = $this->product(['restock_quantity' => '5.000', 'unit_cost' => '2000.00']);
+        $cancelProduct = $this->product(['restock_quantity' => '5.000', 'unit_cost' => '2000.00']);
+        $partialProduct = $this->product(['restock_quantity' => '5.000', 'unit_cost' => '2000.00']);
+        $oldPr = $this->pr($this->cashier->id, [$oldProduct => ['10', '2000']], 'converted');
+        $cancelPr = $this->pr($this->cashier->id, [$cancelProduct => ['10', '2000']], 'converted');
+        $partialPr = $this->pr($this->cashier->id, [$partialProduct => ['10', '2000']], 'converted');
+        DB::table('purchase_requisitions')->whereIn('id', [$oldPr, $cancelPr, $partialPr])->update(['is_auto_generated' => 1]);
+        $oldPo = $this->po($oldPr, $supplier, [$oldProduct => ['10', '2000']], 'sent');
+        $cancelPo = $this->po($cancelPr, $supplier, [$cancelProduct => ['10', '2000']], 'sent');
+        $partialPo = $this->po($partialPr, $supplier, [$partialProduct => ['10', '2000']], 'partially_received');
+        DB::table('purchase_orders')->where('id', $oldPo)->update(['created_at' => now()->subDays(40)]);
+
+        $locationId = (int) DB::table('locations')->where('store_id', $this->storeId())->value('id');
+        $draftReceipt = DB::table('goods_receipts')->insertGetId([
+            'store_id' => $this->storeId(),
+            'doc_number' => 'GR-RESET-DRAFT',
+            'po_id' => $cancelPo,
+            'supplier_id' => $supplier,
+            'receiving_location_id' => $locationId,
+            'received_by' => $admin->id,
+            'status' => 'draft',
+        ]);
+        DB::table('purchase_order_items')->where('po_id', $partialPo)->update(['qty_received' => '4.000']);
+        $postedReceipt = DB::table('goods_receipts')->insertGetId([
+            'store_id' => $this->storeId(),
+            'doc_number' => 'GR-RESET-POSTED',
+            'po_id' => $partialPo,
+            'supplier_id' => $supplier,
+            'receiving_location_id' => $locationId,
+            'received_by' => $admin->id,
+            'status' => 'posted',
+            'posted_at' => now(),
+        ]);
+
+        $preview = $this->postJson('/api/settings/inventory/stock-monitoring/purchase-order-reset/preview', ['period' => 'week'])->assertOk();
+        $this->assertSame(2, $preview->json('data.total_po_count'), $preview->getContent());
+        $this->assertSame(1, $preview->json('data.cancel_count'));
+        $this->assertSame(1, $preview->json('data.close_partial_count'));
+        $this->assertSame(1, $preview->json('data.draft_receipts_to_cancel'));
+        $this->assertSame(0, $preview->json('data.skipped_po_count'));
+        $this->postJson('/api/settings/inventory/stock-monitoring/purchase-order-reset/preview', ['period' => 'all_time'])
+            ->assertOk()
+            ->assertJsonPath('data.total_po_count', 3);
+
+        $reset = $this->postJson('/api/settings/inventory/stock-monitoring/purchase-order-reset', ['period' => 'week'])->assertOk();
+        $this->assertSame(1, $reset->json('data.cancelled_po_count'), $reset->getContent());
+        $this->assertSame(1, $reset->json('data.closed_partial_po_count'));
+        $this->assertSame(1, $reset->json('data.cancelled_gr_count'));
+        $this->assertSame(0, $reset->json('data.skipped_po_count'));
+
+        $this->assertDatabaseHas('purchase_orders', ['id' => $oldPo, 'status' => 'sent']);
+        $this->assertDatabaseHas('purchase_orders', ['id' => $cancelPo, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('purchase_orders', ['id' => $partialPo, 'status' => 'received', 'receipt_status' => 'partial']);
+        $this->assertDatabaseHas('goods_receipts', ['id' => $draftReceipt, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('goods_receipts', ['id' => $postedReceipt, 'status' => 'posted']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_order.monitoring_reset_cancel', 'entity_id' => $cancelPo]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_order.monitoring_reset_close', 'entity_id' => $partialPo]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'goods_receipt.cancel', 'entity_id' => $draftReceipt]);
+        $this->assertDatabaseHas('purchase_requisitions', ['id' => $cancelPr, 'status' => 'approved']);
+        $this->assertDatabaseHas('purchase_requisitions', ['id' => $partialPr, 'status' => 'converted']);
+        $this->assertSame(1, DB::table('purchase_requisitions')->where('is_auto_generated', 1)->where('status', 'draft')->count());
+    }
+
+    public function test_reset_skips_purchase_orders_with_active_incoming_return_and_is_admin_only(): void
+    {
+        $admin = $this->actAsAdmin();
+        $product = $this->product();
+        $supplier = $this->supplier();
+        $pr = $this->pr($this->cashier->id, [$product => ['10', '2000']], 'converted');
+        $po = $this->po($pr, $supplier, [$product => ['10', '2000']], 'sent');
+        $locationId = (int) DB::table('locations')->where('store_id', $this->storeId())->value('id');
+        $receiptId = DB::table('goods_receipts')->insertGetId([
+            'store_id' => $this->storeId(),
+            'doc_number' => 'GR-RESET-BLOCKED',
+            'po_id' => $po,
+            'supplier_id' => $supplier,
+            'receiving_location_id' => $locationId,
+            'received_by' => $admin->id,
+            'status' => 'draft',
+        ]);
+        DB::table('supplier_returns')->insert([
+            'store_id' => $this->storeId(),
+            'doc_number' => 'RET-RESET-BLOCKED',
+            'supplier_id' => $supplier,
+            'return_type' => 'incoming',
+            'goods_receipt_id' => $receiptId,
+            'status' => 'draft',
+            'requested_by' => $admin->id,
+        ]);
+
+        $owner = $this->makeUser('Owner', 'owner-po-reset');
+        Sanctum::actingAs($owner, ['*']);
+        $this->postJson('/api/settings/inventory/stock-monitoring/purchase-order-reset/preview', ['period' => 'all_time'])
+            ->assertForbidden();
+
+        $this->actAsAdmin();
+        $this->postJson('/api/settings/inventory/stock-monitoring/purchase-order-reset/preview', ['period' => 'all_time'])
+            ->assertOk()
+            ->assertJsonPath('data.skipped_po_count', 1)
+            ->assertJsonPath('data.cancel_count', 0);
+        $this->postJson('/api/settings/inventory/stock-monitoring/purchase-order-reset', ['period' => 'all_time'])
+            ->assertOk()
+            ->assertJsonPath('data.skipped_po_count', 1);
+        $this->assertDatabaseHas('purchase_orders', ['id' => $po, 'status' => 'sent']);
+        $this->assertDatabaseHas('goods_receipts', ['id' => $receiptId, 'status' => 'draft']);
+    }
+
     public function test_po_creation_requires_one_owner_authorization_and_keeps_bank_account_only_as_po_data(): void
     {
         $p = $this->product();

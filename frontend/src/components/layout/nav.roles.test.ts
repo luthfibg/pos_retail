@@ -102,7 +102,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Dashboard',
       'Permintaan Pembelian',
       'Inventory > Produk, Penerimaan Barang, Retur Barang, Adjustment, Pergerakan Stok',
-      'Penjualan > Kasir Jaga Saya, Kasir, Penjualan',
+      'Penjualan > Kasir Jaga, Kasir, Penjualan',
       'Karyawan',
     ]);
   });

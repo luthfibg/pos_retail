@@ -36,6 +36,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('can:settings.manage');
     Route::put('settings/inventory/stock-monitoring', [StockMonitoringSettingController::class, 'update'])
         ->middleware('can:settings.manage');
+    Route::post('settings/inventory/stock-monitoring/purchase-order-reset/preview', [StockMonitoringSettingController::class, 'previewPurchaseOrderReset'])
+        ->middleware('can:settings.manage');
+    Route::post('settings/inventory/stock-monitoring/purchase-order-reset', [StockMonitoringSettingController::class, 'resetPurchaseOrderWorkflow'])
+        ->middleware('can:settings.manage');
 
     // Model administrasi toko: simple (Admin + Kasir) atau standar retail (Kasir, Finance, Purchasing, Accounting, Owner)
     Route::get('settings/admin-model', [AdminModelController::class, 'show'])->middleware('can:settings.manage');

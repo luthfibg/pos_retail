@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cashDepositApi, shiftApi } from '@/lib/api/endpoints';
 import { ApiError } from '@/lib/api/client';
-import type { CashDeposit, DepositStatus, FloatFlag, Shift, ShiftDeposit } from '@/lib/api/types';
+import type { CashDeposit, DepositStatus, Shift, ShiftDeposit } from '@/lib/api/types';
 import { Modal } from '@/components/ui/Modal';
 import { Field, inputCls } from '@/components/ui/Field';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
@@ -20,12 +20,6 @@ const DEPOSIT_STATUS_LABEL: Record<DepositStatus, string> = {
   received: 'Diterima Finance',
   discrepancy: 'Ada selisih — menunggu koreksi',
   corrected: 'Selisih dikoreksi',
-};
-
-const FLOAT_FLAG_LABEL: Record<FloatFlag, string> = {
-  no_policy: 'Admin belum menetapkan kebijakan endapan; tidak ada setoran yang dapat diserahkan.',
-  below_minimum: 'Kas terhitung di bawah endapan minimum; tidak ada setoran yang dapat diserahkan.',
-  nothing_to_deposit: 'Kas di laci tidak melebihi endapan; tidak ada setoran yang dapat diserahkan.',
 };
 
 export function ShiftPage() {
@@ -47,7 +41,7 @@ export function ShiftPage() {
 
   return (
     <div className="max-w-2xl space-y-4 p-6">
-      <h1 className="text-xl font-semibold">Kasir Jaga Saya</h1>
+      <h1 className="text-xl font-semibold">Kasir Jaga</h1>
       <ErrorNotice error={current.error} />
 
       {justClosed && !shift && (
@@ -135,9 +129,6 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
     <form onSubmit={submit} noValidate className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
       <div>
         <h2 className="font-semibold">Belum ada kasir jaga berjalan</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Buka kasir jaga untuk mulai berjualan. Saldo awal otomatis mengikuti sisa uang di laci dari kasir jaga sebelumnya.
-        </p>
       </div>
 
       {/* galat "shift" (mis. laci masih dipakai kasir lain) ditampilkan utuh */}
@@ -160,15 +151,11 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
           ))}
         </select>
       </Field>
-      {registers.data?.length === 0 && <p className="text-sm text-amber-800">Belum ada mesin kasir aktif. Hubungi Admin/Owner untuk menambah atau mengaktifkan mesin.</p>}
-      {registers.data?.length && !registers.data.some((register) => register.is_available)
-        ? <p className="text-sm text-amber-800">Semua mesin kasir sedang digunakan atau menunggu penyerahan setoran akhir.</p>
-        : null}
+      {registers.data?.length === 0 && <p className="text-sm text-amber-800">Belum ada mesin kasir aktif.</p>}
 
       <Field
         label="Uang di laci saat ini (opsional)"
         error={error ?? server.counted_opening_cash?.[0]}
-        hint="Hitung uang fisik di laci. Bila berbeda dari saldo awal, selisihnya dicatat di audit."
       >
         <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={counted} onChange={(e) => setCounted(e.target.value)} placeholder="Rp" autoFocus />
       </Field>
@@ -206,9 +193,6 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
           </div>
         </div>
         <ShiftFigures shift={shift} />
-        {shift.expected_cash === null && (
-          <p className="text-xs text-slate-500">Kas yang diharapkan disembunyikan selama kasir jaga berjalan (hitung buta) dan tampil setelah kasir jaga ditutup.</p>
-        )}
       </div>
 
       <CashMovementsPanel shift={shift} />
@@ -226,15 +210,7 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
       {shift.status === 'open' && (
         <div className="rounded-lg border border-slate-200 bg-white p-5">
           <h2 className="font-semibold">Tutup kasir jaga</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Mulai dengan menghitung uang fisik di laci. Setelah penghitungan dimulai, penjualan baru tidak dapat dibuat pada kasir jaga ini.
-          </p>
           <ErrorNotice error={partialDrafts.error} />
-          {partialDrafts.data?.data.length ? (
-            <p role="status" className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-              Ada Draft setoran parsial. Serahkan atau batalkan Draft sebelum menutup kasir jaga.
-            </p>
-          ) : null}
           <button type="button" disabled={partialDrafts.isLoading} onClick={() => setConfirming(true)} className="mt-3 rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50">
             Mulai hitung kas
           </button>
@@ -245,14 +221,11 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
         partialDrafts.isLoading ? (
           <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">Memeriksa Draft setoran sebelum penutupan…</p>
         ) : partialDrafts.error ? (
-          <div className="space-y-2 rounded-md bg-red-50 p-3 text-sm text-red-900">
-            <p>Draft setoran belum dapat diperiksa. Coba muat ulang sebelum menutup kasir jaga.</p>
+          <div className="rounded-md bg-red-50 p-3 text-sm text-red-900">
             <ErrorNotice error={partialDrafts.error} />
           </div>
         ) : partialDrafts.data?.data.length ? (
-          <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-            Kasir jaga belum dapat ditutup karena masih ada Draft setoran parsial. Serahkan atau batalkan Draft terlebih dahulu.
-          </div>
+          null
         ) : (
           <CloseShiftForm shift={shift} onClosed={onClosed} />
         )
@@ -260,10 +233,7 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
 
       {confirming && (
         <Modal title="Mulai hitung kas?" onClose={() => !startCount.isPending && setConfirming(false)}>
-          <div className="space-y-2 p-5 text-sm">
-            <p>Penjualan baru akan diblokir sampai kasir jaga ditutup.</p>
-            <p className="text-slate-600">Pastikan tidak ada pelanggan yang sedang dilayani.</p>
-          </div>
+          <div className="p-5"><ErrorNotice error={startCount.error} /></div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
             <button type="button" disabled={startCount.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Batal</button>
             <button type="button" disabled={startCount.isPending} onClick={() => startCount.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
@@ -310,7 +280,6 @@ function CloseShiftForm({ shift, onClosed }: { shift: Shift; onClosed: (s: Shift
     <form onSubmit={review} noValidate className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-5">
       <div>
         <h2 className="font-semibold">Hitung uang di laci</h2>
-        <p className="mt-1 text-sm text-slate-700">Masukkan total uang tunai fisik yang ada di laci saat ini, termasuk saldo awal.</p>
       </div>
 
       {!is422 && <ErrorNotice error={mutation.error} />}
@@ -338,10 +307,7 @@ function CloseShiftForm({ shift, onClosed }: { shift: Shift; onClosed: (s: Shift
 
       {confirming && (
         <Modal title="Tutup kasir jaga?" onClose={() => !mutation.isPending && setConfirming(false)}>
-          <div className="space-y-2 p-5 text-sm">
-            <p>Uang terhitung: <span className="font-semibold">{counted.trim()}</span></p>
-            <p className="text-slate-600">Setelah ditutup, kasir jaga tidak dapat diubah. Koreksi dilakukan Admin lewat catatan terpisah.</p>
-          </div>
+          <div className="p-5"><ErrorNotice error={mutation.error} /></div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
             <button type="button" disabled={mutation.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Hitung ulang</button>
             <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
@@ -374,7 +340,7 @@ function ClosedResult({
         <div className="font-mono text-sm text-slate-600">{shift.doc_number}</div>
         <ShiftFigures shift={shift} />
         {shift.float_kept !== null && (
-          <p className="text-sm">Endapan untuk saldo awal kasir jaga berikutnya: <strong>{formatRupiah(shift.float_kept)}</strong></p>
+          <p className="text-sm">Endapan: <strong>{formatRupiah(shift.float_kept)}</strong></p>
         )}
         {shift.deposit ? (
           <FinalDepositHandover
@@ -384,11 +350,9 @@ function ClosedResult({
           />
         ) : (
           <div className="space-y-1 text-sm text-slate-700">
-            {(shift.float_flags ?? []).map((flag) => <p key={flag}>{FLOAT_FLAG_LABEL[flag]}</p>)}
             {!shift.float_flags?.length && <p>Tidak ada setoran akhir yang perlu diserahkan.</p>}
           </div>
         )}
-        <p className="text-xs text-slate-600">Admin akan memeriksa kasir jaga ini, terutama bila ada selisih.</p>
       </div>
       {canOpenNext && (
         <button type="button" onClick={onNew} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white">
@@ -404,9 +368,6 @@ function PendingFinalDeposits({ deposits, onSubmitted }: { deposits: CashDeposit
     <section className="space-y-4 rounded-lg border border-amber-300 bg-amber-50 p-5">
       <div>
         <h2 className="font-semibold text-amber-950">Setoran akhir belum diserahkan</h2>
-        <p className="mt-1 text-sm text-amber-900">
-          Serahkan setoran sebelum membuka kasir jaga baru. Setoran yang masih Draft akan menghalangi pembukaan kasir jaga.
-        </p>
       </div>
       {deposits.map((deposit) => (
         <FinalDepositHandover
@@ -484,15 +445,11 @@ function FinalDepositHandover({
           </button>
         </>
       ) : (
-        <p className="text-sm text-emerald-800" role="status">
-          Setoran sudah diserahkan dan menunggu Finance menerima uang.
-        </p>
+        null
       )}
       {confirming && (
         <Modal title="Serahkan setoran?" onClose={() => !submit.isPending && setConfirming(false)}>
           <div className="space-y-2 p-5 text-sm">
-            <p>Pastikan uang fisik sebesar <strong>{formatRupiah(deposit.deposit_amount)}</strong> diserahkan kepada Finance.</p>
-            <p className="text-slate-600">Setelah diserahkan, setoran akhir tidak dapat dibatalkan. Kasir jaga baru dapat dibuka setelah penyerahan tercatat.</p>
             <ErrorNotice error={submit.error} />
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">

@@ -352,6 +352,25 @@ export interface StockMonitoringSetting {
   low_stock_threshold: Decimal;
 }
 
+export type PurchaseOrderResetPeriod = 'day' | 'week' | 'month' | 'all_time';
+
+export interface PurchaseOrderResetPreview {
+  period: PurchaseOrderResetPeriod;
+  total_po_count: number;
+  cancel_count: number;
+  close_partial_count: number;
+  draft_receipts_to_cancel: number;
+  skipped_po_count: number;
+}
+
+export interface PurchaseOrderResetResult {
+  period: PurchaseOrderResetPeriod;
+  cancelled_po_count: number;
+  closed_partial_po_count: number;
+  cancelled_gr_count: number;
+  skipped_po_count: number;
+}
+
 export interface Category {
   id: number;
   parent_id: number | null;

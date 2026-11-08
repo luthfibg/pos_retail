@@ -16,7 +16,7 @@ import type {
   AvailableRegister, Register,
   Adjustment, AdjustmentInput, AdjustmentMeta, AdjustmentReasonCode, AdjustmentType,
   OpnameCategoryOption, OpnameSession, OpnameSessionSummary, OpnameSessionStatus, OpnameScopeType,
-  OpnameDisplaySetting, OpnameItem, OpnameProgressTree,
+  OpnameDisplaySetting, OpnameItem, OpnameProgressTree, PurchaseOrderResetPeriod, PurchaseOrderResetPreview, PurchaseOrderResetResult,
 } from './types';
 
 export const authApi = {
@@ -37,6 +37,16 @@ export const stockMonitoringApi = {
     api<{ data: StockMonitoringSetting }>('/settings/inventory/stock-monitoring', {
       method: 'PUT',
       body: { low_stock_threshold },
+    }).then((r) => r.data),
+  previewPurchaseOrderReset: (period: PurchaseOrderResetPeriod) =>
+    api<{ data: PurchaseOrderResetPreview }>('/settings/inventory/stock-monitoring/purchase-order-reset/preview', {
+      method: 'POST',
+      body: { period },
+    }).then((r) => r.data),
+  resetPurchaseOrderWorkflow: (period: PurchaseOrderResetPeriod) =>
+    api<{ data: PurchaseOrderResetResult }>('/settings/inventory/stock-monitoring/purchase-order-reset', {
+      method: 'POST',
+      body: { period },
     }).then((r) => r.data),
 };
 

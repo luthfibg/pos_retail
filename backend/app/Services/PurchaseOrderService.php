@@ -6,6 +6,8 @@ use App\Models\User;
 use App\Services\Concerns\PurchasingSupport;
 use App\Support\Decimal;
 use App\Support\LineTotal;
+use App\Support\StockAuthorityPolicy;
+use Carbon\CarbonImmutable;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -27,6 +29,8 @@ class PurchaseOrderService
     use PurchasingSupport;
 
     public const RECEIVABLE = ['sent', 'partially_received'];
+
+    private const RESETTABLE = ['draft', 'pending_confirmation', 'approved', 'sent', 'partially_received'];
 
     public function __construct(
         private AuditLogger $audit,
@@ -447,6 +451,11 @@ class PurchaseOrderService
 
             DB::table('purchase_orders')->where('id', $id)->update(['status' => 'cancelled']);
             $this->syncConversion((int) $po->pr_id, $actor, $storeId);
+            $this->requisitions->synchronizeAutomatic(
+                $actor,
+                $storeId,
+                DB::table('purchase_order_items')->where('po_id', $id)->pluck('product_id')->map(fn ($productId) => (int) $productId)->all(),
+            );
 
             $this->audit->log(
                 'purchase_order.cancel',
@@ -509,7 +518,228 @@ class PurchaseOrderService
         return $this->load($storeId, $id, true) ?? [];
     }
 
+    /**
+     * @return array{period: string, total_po_count: int, cancel_count: int, close_partial_count: int, draft_receipts_to_cancel: int, skipped_po_count: int}
+     */
+    public function previewMonitoringReset(User $actor, int $storeId, string $period): array
+    {
+        $this->assertCanResetMonitoring($actor, $storeId);
+        $orders = $this->monitoringResetOrders($storeId, $period);
+        $summary = [
+            'period' => $period,
+            'total_po_count' => count($orders),
+            'cancel_count' => 0,
+            'close_partial_count' => 0,
+            'draft_receipts_to_cancel' => 0,
+            'skipped_po_count' => 0,
+        ];
+
+        foreach ($orders as $order) {
+            $openReceipts = DB::table('goods_receipts')
+                ->where('po_id', $order->id)
+                ->whereIn('status', ['draft', 'checked'])
+                ->pluck('id')
+                ->all();
+            $hasOpenReturn = $openReceipts !== [] && DB::table('supplier_returns')
+                ->whereIn('goods_receipt_id', $openReceipts)
+                ->where('return_type', 'incoming')
+                ->where('status', '<>', 'cancelled')
+                ->exists();
+
+            if ($hasOpenReturn) {
+                $summary['skipped_po_count']++;
+
+                continue;
+            }
+
+            $summary['draft_receipts_to_cancel'] += count($openReceipts);
+            if (DB::table('goods_receipts')->where('po_id', $order->id)->where('status', 'posted')->exists()) {
+                $summary['close_partial_count']++;
+            } else {
+                $summary['cancel_count']++;
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @return array{period: string, cancelled_po_count: int, closed_partial_po_count: int, cancelled_gr_count: int, skipped_po_count: int}
+     */
+    public function resetMonitoringWorkflow(User $actor, int $storeId, string $period): array
+    {
+        $this->assertCanResetMonitoring($actor, $storeId);
+        $orders = $this->monitoringResetOrders($storeId, $period);
+        $result = [
+            'period' => $period,
+            'cancelled_po_count' => 0,
+            'closed_partial_po_count' => 0,
+            'cancelled_gr_count' => 0,
+            'skipped_po_count' => 0,
+        ];
+        foreach ($orders as $candidate) {
+            $outcome = DB::transaction(function () use ($actor, $storeId, $period, $candidate) {
+                $po = DB::table('purchase_orders')
+                    ->where('store_id', $storeId)
+                    ->where('id', $candidate->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($po === null || ! in_array($po->status, self::RESETTABLE, true) || ! $this->matchesResetPeriod($po, $period)) {
+                    return null;
+                }
+
+                $openReceipts = DB::table('goods_receipts')
+                    ->where('po_id', $po->id)
+                    ->whereIn('status', ['draft', 'checked'])
+                    ->lockForUpdate()
+                    ->get(['id', 'status']);
+                $openReceiptIds = $openReceipts->pluck('id')->all();
+                if ($openReceiptIds !== [] && DB::table('supplier_returns')
+                    ->whereIn('goods_receipt_id', $openReceiptIds)
+                    ->where('return_type', 'incoming')
+                    ->where('status', '<>', 'cancelled')
+                    ->exists()) {
+                    return ['skipped' => true, 'cancelled_gr_count' => 0, 'closed_partial' => false];
+                }
+
+                foreach ($openReceipts as $receipt) {
+                    DB::table('goods_receipts')->where('id', $receipt->id)->update(['status' => 'cancelled']);
+                    $this->audit->log(
+                        'goods_receipt.cancel',
+                        'goods_receipt',
+                        (int) $receipt->id,
+                        before: ['status' => $receipt->status],
+                        after: ['status' => 'cancelled'],
+                        reason: "Dibatalkan sebagai bagian reset alur PO ({$period}).",
+                        actorId: $actor->id,
+                        storeId: $storeId,
+                    );
+                }
+
+                $productIds = DB::table('purchase_order_items')
+                    ->where('po_id', $po->id)
+                    ->pluck('product_id')
+                    ->map(fn ($productId) => (int) $productId)
+                    ->all();
+                $hasPostedReceipt = DB::table('goods_receipts')->where('po_id', $po->id)->where('status', 'posted')->exists();
+
+                if ($hasPostedReceipt) {
+                    $items = DB::table('purchase_order_items')->where('po_id', $po->id)->get(['qty_ordered', 'qty_received']);
+                    $complete = true;
+                    foreach ($items as $item) {
+                        $complete = $complete && Decimal::qty($item->qty_received) >= Decimal::qty($item->qty_ordered);
+                    }
+
+                    DB::table('purchase_orders')->where('id', $po->id)->update([
+                        'status' => 'received',
+                        'receipt_status' => $complete ? 'complete' : 'partial',
+                    ]);
+                    $this->audit->log(
+                        'purchase_order.monitoring_reset_close',
+                        'purchase_order',
+                        (int) $po->id,
+                        before: ['status' => $po->status, 'receipt_status' => $po->receipt_status],
+                        after: ['status' => 'received', 'receipt_status' => $complete ? 'complete' : 'partial'],
+                        reason: "Sisa PO dihentikan sebagai bagian reset alur monitoring ({$period}).",
+                        actorId: $actor->id,
+                        storeId: $storeId,
+                    );
+                    $this->requisitions->synchronizeAutomatic($actor, $storeId, array_values(array_unique($productIds)));
+
+                    return [
+                        'skipped' => false,
+                        'cancelled_gr_count' => $openReceipts->count(),
+                        'closed_partial' => true,
+                    ];
+                }
+
+                DB::table('purchase_orders')->where('id', $po->id)->update(['status' => 'cancelled']);
+                $this->syncConversion((int) $po->pr_id, $actor, $storeId);
+                $this->audit->log(
+                    'purchase_order.monitoring_reset_cancel',
+                    'purchase_order',
+                    (int) $po->id,
+                    before: ['status' => $po->status],
+                    after: ['status' => 'cancelled'],
+                    reason: "Dibatalkan sebagai bagian reset alur monitoring ({$period}).",
+                    actorId: $actor->id,
+                    storeId: $storeId,
+                );
+                $this->requisitions->synchronizeAutomatic($actor, $storeId, array_values(array_unique($productIds)));
+
+                return [
+                    'skipped' => false,
+                    'cancelled_gr_count' => $openReceipts->count(),
+                    'closed_partial' => false,
+                ];
+            });
+
+            if ($outcome === null) {
+                continue;
+            }
+            if ($outcome['skipped']) {
+                $result['skipped_po_count']++;
+
+                continue;
+            }
+            $result['cancelled_gr_count'] += $outcome['cancelled_gr_count'];
+            if ($outcome['closed_partial']) {
+                $result['closed_partial_po_count']++;
+            } else {
+                $result['cancelled_po_count']++;
+            }
+        }
+
+        return $result;
+    }
+
     // ------------------------------------------------------------------ internal
+
+    private function assertCanResetMonitoring(User $actor, int $storeId): void
+    {
+        abort_unless(
+            $this->permissions->allows($actor, 'settings.manage', $storeId)
+                && in_array('Admin', StockAuthorityPolicy::roleNames($actor->id, $storeId), true),
+            403,
+            'Reset alur PO hanya dapat dilakukan oleh Admin.',
+        );
+    }
+
+    /** @return list<object> */
+    private function monitoringResetOrders(int $storeId, string $period): array
+    {
+        $cutoff = $this->monitoringResetCutoff($period);
+
+        return DB::table('purchase_orders')
+            ->where('store_id', $storeId)
+            ->whereIn('status', self::RESETTABLE)
+            ->when($cutoff !== null, fn ($query) => $query->where('created_at', '>=', $cutoff))
+            ->orderBy('id')
+            ->get(['id', 'status', 'created_at'])
+            ->all();
+    }
+
+    private function matchesResetPeriod(object $po, string $period): bool
+    {
+        $cutoff = $this->monitoringResetCutoff($period);
+
+        return $cutoff === null || $po->created_at >= $cutoff;
+    }
+
+    private function monitoringResetCutoff(string $period): ?string
+    {
+        $now = CarbonImmutable::now('UTC');
+        $cutoff = match ($period) {
+            'day' => $now->subDay(),
+            'week' => $now->subWeek(),
+            'month' => $now->subMonth(),
+            'all_time' => null,
+            default => throw new \InvalidArgumentException('Periode reset PO tidak valid.'),
+        };
+
+        return $cutoff?->format('Y-m-d H:i:s');
+    }
 
     private function assertCanView(User $user, int $storeId): void
     {
