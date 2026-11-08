@@ -651,11 +651,26 @@ function SupplierReturnDetailDialog({
             <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
               <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak retur</button>
               {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'draft' && (
-                <button type="button" disabled={anyPending} onClick={() => {
-                  if (window.confirm('Tandai retur ini sudah dicetak dan dikirim ke supplier?')) submitReturn.mutate();
-                }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-                  {submitReturn.isPending ? 'Menyimpan…' : 'Ajukan retur ke supplier'}
-                </button>
+                returnDoc.is_auto_generated ? (
+                  <>
+                    <button type="button" disabled={anyPending} onClick={() => {
+                      setDecision('accept');
+                      setDecisionNote('');
+                      setAction('decision');
+                    }} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">Supplier menerima retur</button>
+                    <button type="button" disabled={anyPending} onClick={() => {
+                      setDecision('reject');
+                      setDecisionNote('');
+                      setAction('decision');
+                    }} className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-60">Supplier menolak retur</button>
+                  </>
+                ) : (
+                  <button type="button" disabled={anyPending} onClick={() => {
+                    if (window.confirm('Tandai retur ini sudah dicetak dan dikirim ke supplier?')) submitReturn.mutate();
+                  }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+                    {submitReturn.isPending ? 'Menyimpan…' : 'Ajukan retur ke supplier'}
+                  </button>
+                )
               )}
               {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'submitted' && (
                 <>
@@ -699,7 +714,8 @@ function SupplierReturnDetailDialog({
             )}
             {action === 'decision' && (
               <div className="space-y-3 rounded-md border border-slate-200 p-3">
-                {returnDoc.status === 'draft' ? (
+                {returnDoc.status === 'draft'
+                && !(returnDoc.return_type === 'incoming' && returnDoc.is_auto_generated) ? (
                   <>
                     <h3 className="text-sm font-semibold">Batalkan draft retur</h3>
                     <Field label="Alasan (opsional)"><textarea className={inputCls} rows={2} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} /></Field>

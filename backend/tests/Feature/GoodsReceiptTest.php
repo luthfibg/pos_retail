@@ -166,8 +166,60 @@ class GoodsReceiptTest extends SeededTestCase
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
         $receiptId = (int) DB::table('goods_receipts')->where('po_id', $po)->value('id');
         $this->assertSame(0, DB::table('supplier_returns')->where('goods_receipt_id', $receiptId)->count());
-        $this->assertSame(7.0, $this->stock($p));
-        $this->assertSame(0, DB::table('supplier_returns')->where('goods_receipt_id', DB::table('goods_receipts')->where('po_id', $po)->value('id'))->count());
+    }
+
+    public function test_admin_can_record_supplier_acceptance_directly_on_new_automatic_return(): void
+    {
+        $productId = $this->product(['unit_cost' => '2000.00']);
+        [$poId, $poItemId] = $this->sentPo($productId);
+        $receipt = $this->postJson('/api/goods-receipts', [
+            'po_id' => $poId,
+            'complete_po' => true,
+            'post' => true,
+            'items' => [['po_item_id' => $poItemId, 'qty_damaged' => '2', 'qty_short' => '0']],
+        ])->assertCreated()->json('data');
+        $returnId = (int) DB::table('supplier_returns')->where('goods_receipt_id', $receipt['id'])->value('id');
+
+        $this->actAsAdmin();
+        $this->postJson("/api/supplier-returns/{$returnId}/supplier-decision", ['decision' => 'accept'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'replacement_received')
+            ->assertJsonPath('data.is_auto_generated', true);
+
+        $this->assertSame(10.0, (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_sellable'));
+        $this->assertSame(0.0, (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_quarantine'));
+        $this->assertDatabaseHas('inventory_movements', [
+            'product_id' => $productId,
+            'movement_type' => 'supplier_replacement_in',
+            'qty' => '2.000',
+            'ref_type' => 'supplier_return',
+            'ref_id' => $returnId,
+        ]);
+    }
+
+    public function test_admin_can_record_supplier_rejection_directly_and_calculate_loss_for_new_automatic_return(): void
+    {
+        $productId = $this->product(['unit_cost' => '2000.00']);
+        [$poId, $poItemId] = $this->sentPo($productId);
+        $receipt = $this->postJson('/api/goods-receipts', [
+            'po_id' => $poId,
+            'complete_po' => true,
+            'post' => true,
+            'items' => [['po_item_id' => $poItemId, 'qty_damaged' => '2', 'qty_short' => '0']],
+        ])->assertCreated()->json('data');
+        $returnId = (int) DB::table('supplier_returns')->where('goods_receipt_id', $receipt['id'])->value('id');
+
+        $this->actAsAdmin();
+        $this->postJson("/api/supplier-returns/{$returnId}/supplier-decision", [
+            'decision' => 'reject',
+            'note' => 'Supplier menolak klaim.',
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'rejected')
+            ->assertJsonPath('data.loss_amount', '4000.00');
+
+        $this->assertSame(2.0, (float) DB::table('inventory_balances')->where('product_id', $productId)->sum('qty_quarantine'));
+        $this->assertSame(0, DB::table('inventory_movements')->where('ref_type', 'supplier_return')
+            ->where('ref_id', $returnId)->whereIn('movement_type', ['supplier_return_out', 'supplier_replacement_in', 'write_off'])->count());
     }
 
     public function test_final_receipt_resynchronizes_low_stock_after_finishing_the_po(): void

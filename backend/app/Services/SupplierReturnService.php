@@ -660,7 +660,10 @@ class SupplierReturnService
 
         DB::transaction(function () use ($actor, $storeId, $id, $data) {
             $return = $this->lock($storeId, $id);
-            if ($return->status !== 'submitted') {
+            $canDecideNewAutomaticReturn = $return->status === 'draft'
+                && $return->return_type === 'incoming'
+                && (bool) $return->is_auto_generated;
+            if ($return->status !== 'submitted' && ! $canDecideNewAutomaticReturn) {
                 throw ValidationException::withMessages(['status' => ['Keputusan supplier hanya dapat dicatat untuk retur yang menunggu keputusan.']]);
             }
 
@@ -749,7 +752,7 @@ class SupplierReturnService
                 $accepted ? 'supplier_return.accept' : 'supplier_return.reject',
                 'supplier_return',
                 $id,
-                before: ['status' => 'submitted'],
+                before: ['status' => $return->status],
                 after: [
                     'status' => $nextStatus,
                     'loss_amount' => $lossAmount,
