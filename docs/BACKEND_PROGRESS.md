@@ -8,6 +8,7 @@ Progres implementasi Adjustment langsung Handoff #1: lihat `docs/ROADMAP_PROGRES
 Sesi opname Handoff #2 (skema, service, endpoint, izin, test, dan kontrak UI): lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #2”.
 Peta progres opname, kebijakan hitung buta, pengaturan, dan kontrak UI Handoff #3: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #3”.
 Input hitungan, log, lookup, dan penguncian stok Handoff #4: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #4” (UAT dan test suite penuh masih terbuka).
+Perluasan daftar item untuk rangkaian scan Handoff #5 (`only_counted`, urutan `-counted_at`, `exclude_item_ids[]`, dan `counted_at`): lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #5”.
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 

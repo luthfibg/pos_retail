@@ -97,10 +97,19 @@ class OpnameSessionController extends Controller
             'category_id' => ['sometimes', 'integer', 'min:0'],
             'scope' => ['sometimes', 'in:direct,all'],
             'q' => ['sometimes', 'nullable', 'string', 'min:2', 'max:120'],
-            'only_uncounted' => ['sometimes', 'boolean'],
+            'only_uncounted' => ['sometimes', 'in:0,1,false,true'],
+            'only_counted' => ['sometimes', 'in:0,1,false,true'],
+            'sort' => ['sometimes', 'in:-counted_at'],
+            'exclude_item_ids' => ['sometimes', 'array', 'max:10'],
+            'exclude_item_ids.*' => ['integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:200'],
         ]);
+        foreach (['only_uncounted', 'only_counted'] as $booleanFilter) {
+            if (array_key_exists($booleanFilter, $filters)) {
+                $filters[$booleanFilter] = filter_var($filters[$booleanFilter], FILTER_VALIDATE_BOOLEAN);
+            }
+        }
         if (! empty($filters['q'])) {
             $filters['q'] = trim($filters['q']);
             if (mb_strlen($filters['q']) < 2) {

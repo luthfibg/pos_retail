@@ -201,9 +201,20 @@ export const opnameApi = {
     scope?: 'direct' | 'all';
     q?: string;
     only_uncounted?: boolean;
+    only_counted?: boolean;
+    sort?: '-counted_at';
+    exclude_item_ids?: number[];
     page?: number;
     per_page?: number;
-  } = {}) => api<Paginated<OpnameItem>>(`/stock-opname-sessions/${id}/items`, { query: { ...filters } }),
+  } = {}) => {
+    const { exclude_item_ids, ...query } = filters;
+    return api<Paginated<OpnameItem>>(`/stock-opname-sessions/${id}/items`, {
+      query: {
+        ...query,
+        ...(exclude_item_ids ? { 'exclude_item_ids[]': exclude_item_ids } : {}),
+      },
+    });
+  },
   lookup: (id: number, q: string, mode: 'auto' | 'search' = 'auto') =>
     api<{ data: OpnameItem[] }>(`/stock-opname-sessions/${id}/lookup`, { query: { q, mode } }).then((r) => r.data),
   counts: (id: number, limit = 10) =>

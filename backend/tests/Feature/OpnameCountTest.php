@@ -177,4 +177,53 @@ class OpnameCountTest extends SeededTestCase
             ->assertJsonMissingPath('stock')
             ->assertJsonMissingPath('system_qty');
     }
+
+    public function test_items_can_list_recent_counts_and_exclude_ids_without_changing_default_order(): void
+    {
+        $this->actAsAdmin();
+        $category = $this->category('Rak A');
+        $first = $this->product(['category_id' => $category, 'name' => 'Barang A']);
+        $second = $this->product(['category_id' => $category, 'name' => 'Barang B']);
+        $third = $this->product(['category_id' => $category, 'name' => 'Barang C']);
+        $sessionId = $this->startAll();
+        $items = DB::table('stock_opname_items')->where('session_id', $sessionId)->get()->keyBy('product_id');
+
+        foreach ([$first, $second] as $productId) {
+            $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
+                'item_id' => $items[$productId]->id,
+                'mode' => 'set',
+                'quantity' => $productId === $first ? 12 : 17,
+                'client_request_id' => fake()->uuid(),
+            ])->assertOk();
+        }
+        DB::table('stock_opname_items')->where('id', $items[$first]->id)->update(['counted_at' => '2026-11-09 08:00:00.000']);
+        DB::table('stock_opname_items')->where('id', $items[$second]->id)->update(['counted_at' => '2026-11-09 09:00:00.000']);
+
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?only_counted=true&sort=-counted_at&per_page=2")
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.product_id', $second)
+            ->assertJsonPath('data.0.counted_at', '2026-11-09 09:00:00.000')
+            ->assertJsonPath('data.1.product_id', $first)
+            ->assertJsonPath('data.1.counted_at', '2026-11-09 08:00:00.000');
+
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts/{$items[$first]->id}/clear", [
+            'client_request_id' => fake()->uuid(),
+        ])->assertOk();
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?only_counted=true&sort=-counted_at")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.product_id', $second);
+
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?category_id={$category}&scope=direct&only_uncounted=true&exclude_item_ids[]={$items[$first]->id}&exclude_item_ids[]={$items[$third]->id}")
+            ->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?category_id={$category}&scope=direct&only_uncounted=true")
+            ->assertOk()->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.1.product_id', $third)
+            ->assertJsonPath('data.1.counted_at', null);
+
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items")
+            ->assertOk()->assertJsonPath('data.0.name', 'Barang A');
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?exclude_item_ids[]=1&exclude_item_ids[]=2&exclude_item_ids[]=3&exclude_item_ids[]=4&exclude_item_ids[]=5&exclude_item_ids[]=6&exclude_item_ids[]=7&exclude_item_ids[]=8&exclude_item_ids[]=9&exclude_item_ids[]=10&exclude_item_ids[]=11")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['exclude_item_ids']);
+    }
 }

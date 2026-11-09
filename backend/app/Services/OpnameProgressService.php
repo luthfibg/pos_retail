@@ -177,11 +177,21 @@ class OpnameProgressService
         if (! empty($filters['only_uncounted'])) {
             $query->whereNull('i.counted_qty');
         }
+        if (! empty($filters['only_counted'])) {
+            $query->whereNotNull('i.counted_qty');
+        }
+        if (! empty($filters['exclude_item_ids'])) {
+            $query->whereNotIn('i.id', array_map('intval', $filters['exclude_item_ids']));
+        }
         if (! empty($filters['q'])) {
             $query->orderByRaw('CASE WHEN i.barcode_snapshot = ? THEN 0 ELSE 1 END', [(string) $filters['q']]);
         }
 
-        $page = $query->orderBy('i.product_name_snapshot')->orderBy('i.id')
+        $query = ($filters['sort'] ?? null) === '-counted_at'
+            ? $query->orderByDesc('i.counted_at')->orderByDesc('i.id')
+            : $query->orderBy('i.product_name_snapshot')->orderBy('i.id');
+
+        $page = $query
             ->paginate($perPage)->through(function (object $item) use ($reveals, $staleCategoryIds, $categoryMap) {
                 $row = [
                     'id' => (int) $item->id,
@@ -192,6 +202,7 @@ class OpnameProgressService
                     'category_path' => $this->categoryPath($item, $staleCategoryIds, $categoryMap),
                     'status' => $this->displayPolicy->itemStatus($item, $reveals),
                     'counted_qty' => $item->counted_qty,
+                    'counted_at' => $item->counted_at,
                 ];
                 if ($reveals) {
                     $row['system_qty'] = $item->system_qty_at_count ?? $item->system_qty_at_start;
@@ -285,6 +296,7 @@ class OpnameProgressService
                 'category_path' => $this->categoryPath($item, $staleCategoryIds, $categoryMap),
                 'status' => $this->displayPolicy->itemStatus($item, $reveals),
                 'counted_qty' => $item->counted_qty,
+                'counted_at' => $item->counted_at,
             ];
             if ($reveals) {
                 $presented['system_qty'] = $item->system_qty_at_count ?? $item->system_qty_at_start;

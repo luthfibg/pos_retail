@@ -437,6 +437,7 @@ export interface OpnameItem {
   category_path: string[];
   status: OpnameItemStatus;
   counted_qty: Decimal | null;
+  counted_at: string | null;
   system_qty?: Decimal;
 }
 

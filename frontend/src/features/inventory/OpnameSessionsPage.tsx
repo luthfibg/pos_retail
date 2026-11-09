@@ -10,7 +10,8 @@ import { parseApiTime } from '@/lib/format';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { StartOpnameForm } from './StartOpnameForm';
 import { OpnameWorkspaceProvider, useOpnameWorkspace } from './OpnameWorkspaceContext';
-import { CountEntryForm } from './CountEntryForm';
+import { findNode as findProgressNode, resolveWorkingNode } from './opnameWorkingNode';
+import { CountingStack } from './CountingStack';
 
 const PER_PAGE = 20;
 const STATUS_FILTERS: Array<{ value: OpnameSessionStatus | ''; label: string }> = [
@@ -357,6 +358,7 @@ export function OpnameSessionDetailPage() {
   const mobile = useMobileViewport();
   const activeNode = tree ? findNode(tree.nodes, activeNodeId) : null;
   const activeParent = tree && activeNode ? findNodeById(tree.nodes, activeNode.parent_id) : null;
+  const workingNode = tree ? resolveWorkingNode(tree, activeNodeId) : null;
 
   function changeView(next: WorkspaceView) {
     const nextParams = new URLSearchParams(searchParams);
@@ -366,18 +368,21 @@ export function OpnameSessionDetailPage() {
 
   function loadItem(item: OpnameItem) {
     setSelectedItem(item);
-    let candidates = tree?.nodes ?? [];
+    const categoryNode = item.category_id === null ? null : tree ? findProgressNode(tree.nodes, String(item.category_id)) : null;
     const expanded: string[] = [];
-    let selectedId = 'other';
-    for (const name of item.category_path) {
-      const node = candidates.find((candidate) => candidate.name === name);
-      if (!node) break;
-      selectedId = String(node.id);
-      expanded.push(selectedId);
-      candidates = node.children;
+    let node = categoryNode;
+    while (node) {
+      expanded.push(String(node.id));
+      node = node.parent_id === null ? null : tree ? findProgressNode(tree.nodes, String(node.parent_id)) : null;
     }
+    const selectedId = categoryNode ? String(categoryNode.id) : 'other';
     setActiveNodeId(selectedId);
     setOpenNodeIds((current) => new Set([...current, ...expanded]));
+    changeView('input');
+  }
+
+  function startNode(nodeId: string) {
+    setActiveNodeId(nodeId);
     changeView('input');
   }
 
@@ -446,6 +451,9 @@ export function OpnameSessionDetailPage() {
         highlightedItemId,
         setHighlightedItemId,
         loadItem,
+        selectItem: loadItem,
+        startNode,
+        workingNodeId: workingNode ? String(workingNode.id) : null,
       }}>
         {view === 'ringkasan' && mobile && <WorkspaceSummary session={session} tree={tree} timezone={timezone} />}
         {summaryOpen && (
@@ -461,7 +469,7 @@ export function OpnameSessionDetailPage() {
         )}
         <WorkspacePanels
           id={id}
-          tree={tree}
+          tree={tree ?? EMPTY_TREE}
           treeLoading={treeQuery.isLoading}
           treeError={treeQuery.error}
           retryTree={() => void treeQuery.refetch()}
@@ -483,6 +491,7 @@ export function OpnameSessionDetailPage() {
           active={session.status === 'in_progress'}
           canCount={can('opname.count')}
           revealsSystemQty={tree?.display.reveals_system_qty ?? false}
+          workingNode={workingNode}
         />
       </OpnameWorkspaceProvider>
 
@@ -610,9 +619,10 @@ function WorkspacePanels({
   active,
   canCount,
   revealsSystemQty,
+  workingNode,
 }: {
   id: number;
-  tree: OpnameProgressTree | undefined;
+  tree: OpnameProgressTree;
   treeLoading: boolean;
   treeError: Error | null;
   retryTree: () => void;
@@ -634,8 +644,9 @@ function WorkspacePanels({
   active: boolean;
   canCount: boolean;
   revealsSystemQty: boolean;
+  workingNode: OpnameProgressNode | null;
 }) {
-  const { activeNodeId, setActiveNodeId, loadItem, highlightedItemId, selectedItem } = useOpnameWorkspace();
+  const { activeNodeId, setActiveNodeId, loadItem, highlightedItemId, selectedItem, startNode } = useOpnameWorkspace();
   const [listCollapsed, setListCollapsed] = useState(false);
   const searching = search.trim().length >= 2;
   const mobile = useMobileViewport();
@@ -692,7 +703,7 @@ function WorkspacePanels({
                     <button key={item.id} type="button" onClick={() => loadItem(item)} className="w-full rounded-md border border-slate-200 p-3 text-left hover:bg-slate-50">
                       <span className="block font-medium">{item.name}</span>
                       <span className="block break-words text-xs text-slate-500">{item.barcode || 'Tanpa barcode'} · {item.category_path.join(' › ') || 'Lainnya'}</span>
-                      <span className="mt-1 block"><ItemStatus status={item.status} /></span>
+                      {revealsSystemQty && <span className="mt-1 block"><ItemStatus status={item.status} /></span>}
                     </button>
                   ))}
                   {productSearchHasNext && (
@@ -716,6 +727,9 @@ function WorkspacePanels({
                     openNodeIds={openNodeIds}
                     setOpenNodeIds={setOpenNodeIds}
                     loadItem={loadItem}
+                    startNode={startNode}
+                    canStart={active && canCount}
+                    revealsSystemQty={revealsSystemQty}
                     highlightedItemId={highlightedItemId}
                     selectedItemId={selectedItem?.id ?? null}
                   />
@@ -727,12 +741,14 @@ function WorkspacePanels({
           )}
         </section>
         {listCollapsed && <button type="button" onClick={() => setListCollapsed(false)} className="hidden min-h-11 rounded-md border border-slate-300 px-3 text-sm md:inline-flex md:items-center lg:hidden">Buka daftar progres</button>}
-        <section aria-label="Panel input" className={`${showInput ? '' : 'hidden'} min-w-0 rounded-lg border border-slate-200 bg-white p-4 pb-16 md:max-h-[calc(100dvh-14rem)] md:overflow-y-auto`}>
-          <CountEntryForm
+        <section aria-label="Panel input" className={`${showInput ? '' : 'hidden'} min-w-0 max-h-[calc(100dvh-8rem)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 pb-16 md:max-h-[calc(100dvh-14rem)]`}>
+          <CountingStack
             sessionId={id}
             active={active}
             canCount={canCount}
             revealsSystemQty={revealsSystemQty}
+            tree={tree}
+            workingNode={workingNode}
           />
         </section>
       </div>
@@ -756,6 +772,9 @@ function CategoryNode({
   openNodeIds,
   setOpenNodeIds,
   loadItem,
+  startNode,
+  canStart,
+  revealsSystemQty,
   highlightedItemId,
   selectedItemId,
 }: {
@@ -769,6 +788,9 @@ function CategoryNode({
   openNodeIds: Set<string>;
   setOpenNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   loadItem: (item: OpnameItem) => void;
+  startNode: (id: string) => void;
+  canStart: boolean;
+  revealsSystemQty: boolean;
   highlightedItemId: number | null;
   selectedItemId: number | null;
 }) {
@@ -813,26 +835,29 @@ function CategoryNode({
   const childNodes = node.children.filter((child) => (!onlyUncounted || child.status !== 'done') && (!query.trim() || nodeMatchesSearch(child, query)));
   return (
     <div role="treeitem" aria-expanded={opened} id={`opname-node-${nodeId}`}>
-      <button
-        type="button"
-        aria-expanded={opened}
-        onClick={toggle}
-        style={{ paddingInlineStart: `${12 + depth * 16}px` }}
-        className={`flex min-h-12 w-full items-center gap-2 rounded-md border px-3 py-2 text-left ${selected ? 'border-blue-700 bg-blue-50 ring-1 ring-blue-700' : 'border-transparent hover:bg-slate-50'}`}
-      >
-        <span aria-hidden="true" className="w-5 shrink-0 text-lg">{opened ? '⌄' : '›'}</span>
-        <span className="min-w-0 flex-1">
-          <span className="block break-words text-sm font-medium">{node.name} <span className="font-normal text-slate-500">({node.product_count})</span></span>
-          <span className="mt-1 flex items-center gap-2">
-            <span className="h-1.5 min-w-10 flex-1 overflow-hidden rounded-full bg-slate-200">
-              <span className="block h-full bg-emerald-600" style={{ width: progressWidth(node.counted_count, node.product_count) }} />
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-expanded={opened}
+          onClick={toggle}
+          style={{ paddingInlineStart: `${12 + depth * 16}px` }}
+          className={`flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-2 text-left ${selected ? 'border-blue-700 bg-blue-50 ring-1 ring-blue-700' : 'border-transparent hover:bg-slate-50'}`}
+        >
+          <span aria-hidden="true" className="w-5 shrink-0 text-lg">{opened ? '⌄' : '›'}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block break-words text-sm font-medium">{node.name} <span className="font-normal text-slate-500">({node.product_count})</span></span>
+            <span className="mt-1 flex items-center gap-2">
+              <span className="h-1.5 min-w-10 flex-1 overflow-hidden rounded-full bg-slate-200">
+                <span className="block h-full bg-emerald-600" style={{ width: progressWidth(node.counted_count, node.product_count) }} />
+              </span>
+              <span className="shrink-0 text-xs text-slate-600">{node.counted_count}/{node.product_count}</span>
             </span>
-            <span className="shrink-0 text-xs text-slate-600">{node.counted_count}/{node.product_count}</span>
           </span>
-        </span>
-        <NodeStatus status={node.status} />
-        {node.variance_count !== undefined && node.variance_count > 0 && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-900">{node.variance_count} selisih</span>}
-      </button>
+          <NodeStatus status={node.status} />
+          {revealsSystemQty && node.variance_count !== undefined && node.variance_count > 0 && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-900">{node.variance_count} selisih</span>}
+        </button>
+        {canStart && node.status !== 'done' && <button type="button" onClick={() => startNode(nodeId)} className="min-h-11 shrink-0 rounded-md border border-slate-300 px-2 text-xs font-medium">Mulai</button>}
+      </div>
       {opened && (
         <div role="group" className="space-y-1">
           {childNodes.map((child) => (
@@ -848,6 +873,9 @@ function CategoryNode({
               openNodeIds={openNodeIds}
               setOpenNodeIds={setOpenNodeIds}
               loadItem={loadItem}
+              startNode={startNode}
+              canStart={canStart}
+              revealsSystemQty={revealsSystemQty}
               highlightedItemId={highlightedItemId}
               selectedItemId={selectedItemId}
             />
@@ -861,6 +889,7 @@ function CategoryNode({
               item={item}
               selected={selectedItemId === item.id}
               highlighted={highlightedItemId === item.id}
+              revealsSystemQty={revealsSystemQty}
               onSelect={() => loadItem(item)}
             />
           ))}
@@ -879,11 +908,13 @@ function ProductRow({
   item,
   selected,
   highlighted,
+  revealsSystemQty,
   onSelect,
 }: {
   item: OpnameItem;
   selected: boolean;
   highlighted: boolean;
+  revealsSystemQty: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -898,8 +929,8 @@ function ProductRow({
         {item.counted_qty !== null && <p className="text-xs text-slate-600">Hitungan: {item.counted_qty}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
-        <ItemStatus status={item.status} />
-        {item.system_qty !== undefined && <span className="text-xs text-slate-500">Stok: {item.system_qty}</span>}
+        {revealsSystemQty && <ItemStatus status={item.status} />}
+        {revealsSystemQty && item.system_qty !== undefined && <span className="text-xs text-slate-500">Stok: {item.system_qty}</span>}
       </div>
     </button>
   );

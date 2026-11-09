@@ -461,6 +461,16 @@ class OpnameSessionTest extends SeededTestCase
             'client_request_id' => fake()->uuid(),
         ])->assertOk();
         $countElapsed = (hrtime(true) - $countStartedAt) / 1_000_000_000;
+        $countedItemsStartedAt = hrtime(true);
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?only_counted=true&sort=-counted_at&per_page=2")
+            ->assertOk()->assertJsonCount(1, 'data');
+        $countedItemsElapsed = (hrtime(true) - $countedItemsStartedAt) / 1_000_000_000;
+        $excludedItem = DB::table('stock_opname_items')
+            ->where('session_id', $sessionId)->whereNull('counted_qty')->first(['id']);
+        $recommendationsStartedAt = hrtime(true);
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?category_id=0&scope=direct&only_uncounted=true&per_page=2&exclude_item_ids[]={$excludedItem->id}")
+            ->assertOk()->assertJsonCount(2, 'data');
+        $recommendationsElapsed = (hrtime(true) - $recommendationsStartedAt) / 1_000_000_000;
         DB::table('stock_opname_sessions')->where('id', $sessionId)->update(['status' => 'posted']);
         $guardIds = DB::table('products')->where('store_id', $this->storeId())->orderBy('id')->limit(20)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $guardQueries = 0;
@@ -479,12 +489,14 @@ class OpnameSessionTest extends SeededTestCase
         $phase = null;
         $guardElapsed = (hrtime(true) - $guardStartedAt) / 1_000_000_000;
         fwrite(STDOUT, sprintf(
-            "Opname 5,000 products: start %.3fs, tree %.3fs, items/100 %.3fs, lookup %.3fs, count %.3fs, 20-product guard %.3fs (%d lock queries)\n",
+            "Opname 5,000 products: start %.3fs, tree %.3fs, items/100 %.3fs, lookup %.3fs, count %.3fs, counted/2 %.3fs, recommendations/2 %.3fs, 20-product guard %.3fs (%d lock queries)\n",
             $elapsed,
             $treeElapsed,
             $itemsElapsed,
             $lookupElapsed,
             $countElapsed,
+            $countedItemsElapsed,
+            $recommendationsElapsed,
             $guardElapsed,
             $guardQueries,
         ));

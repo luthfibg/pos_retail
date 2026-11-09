@@ -35,7 +35,7 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
 }
 
-type Query = Record<string, string | number | boolean | null | undefined>;
+type Query = Record<string, string | number | boolean | readonly (string | number)[] | null | undefined>;
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -51,7 +51,11 @@ function buildUrl(path: string, query?: Query): string {
   if (!query) return url;
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) {
-    if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+    if (Array.isArray(v)) {
+      v.forEach((value) => params.append(k, String(value)));
+    } else if (v !== undefined && v !== null && v !== '') {
+      params.set(k, String(v));
+    }
   }
   const qs = params.toString();
   return qs ? `${url}?${qs}` : url;

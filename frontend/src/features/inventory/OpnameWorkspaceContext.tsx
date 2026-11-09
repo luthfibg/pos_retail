@@ -10,6 +10,9 @@ interface OpnameWorkspaceValue {
   highlightedItemId: number | null;
   setHighlightedItemId: Dispatch<SetStateAction<number | null>>;
   loadItem: (item: OpnameItem) => void;
+  selectItem: (item: OpnameItem) => void;
+  startNode: (nodeId: string) => void;
+  workingNodeId: string | null;
 }
 
 const OpnameWorkspaceContext = createContext<OpnameWorkspaceValue | null>(null);
