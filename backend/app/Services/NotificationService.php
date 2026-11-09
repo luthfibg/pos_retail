@@ -10,9 +10,7 @@ use Illuminate\Support\Facades\DB;
 /** Notifikasi dalam aplikasi (tabel notifications), per pengguna dan per toko. */
 class NotificationService
 {
-    public function __construct(private PermissionResolver $permissions)
-    {
-    }
+    public function __construct(private PermissionResolver $permissions) {}
 
     /** Kirim ke semua pengguna aktif di toko yang memegang $permission (kecuali $exceptUserId). */
     public function notifyPermission(
@@ -45,6 +43,32 @@ class NotificationService
         }
 
         return $count;
+    }
+
+    public function notifyUser(
+        int $storeId,
+        int $userId,
+        string $permission,
+        string $type,
+        string $message,
+        ?string $entityType = null,
+        ?int $entityId = null,
+    ): bool {
+        $user = User::query()->where('id', $userId)->where('is_active', 1)->first();
+        if ($user === null || ! $this->permissions->allows($user, $permission, $storeId)) {
+            return false;
+        }
+
+        DB::table('notifications')->insert([
+            'store_id' => $storeId,
+            'user_id' => $userId,
+            'type' => $type,
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'message' => mb_substr($message, 0, 500),
+        ]);
+
+        return true;
     }
 
     /** Tandai selesai (terbaca) semua notifikasi tipe tertentu untuk satu entitas, bagi siapa pun. */

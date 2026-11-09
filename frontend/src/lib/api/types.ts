@@ -394,6 +394,20 @@ export interface OpnameSessionSummary {
   counted_products: number;
   started_at: string;
   created_by: { id: number; name: string };
+  submitted_at?: string | null;
+  submitted_by?: { id: number; name: string } | null;
+  approval_required?: boolean | null;
+  approval_reasons?: Array<{ type: string; product_id?: number; product_name?: string }>;
+  approved_at?: string | null;
+  approved_by?: { id: number; name: string } | null;
+  posted_at?: string | null;
+  posted_by?: { id: number; name: string } | null;
+  rejected_at?: string | null;
+  rejected_by?: { id: number; name: string } | null;
+  reject_reason?: string | null;
+  variance_products?: number | null;
+  short_qty?: Decimal | null;
+  over_qty?: Decimal | null;
 }
 
 export interface OpnameSession extends OpnameSessionSummary {
@@ -402,6 +416,58 @@ export interface OpnameSession extends OpnameSessionSummary {
   cancelled_at: string | null;
   cancelled_by: { id: number; name: string } | null;
   cancel_reason: string | null;
+}
+
+export interface OpnameReportLine {
+  item_id: number;
+  product_id: number;
+  name: string;
+  barcode: string;
+  system_qty: Decimal;
+  counted_qty: Decimal;
+  diff_qty: Decimal;
+  direction: 'short' | 'over';
+  value?: Decimal | null;
+  cost_missing?: boolean;
+  revised: boolean;
+}
+
+export interface OpnameReportNode {
+  id: number;
+  name: string;
+  products_counted: number;
+  variance_count: number;
+  short_qty: Decimal;
+  over_qty: Decimal;
+  lines: OpnameReportLine[];
+  children: OpnameReportNode[];
+}
+
+export interface OpnameReport {
+  session: { id: number; number?: string; status: OpnameSessionStatus };
+  complete: boolean;
+  progress?: { products_counted: number; products_total: number };
+  provisional?: boolean;
+  clean?: boolean;
+  totals?: {
+    products_counted: number;
+    products_total: number;
+    variance_products: number;
+    short_count: number;
+    over_count: number;
+    short_qty: Decimal;
+    over_qty: Decimal;
+    net_qty: Decimal;
+    short_value?: Decimal;
+    over_value?: Decimal;
+    abs_value?: Decimal;
+  };
+  approval?: {
+    required: boolean;
+    reasons: Array<{ type: string; product_id?: number; product_name?: string }>;
+    thresholds?: { per_product: number; per_session: number };
+  };
+  categories?: OpnameReportNode[];
 }
 
 export type OpnameItemStatus = 'uncounted' | 'counted' | 'matched' | 'variance';
@@ -476,6 +542,9 @@ export interface OpnameLookupError extends Error {
 
 export interface OpnameDisplaySetting {
   show_system_qty: boolean;
+  per_product_threshold?: number;
+  per_session_threshold?: number;
+  require_first_opname?: boolean;
 }
 
 export interface OpnameCategoryOption {
@@ -570,6 +639,7 @@ export interface Movement {
   to_bucket: string | null;
   ref_type: string | null;
   ref_id: number | null;
+  ref_label?: string | null;
   occurred_at: string; // UTC
   created_by: number | null;
   created_by_name: string | null;

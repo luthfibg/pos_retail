@@ -25,8 +25,9 @@ export const bucketLabel = (b: string | null) => (b ? BUCKET_LABEL[b] ?? b : '')
 export type Direction = 'in' | 'out' | 'move';
 
 /** Ada to_bucket saja = masuk; from_bucket saja = keluar; keduanya = pindah. */
-export function directionOf(m: { from_bucket: string | null; to_bucket: string | null }): Direction {
+export function directionOf(m: { from_bucket: string | null; to_bucket: string | null; movement_type?: string }): Direction {
   if (m.from_bucket && m.to_bucket) return 'move';
   if (m.from_bucket) return 'out';
+  if (m.movement_type === 'write_off') return 'out';
   return 'in';
 }

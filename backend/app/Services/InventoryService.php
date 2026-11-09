@@ -70,6 +70,135 @@ class InventoryService
         }
     }
 
+    /**
+     * Apply one opname difference and record exactly one movement for the source session.
+     * The caller owns the transaction and has already frozen the session snapshot.
+     */
+    public function postOpnameAdjustment(
+        User $actor,
+        int $storeId,
+        int $sessionId,
+        int $productId,
+        string $diffQty,
+        ?string $unitCost,
+    ): int {
+        return $this->postOpnameAdjustments($actor, $storeId, $sessionId, [[
+            'product_id' => $productId,
+            'diff_qty' => $diffQty,
+            'unit_cost' => $unitCost,
+        ]])[$productId];
+    }
+
+    /**
+     * Apply a batch after one lock validation and write one movement per differing product.
+     *
+     * @param  list<array{product_id: int, diff_qty: string, unit_cost: ?string}>  $lines
+     * @return array<int, int> product id => movement id
+     */
+    public function postOpnameAdjustments(User $actor, int $storeId, int $sessionId, array $lines): array
+    {
+        $this->requireTransaction();
+        if ($lines === []) {
+            return [];
+        }
+
+        $productIds = array_map(fn (array $line) => (int) $line['product_id'], $lines);
+        if (count(array_unique($productIds)) !== count($productIds)) {
+            throw new LogicException('Produk opname duplikat pada posting stok.');
+        }
+        sort($productIds);
+        $products = DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
+            ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        if ($products->count() !== count($productIds)) {
+            abort(404, 'Produk opname tidak ditemukan.');
+        }
+
+        $this->lockStockRows($productIds);
+        $this->opnameLocks->assertUnlocked($storeId, $productIds, 'stock_opname', $sessionId);
+        $balances = DB::table('inventory_balances')->whereIn('product_id', $productIds)
+            ->orderBy('product_id')->orderBy('id')->lockForUpdate()
+            ->get(['id', 'product_id', 'qty_sellable', 'qty_quarantine', 'qty_damaged'])
+            ->groupBy('product_id');
+        $hasIncrease = collect($lines)->contains(fn (array $line) => Decimal::qty($line['diff_qty']) > 0);
+        $locationId = $hasIncrease ? $this->sellingLocationId($storeId) : null;
+        $movementIds = [];
+        $now = $this->now();
+
+        usort($lines, fn (array $a, array $b) => $a['product_id'] <=> $b['product_id']);
+        foreach ($lines as $line) {
+            $productId = (int) $line['product_id'];
+            $units = Decimal::qty($line['diff_qty']);
+            if ($units === 0) {
+                throw new LogicException('Selisih nol tidak dapat diposting.');
+            }
+            $product = $products->get($productId);
+            if ($units > 0) {
+                $result = $this->stockIn(
+                    storeId: $storeId,
+                    product: $product,
+                    locationId: $locationId,
+                    positionId: null,
+                    qty: Decimal::qtyString($units),
+                    unitCost: $line['unit_cost'],
+                    expiryDate: null,
+                    batchCode: null,
+                    goodsReceiptItemId: null,
+                    isOpening: false,
+                    type: 'adjustment',
+                    refType: 'stock_opname',
+                    refId: $sessionId,
+                    actorId: $actor->id,
+                    updateProductCost: false,
+                );
+                $movementIds[$productId] = $result['movement_id'];
+
+                continue;
+            }
+
+            $productBalances = $balances->get($productId, collect());
+            $remaining = abs($units);
+            $available = 0;
+            foreach ($productBalances as $balance) {
+                foreach (['damaged', 'quarantine', 'sellable'] as $bucket) {
+                    $available += Decimal::qty((string) $balance->{'qty_'.$bucket});
+                }
+            }
+            if ($available < $remaining) {
+                throw ValidationException::withMessages([
+                    'stock' => ['stock_changed_during_opname: stok tidak mencukupi untuk menerapkan selisih.'],
+                ]);
+            }
+
+            foreach ($productBalances as $balance) {
+                foreach (['damaged', 'quarantine', 'sellable'] as $bucket) {
+                    $balanceUnits = Decimal::qty((string) $balance->{'qty_'.$bucket});
+                    $take = min($remaining, $balanceUnits);
+                    if ($take > 0) {
+                        $this->decreaseBalance((int) $balance->id, $bucket, $take);
+                        $remaining -= $take;
+                    }
+                    if ($remaining === 0) {
+                        break 2;
+                    }
+                }
+            }
+
+            $movementIds[$productId] = (int) DB::table('inventory_movements')->insertGetId([
+                'store_id' => $storeId,
+                'product_id' => $productId,
+                'qty' => Decimal::qtyString(abs($units)),
+                'movement_type' => 'write_off',
+                'unit_cost' => $line['unit_cost'],
+                'ref_type' => 'stock_opname',
+                'ref_id' => $sessionId,
+                'occurred_at' => $now,
+                'created_by' => $actor->id,
+            ]);
+        }
+
+        return $movementIds;
+    }
+
     /** @var array{store_id: int, product_ids: list<int>, transaction_level: int}|null */
     private ?array $authorizedStockMutation = null;
 
@@ -899,6 +1028,9 @@ class InventoryService
             ->join('products as p', 'p.id', '=', 'm.product_id')
             ->leftJoin('product_batches as pb', 'pb.id', '=', 'm.batch_id')
             ->leftJoin('users as u', 'u.id', '=', 'm.created_by')
+            ->leftJoin('stock_opname_sessions as os', function ($join) {
+                $join->on('os.id', '=', 'm.ref_id')->where('m.ref_type', '=', 'stock_opname');
+            })
             ->where('m.store_id', $storeId)
             ->orderByDesc('m.occurred_at')
             ->orderByDesc('m.id')
@@ -908,6 +1040,7 @@ class InventoryService
                 'm.from_location_id', 'm.from_position_id', 'm.from_bucket',
                 'm.to_location_id', 'm.to_position_id', 'm.to_bucket',
                 'm.ref_type', 'm.ref_id', 'm.occurred_at', 'm.created_by', 'u.name as created_by_name',
+                'os.number as opname_number',
             ]);
 
         if (! empty($filters['product_id'])) {
@@ -942,6 +1075,7 @@ class InventoryService
                 'to_bucket' => $row->to_bucket,
                 'ref_type' => $row->ref_type,
                 'ref_id' => (int) $row->ref_id,
+                'ref_label' => $row->opname_number === null ? "{$row->ref_type} #{$row->ref_id}" : 'Opname '.$row->opname_number,
                 'occurred_at' => $row->occurred_at,
                 'created_by' => $row->created_by === null ? null : (int) $row->created_by,
                 'created_by_name' => $row->created_by_name,
@@ -972,6 +1106,7 @@ class InventoryService
         int $refId,
         ?int $actorId,
         string $bucket = 'sellable',
+        bool $updateProductCost = true,
     ): array {
         $units = Decimal::qty($qty);
         if ($units <= 0) {
@@ -1011,7 +1146,7 @@ class InventoryService
             'created_by' => $actorId,
         ]);
 
-        if ($unitCost !== null) {
+        if ($unitCost !== null && $updateProductCost) {
             DB::update(
                 'UPDATE products SET unit_cost = ROUND(CAST(? AS DECIMAL(18,4)), 4) WHERE id = ?',
                 [$unitCost, $product->id],

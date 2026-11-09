@@ -14,6 +14,11 @@ class UpdateOpnameDisplaySettingRequest extends FormRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        return ['show_system_qty' => ['required', 'boolean']];
+        return [
+            'show_system_qty' => ['sometimes', 'boolean'],
+            'per_product_threshold' => ['sometimes', 'integer', 'min:1'],
+            'per_session_threshold' => ['sometimes', 'integer', 'min:1'],
+            'require_first_opname' => ['sometimes', 'boolean'],
+        ];
     }
 }

@@ -44,13 +44,16 @@ class RbacTest extends TestCase
         $this->assertSame(count(PermissionCatalog::cashier()), count(array_unique(PermissionCatalog::cashier())));
     }
 
-    public function test_admin_has_every_permission(): void
+    public function test_admin_has_every_permission_except_owner_approval_and_cost_visibility(): void
     {
         $admin = $this->makeUser('Admin', 'budi');
 
         $codes = app(PermissionResolver::class)->codes($admin);
 
-        $expected = array_keys(PermissionCatalog::all());
+        $expected = array_values(array_diff(array_keys(PermissionCatalog::all()), [
+            'opname.approve',
+            'opname.view_value',
+        ]));
         sort($expected);
         $this->assertSame($expected, $codes);
     }

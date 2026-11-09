@@ -5,7 +5,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { ApiError } from '@/lib/api/client';
 import { opnameApi } from '@/lib/api/endpoints';
-import type { OpnameItem, OpnameProgressNode, OpnameProgressTree, OpnameSession, OpnameSessionStatus, OpnameSessionSummary } from '@/lib/api/types';
+import type { OpnameItem, OpnameProgressNode, OpnameProgressTree, OpnameReport, OpnameReportNode, OpnameSession, OpnameSessionStatus, OpnameSessionSummary } from '@/lib/api/types';
 import { parseApiTime } from '@/lib/format';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { StartOpnameForm } from './StartOpnameForm';
@@ -205,7 +205,14 @@ export function OpnameSessionsPage() {
                         {session.name && <span className="mt-1 block text-xs text-slate-600">{session.name}</span>}
                       </td>
                       <td className="break-words px-3 py-3">{session.scope_summary}</td>
-                      <td className="px-3 py-3"><StatusBadge status={session.status} /></td>
+                      <td className="px-3 py-3">
+                        <StatusBadge status={session.status} />
+                        {session.status === 'posted' && (
+                          <span className="mt-1 block text-xs text-slate-600">
+                            {session.variance_products === 0 ? '✓ Bersih' : `${session.variance_products ?? 0} selisih`}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-3">{session.counted_products}/{session.total_products} produk</td>
                       <td className="px-3 py-3">{formatSessionTime(session.started_at, timezone)}</td>
                       <td className="break-words px-3 py-3">{session.created_by.name}</td>
@@ -263,6 +270,11 @@ function SessionCard({ session, timezone }: { session: OpnameSessionSummary; tim
         <div className="min-w-0">
           <SessionLink session={session}>{session.number}</SessionLink>
           {session.name && <p className="mt-1 break-words text-sm text-slate-700">{session.name}</p>}
+          {session.status === 'posted' && (
+            <p className="mt-1 text-xs text-slate-600">
+              {session.variance_products === 0 ? '✓ Bersih' : `${session.variance_products ?? 0} selisih`}
+            </p>
+          )}
         </div>
         <StatusBadge status={session.status} />
       </div>
@@ -292,6 +304,10 @@ export function OpnameSessionDetailPage() {
   const [search, setSearch] = useState('');
   const [onlyUncounted, setOnlyUncounted] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [workflowDialog, setWorkflowDialog] = useState<'submit' | 'approve' | 'reject' | null>(null);
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+  const workflowRequestId = useRef(window.crypto.randomUUID());
   const searchTimer = useRef<number | null>(null);
   useEffect(() => () => {
     if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
@@ -307,6 +323,15 @@ export function OpnameSessionDetailPage() {
     queryKey: ['opname', 'session', id],
     queryFn: () => opnameApi.get(id),
     enabled: Number.isInteger(id) && id > 0,
+  });
+  const sessionIsComplete = detail.data
+    ? detail.data.counted_products === detail.data.total_products
+    : false;
+  const reportQuery = useQuery({
+    queryKey: ['opname', 'report', id],
+    queryFn: () => opnameApi.report(id),
+    enabled: Boolean(detail.data && detail.data.status !== 'cancelled'
+      && (detail.data.status !== 'in_progress' || (can('opname.review') && sessionIsComplete))),
   });
   const treeQuery = useQuery({
     queryKey: ['opname', 'tree', id],
@@ -342,6 +367,48 @@ export function OpnameSessionDetailPage() {
       ]);
       setReason('');
       setCancelOpen(false);
+    },
+  });
+  const invalidateWorkflowQueries = async () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['opname', 'session', id] }),
+    queryClient.invalidateQueries({ queryKey: ['opname', 'report', id] }),
+    queryClient.invalidateQueries({ queryKey: ['opname', 'sessions'] }),
+    queryClient.invalidateQueries({ queryKey: ['opname', 'tree', id] }),
+    queryClient.invalidateQueries({ queryKey: ['opname', 'lock-status'] }),
+  ]);
+  const submitWorkflow = useMutation({
+    mutationFn: () => opnameApi.submit(id, {
+      client_request_id: workflowRequestId.current,
+      ...(me?.roles.includes('Owner') ? { owner_password: ownerPassword } : {}),
+    }),
+    onSuccess: async () => {
+      workflowRequestId.current = window.crypto.randomUUID();
+      setWorkflowDialog(null);
+      setOwnerPassword('');
+      await invalidateWorkflowQueries();
+    },
+  });
+  const approveWorkflow = useMutation({
+    mutationFn: () => opnameApi.approve(id, { client_request_id: workflowRequestId.current, owner_password: ownerPassword }),
+    onSuccess: async () => {
+      workflowRequestId.current = window.crypto.randomUUID();
+      setWorkflowDialog(null);
+      setOwnerPassword('');
+      await invalidateWorkflowQueries();
+    },
+  });
+  const rejectWorkflow = useMutation({
+    mutationFn: () => opnameApi.reject(id, {
+      client_request_id: workflowRequestId.current,
+      owner_password: ownerPassword,
+      reason: rejectReason.trim(),
+    }),
+    onSuccess: async () => {
+      workflowRequestId.current = window.crypto.randomUUID();
+      setWorkflowDialog(null);
+      setOwnerPassword('');
+      setRejectReason('');
+      await invalidateWorkflowQueries();
     },
   });
 
@@ -401,7 +468,7 @@ export function OpnameSessionDetailPage() {
   }
 
   return (
-    <div className="min-w-0 space-y-4 pb-20 md:pb-0">
+    <div className="opname-workspace-page min-w-0 space-y-4 pb-20 md:pb-0">
       {session.status !== 'in_progress' && (
         <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
           Sesi ini berstatus <strong>{statusLabel(session.status)}</strong>. Tampilan hanya baca.
@@ -441,6 +508,23 @@ export function OpnameSessionDetailPage() {
           </p>
         </div>
       </header>
+
+      {session.status !== 'cancelled' && (
+        <OpnameWorkflowPanel
+          session={session}
+          report={reportQuery.data}
+          reportLoading={reportQuery.isLoading}
+          reportError={reportQuery.error}
+          canPost={can('opname.post')}
+          canApprove={can('opname.approve')}
+          canReview={can('opname.review')}
+          isOwner={me?.roles.includes('Owner') ?? false}
+          onSubmit={() => { setWorkflowDialog('submit'); setOwnerPassword(''); }}
+          onApprove={() => { setWorkflowDialog('approve'); setOwnerPassword(''); }}
+          onReject={() => { setWorkflowDialog('reject'); setOwnerPassword(''); setRejectReason(''); }}
+          onRetry={() => void reportQuery.refetch()}
+        />
+      )}
 
       <OpnameWorkspaceProvider value={{
         activeNodeId,
@@ -503,6 +587,31 @@ export function OpnameSessionDetailPage() {
           onReasonChange={setReason}
           onCancel={() => { setCancelOpen(false); setReason(''); cancel.reset(); }}
           onSubmit={() => cancel.mutate()}
+        />
+      )}
+      {workflowDialog && (
+        <OpnameWorkflowDialog
+          action={workflowDialog}
+          ownerRequired={workflowDialog !== 'submit' || (me?.roles.includes('Owner') ?? false)}
+          ownerPassword={ownerPassword}
+          reason={rejectReason}
+          error={submitWorkflow.error || approveWorkflow.error || rejectWorkflow.error}
+          pending={submitWorkflow.isPending || approveWorkflow.isPending || rejectWorkflow.isPending}
+          onPasswordChange={setOwnerPassword}
+          onReasonChange={setRejectReason}
+          onClose={() => {
+            setWorkflowDialog(null);
+            setOwnerPassword('');
+            setRejectReason('');
+            submitWorkflow.reset();
+            approveWorkflow.reset();
+            rejectWorkflow.reset();
+          }}
+          onConfirm={() => {
+            if (workflowDialog === 'submit') submitWorkflow.mutate();
+            if (workflowDialog === 'approve') approveWorkflow.mutate();
+            if (workflowDialog === 'reject') rejectWorkflow.mutate();
+          }}
         />
       )}
     </div>
@@ -592,6 +701,223 @@ function WorkspaceSummary({
         Ringkasan selisih tersedia pada tahap berikutnya.
       </div>
     </section>
+  );
+}
+
+function formatReportQty(value: string | number): string {
+  return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 3 }).format(Number(value));
+}
+
+function formatReportMoney(value: string | number): string {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 2,
+  }).format(Number(value));
+}
+
+function approvalReasonLabel(reason: { type: string; product_name?: string }): string {
+  const labels: Record<string, string> = {
+    per_product_threshold: 'Nilai selisih produk memerlukan persetujuan Owner',
+    per_session_threshold: 'Total nilai selisih memerlukan persetujuan Owner',
+    first_opname: 'Opname pertama di toko',
+    cost_missing: 'Harga pokok produk tidak tersedia',
+  };
+  const label = labels[reason.type] ?? 'Memerlukan persetujuan Owner';
+  return reason.product_name ? `${label}: ${reason.product_name}` : label;
+}
+
+function ReportCategory({ node, depth = 0 }: { node: OpnameReportNode; depth?: number }) {
+  return (
+    <section className={`rounded-md border p-3 ${node.variance_count > 0 ? 'border-amber-200 bg-amber-50/40' : 'border-emerald-200 bg-emerald-50/40'}`} style={{ marginLeft: depth ? `${Math.min(depth, 3) * 0.5}rem` : undefined }}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h4 className="font-semibold">{node.name}</h4>
+          <p className="text-sm text-slate-600">{node.products_counted} produk dihitung · {node.variance_count === 0 ? '✓ 0 selisih' : `${node.variance_count} produk berselisih`}</p>
+        </div>
+        {node.variance_count > 0 && <span className="text-sm tabular-nums">−{formatReportQty(node.short_qty)} / +{formatReportQty(node.over_qty)}</span>}
+      </div>
+      {node.lines.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {node.lines.map((line) => (
+            <article key={line.item_id} className="rounded-md border border-slate-200 bg-white p-3 text-sm">
+              <div className="flex flex-wrap justify-between gap-2">
+                <div className="font-medium">{line.name}{line.revised && <span className="ml-2 text-xs font-normal text-indigo-700">↻ dihitung ulang</span>}</div>
+                <span className={line.direction === 'short' ? 'font-semibold text-rose-700' : 'font-semibold text-emerald-700'}>
+                  {line.direction === 'short' ? 'Kurang' : 'Lebih'} {formatReportQty(Math.abs(Number(line.diff_qty)))}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-600">{line.barcode} · Sistem {formatReportQty(line.system_qty)} · Hitung {formatReportQty(line.counted_qty)}</p>
+              {line.value !== undefined && (
+                <p className="mt-1 text-xs text-slate-600">{line.cost_missing ? 'Harga pokok tidak tersedia' : `Nilai selisih ${formatReportMoney(line.value ?? 0)}`}</p>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+      {node.children.map((child) => <div key={child.id} className="mt-2"><ReportCategory node={child} depth={depth + 1} /></div>)}
+    </section>
+  );
+}
+
+function OpnameWorkflowPanel({
+  session,
+  report,
+  reportLoading,
+  reportError,
+  canPost,
+  canApprove,
+  canReview,
+  isOwner,
+  onSubmit,
+  onApprove,
+  onReject,
+  onRetry,
+}: {
+  session: OpnameSession;
+  report?: OpnameReport;
+  reportLoading: boolean;
+  reportError: Error | null;
+  canPost: boolean;
+  canApprove: boolean;
+  canReview: boolean;
+  isOwner: boolean;
+  onSubmit: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+  onRetry: () => void;
+}) {
+  const complete = session.counted_products === session.total_products;
+  const totals = report?.totals;
+  return (
+    <section aria-label="Laporan dan posting opname" className="opname-report space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+      {session.status === 'in_progress' && !complete && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+          Laporan selisih dan posting tersedia setelah seluruh produk dihitung ({session.counted_products}/{session.total_products}).
+        </div>
+      )}
+      {session.status === 'in_progress' && !canReview && complete && (
+        <p className="text-sm text-slate-600">Laporan selisih belum tersedia untuk akun ini.</p>
+      )}
+      {session.status === 'in_progress' && session.reject_reason && (
+        <div role="status" className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
+          Pengajuan sebelumnya ditolak: {session.reject_reason}
+        </div>
+      )}
+      {reportLoading && <p role="status" className="text-sm text-slate-500">Memuat laporan opname…</p>}
+      {reportError && <div className="space-y-2"><ErrorNotice error={reportError} /><button type="button" onClick={onRetry} className="min-h-10 rounded-md border border-slate-300 px-3 text-sm">Coba lagi</button></div>}
+      {report?.complete && totals && (
+        <>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold">Laporan opname</h3>
+              <p className="text-sm text-slate-600">{session.number} · {statusLabel(session.status)}</p>
+              {report.provisional && <p className="text-xs text-slate-500">Pratinjau sementara — nilai akan dibekukan saat diajukan atau diposting.</p>}
+            </div>
+            <button type="button" onClick={() => window.print()} className="min-h-10 rounded-md border border-slate-300 px-3 text-sm print:hidden">Cetak</button>
+          </div>
+          {report.clean && <div role="status" className="rounded-md bg-emerald-50 p-3 font-medium text-emerald-900">✓ Tidak ada selisih</div>}
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <Info label="Produk dihitung">{totals.products_counted}/{totals.products_total}</Info>
+            <Info label="Produk berselisih">{totals.variance_products}</Info>
+            <Info label="Kurang / lebih">{totals.short_count} / {totals.over_count}</Info>
+            <Info label="Jumlah bersih">{formatReportQty(totals.net_qty)}</Info>
+            {totals.abs_value !== undefined && <Info label="Total nilai selisih">{formatReportMoney(totals.abs_value)}</Info>}
+          </div>
+          {report.approval?.required && (
+            <div role="status" className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              <strong>Memerlukan persetujuan Owner</strong>
+              {report.approval.reasons.map((reason, index) => <p key={`${reason.type}-${reason.product_id ?? index}`}>• {approvalReasonLabel(reason)}</p>)}
+              {report.approval.thresholds && (
+                <p className="pt-1 text-xs">Ambang per produk {formatReportMoney(report.approval.thresholds.per_product)} · per sesi {formatReportMoney(report.approval.thresholds.per_session)}</p>
+              )}
+            </div>
+          )}
+          {session.status === 'pending_approval' && !canApprove && (
+            <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">Sesi menunggu persetujuan Owner. Stok masih terkunci.</p>
+          )}
+          {session.status === 'pending_approval' && canApprove && (
+            <div className="flex flex-wrap gap-2 print:hidden">
+              <button type="button" onClick={onApprove} className="min-h-11 rounded-md bg-emerald-700 px-4 font-medium text-white">Setujui dan posting</button>
+              <button type="button" onClick={onReject} className="min-h-11 rounded-md border border-rose-300 px-4 font-medium text-rose-800">Tolak</button>
+            </div>
+          )}
+          {session.status === 'in_progress' && canPost && complete && (
+            <button type="button" onClick={onSubmit} className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white print:hidden">
+              {isOwner ? 'Posting Opname' : report.approval?.required ? 'Ajukan ke Owner' : 'Posting Opname'}
+            </button>
+          )}
+          {session.status === 'posted' && (
+            <p className="text-sm text-emerald-800">Opname diposting pada {session.posted_at ? formatSessionTime(session.posted_at, 'Asia/Jakarta') : '—'}.</p>
+          )}
+          <div className="space-y-2">
+            {report.categories?.map((node) => <ReportCategory key={node.id} node={node} />)}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function OpnameWorkflowDialog({
+  action,
+  ownerRequired,
+  ownerPassword,
+  reason,
+  error,
+  pending,
+  onPasswordChange,
+  onReasonChange,
+  onClose,
+  onConfirm,
+}: {
+  action: 'submit' | 'approve' | 'reject';
+  ownerRequired: boolean;
+  ownerPassword: string;
+  reason: string;
+  error: Error | null;
+  pending: boolean;
+  onPasswordChange: (value: string) => void;
+  onReasonChange: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const title = action === 'submit' ? 'Konfirmasi posting opname'
+    : action === 'approve' ? 'Setujui dan posting opname'
+      : 'Tolak pengajuan opname';
+  return (
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center overflow-y-auto bg-slate-900/50 md:items-center md:p-4">
+      <section role="dialog" aria-modal="true" aria-labelledby="opname-workflow-title" className="my-auto w-full space-y-4 bg-white p-4 md:max-w-lg md:rounded-xl md:shadow-xl">
+        <h3 id="opname-workflow-title" className="text-lg font-semibold">{title}</h3>
+        <p className="text-sm text-slate-600">
+          {action === 'reject' ? 'Alasan penolakan wajib diisi. Sesi akan kembali ke tahap penghitungan.' : 'Perubahan stok akan diproses dalam satu transaksi dan tidak dapat diulang.'}
+        </p>
+        {action === 'reject' && (
+          <label className="block space-y-1 text-sm font-medium">
+            <span>Alasan penolakan</span>
+            <textarea value={reason} onChange={(event) => onReasonChange(event.target.value)} rows={3} className="w-full rounded-md border border-slate-300 p-3" />
+          </label>
+        )}
+        {ownerRequired && (
+          <label className="block space-y-1 text-sm font-medium">
+            <span>Password Owner</span>
+            <input type="password" autoComplete="current-password" value={ownerPassword} onChange={(event) => onPasswordChange(event.target.value)} className="min-h-11 w-full rounded-md border border-slate-300 px-3" />
+          </label>
+        )}
+        {error && <ErrorNotice error={error} />}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" disabled={pending} onClick={onClose} className="min-h-11 rounded-md border border-slate-300 px-4">Kembali</button>
+          <button
+            type="button"
+            disabled={pending || (ownerRequired && !ownerPassword) || (action === 'reject' && reason.trim().length < 3)}
+            onClick={onConfirm}
+            className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white disabled:opacity-60"
+          >
+            {pending ? 'Memproses…' : action === 'reject' ? 'Tolak' : action === 'approve' ? 'Setujui dan posting' : 'Konfirmasi'}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 

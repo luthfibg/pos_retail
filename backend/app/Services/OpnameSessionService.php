@@ -367,12 +367,23 @@ class OpnameSessionService
         return DB::table('stock_opname_sessions as s')
             ->join('users as creator', 'creator.id', '=', 's.created_by')
             ->leftJoin('users as canceller', 'canceller.id', '=', 's.cancelled_by')
+            ->leftJoin('users as submitter', 'submitter.id', '=', 's.submitted_by')
+            ->leftJoin('users as approver', 'approver.id', '=', 's.approved_by')
+            ->leftJoin('users as poster', 'poster.id', '=', 's.posted_by')
+            ->leftJoin('users as rejector', 'rejector.id', '=', 's.rejected_by')
             ->where('s.store_id', $storeId)
             ->select([
                 's.id', 's.number', 's.name', 's.scope_type', 's.status', 's.notes',
                 's.started_at', 's.cancelled_at', 's.cancel_reason',
+                's.submitted_at', 's.approval_required', 's.approval_reasons',
+                's.approved_at', 's.posted_at', 's.rejected_at', 's.reject_reason',
+                's.variance_products', 's.short_qty', 's.over_qty',
                 'creator.id as creator_id', 'creator.name as creator_name',
                 'canceller.id as canceller_id', 'canceller.name as canceller_name',
+                'submitter.id as submitter_id', 'submitter.name as submitter_name',
+                'approver.id as approver_id', 'approver.name as approver_name',
+                'poster.id as poster_id', 'poster.name as poster_name',
+                'rejector.id as rejector_id', 'rejector.name as rejector_name',
             ]);
     }
 
@@ -405,6 +416,32 @@ class OpnameSessionService
             'counted_products' => $countedProducts ?? 0,
             'started_at' => $row->started_at,
             'created_by' => ['id' => (int) $row->creator_id, 'name' => $row->creator_name],
+            'submitted_at' => $row->submitted_at,
+            'submitted_by' => $row->submitter_id === null ? null : [
+                'id' => (int) $row->submitter_id,
+                'name' => $row->submitter_name,
+            ],
+            'approval_required' => $row->approval_required === null ? null : (bool) $row->approval_required,
+            'approval_reasons' => $row->approval_reasons === null ? [] : json_decode((string) $row->approval_reasons, true),
+            'approved_at' => $row->approved_at,
+            'approved_by' => $row->approver_id === null ? null : [
+                'id' => (int) $row->approver_id,
+                'name' => $row->approver_name,
+            ],
+            'posted_at' => $row->posted_at,
+            'posted_by' => $row->poster_id === null ? null : [
+                'id' => (int) $row->poster_id,
+                'name' => $row->poster_name,
+            ],
+            'rejected_at' => $row->rejected_at,
+            'rejected_by' => $row->rejector_id === null ? null : [
+                'id' => (int) $row->rejector_id,
+                'name' => $row->rejector_name,
+            ],
+            'reject_reason' => $row->reject_reason,
+            'variance_products' => $row->variance_products === null ? null : (int) $row->variance_products,
+            'short_qty' => $row->short_qty,
+            'over_qty' => $row->over_qty,
         ];
         if ($detail) {
             $record += [

@@ -126,7 +126,7 @@ export function MovementsPage() {
                   <td className="whitespace-nowrap px-3 py-2">{formatDateTime(m.occurred_at)}</td>
                   <td className="px-3 py-2">
                     {MOVEMENT_LABEL[m.movement_type] ?? m.movement_type}
-                    {m.ref_type && m.ref_id !== null && <div className="text-xs text-slate-400">{m.ref_type} #{m.ref_id}</div>}
+                    {m.ref_type && m.ref_id !== null && <div className="text-xs text-slate-400">{m.ref_label ?? `${m.ref_type} #${m.ref_id}`}</div>}
                   </td>
                   <td className="px-3 py-2">
                     {m.product_name}

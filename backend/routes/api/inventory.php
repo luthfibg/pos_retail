@@ -44,6 +44,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('stock-opname-sessions', [OpnameSessionController::class, 'index'])->middleware('can:opname.view');
     Route::get('stock-opname-sessions/{session}', [OpnameSessionController::class, 'show'])
         ->whereNumber('session')->middleware('can:opname.view');
+    Route::get('stock-opname-sessions/{session}/report', [OpnameSessionController::class, 'report'])
+        ->whereNumber('session')->middleware('can:opname.view');
+    Route::post('stock-opname-sessions/{session}/submit', [OpnameSessionController::class, 'submit'])
+        ->whereNumber('session')->middleware('can:opname.post');
+    Route::post('stock-opname-sessions/{session}/approve', [OpnameSessionController::class, 'approve'])
+        ->whereNumber('session')->middleware('can:opname.approve');
+    Route::post('stock-opname-sessions/{session}/reject', [OpnameSessionController::class, 'reject'])
+        ->whereNumber('session')->middleware('can:opname.approve');
     Route::get('stock-opname-sessions/{session}/tree', [OpnameSessionController::class, 'tree'])
         ->whereNumber('session')->middleware('can:opname.view');
     Route::get('stock-opname-sessions/{session}/items', [OpnameSessionController::class, 'items'])

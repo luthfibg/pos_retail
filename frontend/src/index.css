@@ -60,3 +60,10 @@ body { @apply bg-slate-50 text-slate-900 antialiased; }
   .print-doc th { background: #f1f5f9; text-align: left; }
   .print-doc tr { break-inside: avoid; }
 }
+
+@media print {
+  .opname-workspace-page > :not(.opname-report) { display: none !important; }
+  .opname-report { border: 0 !important; padding: 0 !important; color: #000 !important; }
+  .opname-report > section { break-inside: avoid; }
+  .opname-report button { display: none !important; }
+}

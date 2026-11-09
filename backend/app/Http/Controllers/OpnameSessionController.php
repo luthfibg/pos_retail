@@ -5,13 +5,19 @@ namespace App\Http\Controllers;
 use App\Exceptions\OpnameCountConflictException;
 use App\Exceptions\OpnameLookupException;
 use App\Exceptions\OpnameOverlapException;
+use App\Exceptions\OpnameWorkflowException;
+use App\Http\Requests\ApproveOpnameSessionRequest;
 use App\Http\Requests\CancelOpnameSessionRequest;
 use App\Http\Requests\ClearOpnameCountRequest;
+use App\Http\Requests\RejectOpnameSessionRequest;
 use App\Http\Requests\StartOpnameSessionRequest;
 use App\Http\Requests\StoreOpnameCountRequest;
+use App\Http\Requests\SubmitOpnameSessionRequest;
 use App\Services\OpnameCountService;
 use App\Services\OpnameProgressService;
 use App\Services\OpnameSessionService;
+use App\Services\OpnameWorkflowService;
+use App\Services\PermissionResolver;
 use App\Services\StoreContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +28,8 @@ class OpnameSessionController extends Controller
         private OpnameSessionService $sessions,
         private OpnameProgressService $progress,
         private OpnameCountService $counts,
+        private OpnameWorkflowService $workflow,
+        private PermissionResolver $permissions,
         private StoreContext $stores,
     ) {}
 
@@ -48,6 +56,80 @@ class OpnameSessionController extends Controller
         abort_if($data === null, 404, 'Sesi opname tidak ditemukan.');
 
         return response()->json(['data' => $data]);
+    }
+
+    public function report(Request $request, int $session): JsonResponse
+    {
+        $storeId = $this->stores->requireIdFor($request->user());
+        $data = $this->sessions->find($storeId, $session);
+        abort_if($data === null, 404, 'Sesi opname tidak ditemukan.');
+        if ($data['status'] === 'in_progress') {
+            abort_unless($this->permissions->allows($request->user(), 'opname.review', $storeId), 403);
+        }
+
+        try {
+            return response()->json(['data' => $this->workflow->report($request->user(), $storeId, $session)]);
+        } catch (OpnameWorkflowException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+                ...$exception->details,
+            ], $exception->httpStatus);
+        }
+    }
+
+    public function submit(SubmitOpnameSessionRequest $request, int $session): JsonResponse
+    {
+        try {
+            return response()->json(['data' => $this->workflow->submit(
+                $request->user(),
+                $this->stores->requireIdFor($request->user()),
+                $session,
+                $request->validated(),
+            )]);
+        } catch (OpnameWorkflowException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+                ...$exception->details,
+            ], $exception->httpStatus);
+        }
+    }
+
+    public function approve(ApproveOpnameSessionRequest $request, int $session): JsonResponse
+    {
+        try {
+            return response()->json(['data' => $this->workflow->approve(
+                $request->user(),
+                $this->stores->requireIdFor($request->user()),
+                $session,
+                $request->validated(),
+            )]);
+        } catch (OpnameWorkflowException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+                ...$exception->details,
+            ], $exception->httpStatus);
+        }
+    }
+
+    public function reject(RejectOpnameSessionRequest $request, int $session): JsonResponse
+    {
+        try {
+            return response()->json(['data' => $this->workflow->reject(
+                $request->user(),
+                $this->stores->requireIdFor($request->user()),
+                $session,
+                $request->validated(),
+            )]);
+        } catch (OpnameWorkflowException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+                ...$exception->details,
+            ], $exception->httpStatus);
+        }
     }
 
     public function store(StartOpnameSessionRequest $request): JsonResponse

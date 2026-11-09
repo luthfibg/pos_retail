@@ -63,7 +63,8 @@ class PermissionResolver
         foreach (StockAuthorityPolicy::controlledPermissions() as $code) {
             unset($set[$code]);
         }
-        foreach (StockAuthorityPolicy::permissionsFor($storeId, StockAuthorityPolicy::roleNames($userId, $storeId)) as $code) {
+        $roleNames = StockAuthorityPolicy::roleNames($userId, $storeId);
+        foreach (StockAuthorityPolicy::permissionsFor($storeId, $roleNames) as $code) {
             $set[$code] = true;
         }
 
@@ -73,11 +74,19 @@ class PermissionResolver
             ->where('up.store_id', $storeId)
             ->get(['p.code', 'up.effect']);
 
+        $ownerOrAccounting = array_intersect($roleNames, ['Owner', 'Accounting']) !== [];
+        if (in_array('Admin', $roleNames, true) && ! $ownerOrAccounting) {
+            unset($set['opname.approve'], $set['opname.view_value']);
+        }
         foreach ($overrides as $override) {
             if ($override->effect === 'deny') {
                 unset($set[$override->code]);
             } else {
-                $set[$override->code] = true;
+                if (! (in_array('Admin', $roleNames, true)
+                    && ! $ownerOrAccounting
+                    && in_array($override->code, ['opname.approve', 'opname.view_value'], true))) {
+                    $set[$override->code] = true;
+                }
             }
         }
 

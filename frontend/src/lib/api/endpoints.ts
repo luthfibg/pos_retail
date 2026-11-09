@@ -15,7 +15,7 @@ import type {
   BankAccount, BankAccountSummary,
   AvailableRegister, Register,
   Adjustment, AdjustmentInput, AdjustmentMeta, AdjustmentReasonCode, AdjustmentType,
-  OpnameCategoryOption, OpnameSession, OpnameSessionSummary, OpnameSessionStatus, OpnameScopeType,
+  OpnameCategoryOption, OpnameReport, OpnameSession, OpnameSessionSummary, OpnameSessionStatus, OpnameScopeType,
   OpnameDisplaySetting, OpnameItem, OpnameProgressTree, PurchaseOrderResetPeriod, PurchaseOrderResetPreview, PurchaseOrderResetResult,
   OpnameCountLog,
   OpnameCountMode,
@@ -194,6 +194,8 @@ export const opnameApi = {
   } = {}) => api<Paginated<OpnameSessionSummary>>('/stock-opname-sessions', { query: { ...filters } }),
   get: (id: number) =>
     api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}`).then((r) => r.data),
+  report: (id: number) =>
+    api<{ data: OpnameReport }>(`/stock-opname-sessions/${id}/report`).then((r) => r.data),
   tree: (id: number) =>
     api<OpnameProgressTree>(`/stock-opname-sessions/${id}/tree`),
   items: (id: number, filters: {
@@ -240,6 +242,12 @@ export const opnameApi = {
       method: 'POST',
       body: { reason },
     }).then((r) => r.data),
+  submit: (id: number, input: { client_request_id: string; owner_password?: string }) =>
+    api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/submit`, { method: 'POST', body: input }).then((r) => r.data),
+  approve: (id: number, input: { client_request_id: string; owner_password: string }) =>
+    api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/approve`, { method: 'POST', body: input }).then((r) => r.data),
+  reject: (id: number, input: { client_request_id: string; owner_password: string; reason: string }) =>
+    api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/reject`, { method: 'POST', body: input }).then((r) => r.data),
 };
 
 export const opnameLockApi = {
@@ -248,10 +256,10 @@ export const opnameLockApi = {
 
 export const opnameSettingsApi = {
   get: () => api<{ data: OpnameDisplaySetting }>('/settings/opname').then((r) => r.data),
-  update: (show_system_qty: boolean) =>
+  update: (input: Partial<OpnameDisplaySetting>) =>
     api<{ data: OpnameDisplaySetting }>('/settings/opname', {
       method: 'PUT',
-      body: { show_system_qty },
+      body: input,
     }).then((r) => r.data),
 };
 

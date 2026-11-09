@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateOpnameDisplaySettingRequest;
-use App\Services\OpnameDisplayPolicy;
+use App\Services\OpnameApprovalSettingsService;
 use App\Services\StoreContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,14 +11,14 @@ use Illuminate\Http\Request;
 class OpnameDisplaySettingController extends Controller
 {
     public function __construct(
-        private OpnameDisplayPolicy $policy,
+        private OpnameApprovalSettingsService $settings,
         private StoreContext $stores,
     ) {}
 
     public function show(Request $request): JsonResponse
     {
         return response()->json([
-            'data' => $this->policy->get($this->stores->requireIdFor($request->user())),
+            'data' => $this->settings->get($request->user(), $this->stores->requireIdFor($request->user())),
         ]);
     }
 
@@ -27,11 +27,7 @@ class OpnameDisplaySettingController extends Controller
         $user = $request->user();
 
         return response()->json([
-            'data' => $this->policy->update(
-                $user,
-                $this->stores->requireIdFor($user),
-                (bool) $request->validated('show_system_qty'),
-            ),
+            'data' => $this->settings->update($user, $this->stores->requireIdFor($user), $request->validated()),
         ]);
     }
 }

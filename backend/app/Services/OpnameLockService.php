@@ -24,7 +24,24 @@ class OpnameLockService
         }
 
         $sourceSessionId = null;
-        if ($sourceRefType === 'stock_adjustment' && $sourceRefId !== null) {
+        if ($sourceRefType === 'stock_opname' && $sourceRefId !== null) {
+            $sourceSession = DB::table('stock_opname_sessions')
+                ->where('store_id', $storeId)
+                ->where('id', $sourceRefId)
+                ->whereIn('status', ['in_progress', 'pending_approval'])
+                ->first(['id']);
+            $sessionProducts = $sourceSession === null ? 0 : DB::table('stock_opname_items')
+                ->where('session_id', $sourceRefId)
+                ->whereIn('product_id', $productIds)
+                ->count();
+
+            if ($sourceSession === null || $sessionProducts !== count($productIds)) {
+                throw ValidationException::withMessages([
+                    'opname_session_id' => ['Referensi sesi opname tidak aktif atau tidak mencakup produk yang disesuaikan.'],
+                ]);
+            }
+            $sourceSessionId = (int) $sourceSession->id;
+        } elseif ($sourceRefType === 'stock_adjustment' && $sourceRefId !== null) {
             $sourceAdjustment = DB::table('stock_adjustments')
                 ->where('store_id', $storeId)
                 ->where('id', $sourceRefId)

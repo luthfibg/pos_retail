@@ -33,6 +33,10 @@ final class PermissionCatalog
             'opname.create' => 'Memulai sesi stock opname',
             'opname.cancel' => 'Membatalkan sesi stock opname',
             'opname.settings.manage' => 'Mengubah pengaturan sesi stock opname',
+            'opname.review' => 'Melihat pratinjau hasil stock opname',
+            'opname.post' => 'Mengajukan atau memposting hasil stock opname',
+            'opname.approve' => 'Menyetujui atau menolak hasil stock opname sebagai Owner',
+            'opname.view_value' => 'Melihat nilai rupiah selisih stock opname',
             'discount.manage' => 'Kelola diskon',
             'customer.create' => 'Menambah data karyawan (status menunggu verifikasi)',
             'customer.verify' => 'Memverifikasi karyawan',
@@ -123,6 +127,7 @@ final class PermissionCatalog
             'product.activate', 'price.change', 'discount.manage',
             'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve',
             'opname.view', 'opname.count', 'opname.create', 'opname.cancel', 'opname.settings.manage',
+            'opname.review', 'opname.post', 'opname.approve', 'opname.view_value',
             'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
             'shift.review', 'register.manage', 'float.configure', 'reports.view', 'reports.profit.view',
@@ -153,7 +158,7 @@ final class PermissionCatalog
     public static function accounting(): array
     {
         return [
-            'inventory.view', 'opname.view', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close',
+            'inventory.view', 'opname.view', 'opname.view_value', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close',
             'invoice.generate', 'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'reports.view',
             'reports.profit.view',
         ];
