@@ -54,7 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Inventory',
     items: [
-      { to: '/products', label: 'Produk', permission: 'inventory.view' },
+      { to: '/products', label: 'Stok Barang', permission: 'inventory.view' },
       { to: '/goods-receipts', label: 'Penerimaan Barang', permission: 'goods_receipt.create', cashierOnly: true },
       { to: '/supplier-returns', label: 'Retur Barang', permission: ['supplier_return.create', 'inventory.adjust.approve'] },
       { to: '/inventory/opening', label: 'Stok Eksisting Toko', permission: 'inventory.opening_balance' },

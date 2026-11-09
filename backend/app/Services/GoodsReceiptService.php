@@ -59,7 +59,7 @@ class GoodsReceiptService
             ->join('locations as l', 'l.id', '=', 'gr.receiving_location_id')
             ->leftJoin('supplier_returns as sr', 'sr.id', '=', 'gr.supplier_return_id')
             ->where('gr.store_id', $storeId)
-            ->select('gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'u.name as received_by_name', 'l.name as receiving_location_name', 'sr.doc_number as supplier_return_doc_number');
+            ->select('gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'u.name as received_by_name', 'u.cashier_number as received_by_cashier_number', 'l.name as receiving_location_name', 'sr.doc_number as supplier_return_doc_number');
 
         foreach (['status', 'document_status'] as $column) {
             if (! empty($filters[$column])) {
@@ -89,6 +89,7 @@ class GoodsReceiptService
             'receiving_location_name' => $row->receiving_location_name,
             'document_status' => $row->document_status,
             'received_by_name' => $row->received_by_name,
+            'received_by_cashier_number' => $row->received_by_cashier_number,
             'posted_at' => $row->posted_at,
             'created_at' => $row->created_at,
         ]);
@@ -964,7 +965,7 @@ class GoodsReceiptService
             ->leftJoin('users as v', 'v.id', '=', 'gr.verified_by')
             ->leftJoin('supplier_returns as sr', 'sr.id', '=', 'gr.supplier_return_id')
             ->where('gr.store_id', $storeId)->where('gr.id', $id)
-            ->first(['gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'l.name as receiving_location_name', 'u.name as received_by_name', 'v.name as verified_by_name', 'sr.doc_number as supplier_return_doc_number']);
+            ->first(['gr.*', 'po.doc_number as po_doc_number', 's.name as supplier_name', 'l.name as receiving_location_name', 'u.name as received_by_name', 'u.cashier_number as received_by_cashier_number', 'v.name as verified_by_name', 'sr.doc_number as supplier_return_doc_number']);
 
         if ($gr === null) {
             return null;
@@ -1014,6 +1015,7 @@ class GoodsReceiptService
             'attachments_open' => $gr->status !== 'cancelled' && $gr->document_status !== 'verified',
             'received_by' => (int) $gr->received_by,
             'received_by_name' => $gr->received_by_name,
+            'received_by_cashier_number' => $gr->received_by_cashier_number,
             'posted_at' => $gr->posted_at,
             'verified_by' => $gr->verified_by === null ? null : (int) $gr->verified_by,
             'verified_by_name' => $gr->verified_by_name,

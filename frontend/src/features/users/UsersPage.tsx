@@ -92,7 +92,7 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
     setFormErrors({});
     create.reset();
     update.reset();
-    setSelected({ id: -1, name: '', username: '', email: null, is_active: true, roles: [], last_login_at: null });
+    setSelected({ id: -1, name: '', username: '', cashier_number: null, email: null, is_active: true, roles: [], last_login_at: null });
     setEditing(true);
   }
 
@@ -178,7 +178,11 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
                 <tbody className="divide-y divide-slate-100">
                   {list.data.data.map((user) => (
                     <tr key={user.id}>
-                      <td className="py-3 pr-3"><span className="block font-medium">{user.name}</span><span className="text-xs text-slate-500">{user.username}</span></td>
+                      <td className="py-3 pr-3">
+                        <span className="block font-medium">{user.name}</span>
+                        {user.roles.includes('Kasir') && user.cashier_number && <span className="block text-xs text-slate-500">{user.cashier_number}</span>}
+                        <span className="text-xs text-slate-500">{user.username}</span>
+                      </td>
                       <td className="py-3 pr-3">{user.email ?? '—'}</td>
                       <td className="py-3 pr-3">{user.roles.join(', ') || '—'}</td>
                       <td className="py-3 pr-3"><span className={`rounded-full px-2 py-1 text-xs font-medium ${user.is_active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{user.is_active ? 'Aktif' : 'Nonaktif'}</span></td>

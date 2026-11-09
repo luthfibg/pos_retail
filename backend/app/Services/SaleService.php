@@ -697,7 +697,7 @@ class SaleService
             ->join('users as u', 'u.id', '=', 's.cashier_id')
             ->leftJoin('customers as c', 'c.id', '=', 's.customer_id')
             ->where('s.store_id', $storeId)
-            ->select(['s.*', 'u.name as cashier_name', 'c.name as customer_name', 'c.customer_no']);
+            ->select(['s.*', 'u.name as cashier_name', 'u.cashier_number as cashier_number', 'c.name as customer_name', 'c.customer_no']);
     }
 
     /** @return array<string, mixed> */
@@ -709,6 +709,7 @@ class SaleService
             'shift_id' => (int) $row->shift_id,
             'cashier_id' => (int) $row->cashier_id,
             'cashier_name' => $row->cashier_name,
+            'cashier_number' => $row->cashier_number,
             'customer_id' => $row->customer_id === null ? null : (int) $row->customer_id,
             'customer_name' => $row->customer_name,
             'customer_no' => $row->customer_no,

@@ -18,9 +18,7 @@ use Illuminate\Validation\ValidationException;
  */
 class UserService
 {
-    public function __construct(private AuditLogger $audit, private PermissionResolver $permissions, private AdminModelService $adminModel)
-    {
-    }
+    public function __construct(private AuditLogger $audit, private PermissionResolver $permissions, private AdminModelService $adminModel) {}
 
     /** @param array<string, mixed> $filters */
     public function search(int $storeId, array $filters, int $perPage): LengthAwarePaginator
@@ -37,7 +35,7 @@ class UserService
                 ->join('roles as ro', 'ro.id', '=', 'r2.role_id')->whereColumn('r2.user_id', 'u.id')
                 ->where('r2.store_id', $storeId)->where('ro.name', $filters['role'])))
             ->orderBy('u.name')
-            ->select(['u.id', 'u.name', 'u.username', 'u.email', 'u.is_active', 'u.last_login_at'])
+            ->select(['u.id', 'u.name', 'u.username', 'u.cashier_number', 'u.email', 'u.is_active', 'u.last_login_at'])
             ->paginate($perPage);
 
         $roles = $this->rolesFor($storeId, $page->pluck('id')->all());
@@ -81,6 +79,9 @@ class UserService
             ]);
 
             DB::table('user_roles')->insert(['user_id' => $id, 'role_id' => $this->roleId($data['role']), 'store_id' => $storeId]);
+            if ($data['role'] === 'Kasir') {
+                DB::table('users')->where('id', $id)->update(['cashier_number' => $this->nextCashierNumber()]);
+            }
 
             $this->audit->log('user.create', 'user', $id,
                 after: ['name' => $data['name'], 'username' => $data['username'], 'email' => $data['email'] ?? null, 'role' => $data['role']],
@@ -160,6 +161,9 @@ class UserService
             if ($roleChanging) {
                 DB::table('user_roles')->where('user_id', $id)->where('store_id', $storeId)->delete();
                 DB::table('user_roles')->insert(['user_id' => $id, 'role_id' => $this->roleId($newRole), 'store_id' => $storeId]);
+                if ($newRole === 'Kasir' && $cur->cashier_number === null) {
+                    DB::table('users')->where('id', $id)->update(['cashier_number' => $this->nextCashierNumber()]);
+                }
             }
 
             if ($deactivating) {
@@ -236,7 +240,7 @@ class UserService
     {
         return DB::table('users as u')
             ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('user_roles as ur')->whereColumn('ur.user_id', 'u.id')->where('ur.store_id', $storeId))
-            ->where('u.id', $id)->first(['u.id', 'u.name', 'u.username', 'u.email', 'u.is_active', 'u.last_login_at']);
+            ->where('u.id', $id)->first(['u.id', 'u.name', 'u.username', 'u.cashier_number', 'u.email', 'u.is_active', 'u.last_login_at']);
     }
 
     /**
@@ -264,10 +268,25 @@ class UserService
             'id' => (int) $r->id,
             'name' => $r->name,
             'username' => $r->username,
+            'cashier_number' => $r->cashier_number,
             'email' => $r->email,
             'is_active' => (bool) $r->is_active,
             'roles' => $roles,
             'last_login_at' => $r->last_login_at,
         ];
+    }
+
+    private function nextCashierNumber(): string
+    {
+        $sequence = DB::table('cashier_number_sequences')->where('id', 1)->lockForUpdate()->first();
+        if ($sequence === null) {
+            throw new \LogicException('Nomor kasir belum diinisialisasi.');
+        }
+
+        DB::table('cashier_number_sequences')->where('id', 1)->update([
+            'next_number' => $sequence->next_number + 1,
+        ]);
+
+        return 'K'.str_pad((string) $sequence->next_number, 3, '0', STR_PAD_LEFT);
     }
 }

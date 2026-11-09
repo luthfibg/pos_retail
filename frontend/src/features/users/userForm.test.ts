@@ -6,6 +6,7 @@ const existing: ManagedUser = {
   id: 8,
   name: 'Siti Aminah',
   username: 'siti.aminah',
+  cashier_number: 'K008',
   email: null,
   is_active: true,
   roles: ['Kasir'],

@@ -28,6 +28,7 @@ export function ReceiptView({ sale, paperSize = '80' }: { sale: Sale; paperSize?
         <div>{sale.doc_number}</div>
         <div>{formatDateTime(sale.posted_at)}</div>
         <div>Kasir: {sale.cashier_name ?? '—'}</div>
+        {sale.cashier_number && <div>{sale.cashier_number}</div>}
       </div>
 
       {credit && sale.customer_name && (

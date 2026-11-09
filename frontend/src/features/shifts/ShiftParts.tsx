@@ -33,7 +33,7 @@ export function ShiftFigures({ shift }: { shift: Shift }) {
   );
   return (
     <dl className="grid grid-cols-[11rem_1fr] gap-y-1.5 text-sm">
-      {row('Kasir', shift.cashier_name)}
+      {row('Kasir', <><span className="block">{shift.cashier_name}</span>{shift.cashier_number && <span className="block text-xs text-slate-500">{shift.cashier_number}</span>}</>)}
       {row('Dibuka', formatDateTime(shift.opened_at))}
       {shift.closed_at && row('Ditutup', formatDateTime(shift.closed_at))}
       {row('Saldo awal', formatRupiah(shift.opening_balance))}

@@ -178,13 +178,14 @@ class RegisterService
             ->join('users as u', 'u.id', '=', 's.cashier_id')
             ->where('s.register_id', $registerId)
             ->whereIn('s.status', ['open', 'counting'])
-            ->first(['s.id', 's.status', 's.cashier_id', 'u.name as cashier_name']);
+            ->first(['s.id', 's.status', 's.cashier_id', 'u.name as cashier_name', 'u.cashier_number']);
 
         return $shift === null ? null : [
             'id' => (int) $shift->id,
             'status' => $shift->status,
             'cashier_id' => (int) $shift->cashier_id,
             'cashier_name' => $shift->cashier_name,
+            'cashier_number' => $shift->cashier_number,
         ];
     }
 

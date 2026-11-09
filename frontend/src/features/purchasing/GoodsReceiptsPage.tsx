@@ -156,7 +156,10 @@ export function GoodsReceiptsPage() {
                     <tr key={receipt.id}>
                       <td className="px-3 py-2">{receipt.po_doc_number}<div className="text-xs text-slate-500">{receipt.supplier_name}{receipt.supplier_return_doc_number ? ` · Pengganti ${receipt.supplier_return_doc_number}` : ''}</div></td>
                       <td className="px-3 py-2 font-mono font-medium">{receipt.doc_number}</td>
-                      <td className="px-3 py-2">{receipt.received_by_name}</td>
+                      <td className="px-3 py-2">
+                        <span className="block">{receipt.received_by_name}</span>
+                        {receipt.received_by_cashier_number && <span className="block text-xs text-slate-500">{receipt.received_by_cashier_number}</span>}
+                      </td>
                       <td className="px-3 py-2"><button type="button" onClick={() => setSelectedReceiptId(receipt.id)} className="font-medium text-blue-700 hover:underline">Detail / Proses</button></td>
                     </tr>
                   ))}
@@ -394,7 +397,7 @@ function GoodsReceiptDetailDialog({
             <Detail label="Nomor GR" value={receipt.doc_number} />
             <Detail label="Nomor PO" value={receipt.po_doc_number} />
             <Detail label="Supplier" value={receipt.supplier_name} />
-            <Detail label="Nama Kasir" value={receipt.received_by_name} />
+            <div><div className="text-xs text-slate-500">Nama Kasir</div><div className="font-medium">{receipt.received_by_name}</div>{receipt.received_by_cashier_number && <div className="text-xs text-slate-500">{receipt.received_by_cashier_number}</div>}</div>
           </div>
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <Detail label="Surat jalan" value={receipt.delivery_note_no || 'Belum dicatat'} />

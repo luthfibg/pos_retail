@@ -147,6 +147,7 @@ export interface ManagedUser {
   id: number;
   name: string;
   username: string;
+  cashier_number: string | null;
   email: string | null;
   is_active: boolean;
   roles: string[];
@@ -1004,6 +1005,7 @@ export interface Register {
     status: ShiftStatus;
     cashier_id: number;
     cashier_name: string;
+    cashier_number: string | null;
   } | null;
 }
 
@@ -1025,6 +1027,7 @@ export interface Shift {
   register_name: string;
   cashier_id: number;
   cashier_name: string;
+  cashier_number: string | null;
   status: ShiftStatus;
   opening_balance: Decimal;
   opened_at: string; // UTC
@@ -1233,6 +1236,7 @@ export interface GoodsReceiptSummary {
   receiving_location_name: string;
   document_status: GoodsReceiptDocumentStatus;
   received_by_name: string;
+  received_by_cashier_number: string | null;
   posted_at: string | null;
   created_at: string;
 }
@@ -1354,6 +1358,7 @@ export interface SaleSummary {
   shift_id: number;
   cashier_id: number;
   cashier_name: string | null;
+  cashier_number: string | null;
   customer_id: number | null;
   customer_name: string | null;
   customer_no: string | null;

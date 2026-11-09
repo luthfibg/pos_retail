@@ -8,6 +8,7 @@ const base: SaleSummary = {
   shift_id: 1,
   cashier_id: 2,
   cashier_name: 'Kasir',
+  cashier_number: null,
   customer_id: null,
   customer_name: null,
   customer_no: null,

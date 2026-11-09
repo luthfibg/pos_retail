@@ -5,17 +5,18 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Services\PermissionResolver;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Tests\SeededTestCase;
 
 class UserManagementTest extends SeededTestCase
 {
-    private function create(array $o = []): \Illuminate\Testing\TestResponse
+    private function create(array $o = []): TestResponse
     {
         return $this->postJson('/api/users', $o + ['name' => 'Sari Kasir', 'username' => 'sari', 'password' => 'sandi-kasir-1', 'role' => 'Kasir']);
     }
 
-    private function login(string $u, string $p): \Illuminate\Testing\TestResponse
+    private function login(string $u, string $p): TestResponse
     {
         return $this->postJson('/api/auth/login', ['username' => $u, 'password' => $p]);
     }
@@ -25,7 +26,7 @@ class UserManagementTest extends SeededTestCase
         $admin = $this->signIn('Admin');
 
         $r = $this->create(['email' => 'sari@toko.test'])->assertCreated()
-            ->assertJsonPath('data.username', 'sari')->assertJsonPath('data.roles.0', 'Kasir')->assertJsonPath('data.is_active', true);
+            ->assertJsonPath('data.username', 'sari')->assertJsonPath('data.roles.0', 'Kasir')->assertJsonPath('data.cashier_number', 'K001')->assertJsonPath('data.is_active', true);
         $this->assertArrayNotHasKey('password_hash', $r->json('data'));
         $id = $r->json('data.id');
 
@@ -52,6 +53,26 @@ class UserManagementTest extends SeededTestCase
         $this->create(['username' => 'baru', 'role' => 'Dewa'])->assertUnprocessable()->assertJsonValidationErrors(['role']);
         $this->create(['username' => 'a1', 'email' => 'dobel@toko.test'])->assertCreated();
         $this->create(['username' => 'a2', 'email' => 'dobel@toko.test'])->assertUnprocessable()->assertJsonValidationErrors(['email']);
+    }
+
+    public function test_cashier_number_is_global_sequential_and_persists_when_role_changes(): void
+    {
+        $this->signIn('Admin');
+        $first = $this->create(['username' => 'kasir-pertama'])->assertCreated()
+            ->assertJsonPath('data.cashier_number', 'K001')
+            ->json('data.id');
+        $second = $this->create(['username' => 'kasir-kedua'])->assertCreated()
+            ->assertJsonPath('data.cashier_number', 'K002')
+            ->json('data.id');
+
+        $this->patchJson("/api/users/{$first}", ['role' => 'Admin'])->assertOk()
+            ->assertJsonPath('data.cashier_number', 'K001');
+        $this->patchJson("/api/users/{$first}", ['role' => 'Kasir'])->assertOk()
+            ->assertJsonPath('data.cashier_number', 'K001');
+
+        $this->getJson('/api/users?role=Kasir')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $second, 'cashier_number' => 'K002']);
     }
 
     public function test_list_filter_roles_and_show(): void

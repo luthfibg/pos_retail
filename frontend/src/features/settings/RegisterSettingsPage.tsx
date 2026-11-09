@@ -85,7 +85,7 @@ export function RegisterSettingsPage({ embedded = false }: { embedded?: boolean 
                 <td className="px-3 py-2">{register.fund_account_name ?? 'Akun kas belum tersedia'}</td>
                 <td className="px-3 py-2">{register.is_active ? 'Aktif' : 'Nonaktif'}</td>
                 <td className="px-3 py-2">{register.active_shift
-                  ? `${register.active_shift.cashier_name} · ${register.active_shift.status === 'counting' ? 'Sedang dihitung' : 'Berjalan'}`
+                  ? <><span className="block">{register.active_shift.cashier_name} · {register.active_shift.status === 'counting' ? 'Sedang dihitung' : 'Berjalan'}</span>{register.active_shift.cashier_number && <span className="block text-xs text-slate-500">{register.active_shift.cashier_number}</span>}</>
                   : 'Tidak ada'}</td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex justify-end gap-3">

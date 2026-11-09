@@ -133,6 +133,7 @@ export function SalesHistoryPage() {
                       {PAYMENT_LABEL[sale.payment_mode]} · {sale.cashier_name ?? 'Kasir tidak diketahui'}
                       {sale.customer_name ? ` · ${sale.customer_name}` : ''}
                     </span>
+                    {sale.cashier_number && <span className="mt-1 block text-xs text-slate-500">{sale.cashier_number}</span>}
                     <span className="mt-1 block text-xs text-slate-500">
                       {formatDateTime(sale.posted_at)} · {SALE_STATUS_LABEL[sale.status]} · {BILLING_STATUS_LABEL[sale.billing_status]}
                     </span>

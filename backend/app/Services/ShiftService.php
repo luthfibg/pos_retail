@@ -117,7 +117,7 @@ class ShiftService
             ->join('users as u', 'u.id', '=', 's.cashier_id')
             ->join('registers as r', 'r.id', '=', 's.register_id')
             ->where('s.store_id', $storeId)->where('s.cashier_id', $actor->id)->whereIn('s.status', ['open', 'counting'])
-            ->first(['s.*', 'u.name as cashier_name', 'r.name as register_name']);
+            ->first(['s.*', 'u.name as cashier_name', 'u.cashier_number as cashier_number', 'r.name as register_name']);
 
         return $row === null ? null : $this->present($row, $this->canSeeExpected($actor));
     }
@@ -248,7 +248,7 @@ class ShiftService
             ->join('registers as r', 'r.id', '=', 's.register_id')
             ->where('s.store_id', $storeId)
             ->orderByDesc('s.id')
-            ->select(['s.*', 'u.name as cashier_name', 'r.name as register_name']);
+            ->select(['s.*', 'u.name as cashier_name', 'u.cashier_number as cashier_number', 'r.name as register_name']);
 
         if (! empty($filters['status'])) {
             $query->where('s.status', $filters['status']);
@@ -313,7 +313,7 @@ class ShiftService
             ->join('users as u', 'u.id', '=', 's.cashier_id')
             ->join('registers as r', 'r.id', '=', 's.register_id')
             ->where('s.store_id', $storeId)->where('s.id', $id)
-            ->first(['s.*', 'u.name as cashier_name', 'r.name as register_name']);
+            ->first(['s.*', 'u.name as cashier_name', 'u.cashier_number as cashier_number', 'r.name as register_name']);
     }
 
     private function canSeeExpected(User $user): bool
@@ -334,6 +334,7 @@ class ShiftService
             'register_name' => $row->register_name,
             'cashier_id' => (int) $row->cashier_id,
             'cashier_name' => $row->cashier_name,
+            'cashier_number' => $row->cashier_number,
             'status' => $row->status,
             'opening_balance' => $row->opening_balance,
             'opened_at' => $row->opened_at,
