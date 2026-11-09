@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\StockLockedByOpnameException;
 use App\Http\Middleware\EnsurePlatformOperator;
 use App\Http\Middleware\RequireAnyPermission;
 use Illuminate\Foundation\Application;
@@ -24,4 +25,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+        $exceptions->render(function (StockLockedByOpnameException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => 'stock_locked_by_opname',
+                'locked_products' => $exception->lockedProducts,
+            ], 409);
+        });
     })->create();

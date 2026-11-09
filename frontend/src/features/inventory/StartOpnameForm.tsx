@@ -49,6 +49,7 @@ export function StartOpnameForm({ onClose, onSuccess }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
+  const [confirmStart, setConfirmStart] = useState(false);
   const [clientRequestId] = useState(() => window.crypto.randomUUID());
   const options = useQuery({
     queryKey: ['opname', 'scope-options'],
@@ -93,6 +94,10 @@ export function StartOpnameForm({ onClose, onSuccess }: Props) {
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!confirmStart) {
+      setConfirmStart(true);
+      return;
+    }
     start.mutate();
   }
 
@@ -227,16 +232,22 @@ export function StartOpnameForm({ onClose, onSuccess }: Props) {
 
         <footer className="shrink-0 border-t border-slate-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
           {start.isPending && <p role="status" className="mb-2 text-center text-sm text-slate-600">Membuat sesi dan menyiapkan daftar produk…</p>}
+          {confirmStart && !start.isPending && (
+            <div role="alert" className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              Selama sesi berjalan, penjualan dan penerimaan barang untuk produk dalam cakupan akan ditolak. Sesi dapat dibatalkan untuk membuka kembali transaksi.
+            </div>
+          )}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} disabled={start.isPending} className="min-h-11 rounded-md border border-slate-300 px-5 text-sm font-medium disabled:opacity-50">
-              Kembali
+            <button type="button" onClick={() => confirmStart ? setConfirmStart(false) : onClose()} disabled={start.isPending} className="min-h-11 rounded-md border border-slate-300 px-5 text-sm font-medium disabled:opacity-50">
+              {confirmStart ? 'Periksa lagi' : 'Kembali'}
             </button>
             <button
-              type="submit"
+              type={confirmStart ? 'submit' : 'button'}
+              onClick={confirmStart ? undefined : () => setConfirmStart(true)}
               disabled={start.isPending || options.isLoading || options.isError || (scopeType === 'categories' && selectedIds.size === 0)}
               className="min-h-11 rounded-md bg-slate-900 px-5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {start.isPending ? 'Memulai…' : 'Mulai'}
+              {start.isPending ? 'Memulai…' : confirmStart ? 'Mulai dan tutup transaksi' : 'Lanjutkan'}
             </button>
           </div>
         </footer>

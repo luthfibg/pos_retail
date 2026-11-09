@@ -1,10 +1,15 @@
 import { createContext, useContext, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import type { OpnameProgressTree } from '@/lib/api/types';
+import type { OpnameItem, OpnameProgressTree } from '@/lib/api/types';
 
 interface OpnameWorkspaceValue {
   activeNodeId: string | null;
   setActiveNodeId: Dispatch<SetStateAction<string | null>>;
   tree: OpnameProgressTree;
+  selectedItem: OpnameItem | null;
+  setSelectedItem: Dispatch<SetStateAction<OpnameItem | null>>;
+  highlightedItemId: number | null;
+  setHighlightedItemId: Dispatch<SetStateAction<number | null>>;
+  loadItem: (item: OpnameItem) => void;
 }
 
 const OpnameWorkspaceContext = createContext<OpnameWorkspaceValue | null>(null);

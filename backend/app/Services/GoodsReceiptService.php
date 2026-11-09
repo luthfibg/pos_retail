@@ -442,62 +442,68 @@ class GoodsReceiptService
             $replacementBatches = [];
             $damagedUnits = 0;
 
-            foreach ($ordered as $item) {
-                $received = Decimal::qty($item->qty_received);
-                $damagedUnits += Decimal::qty($item->qty_damaged);
+            $this->inventory->withUnlockedProducts(
+                $storeId,
+                array_values(array_unique(array_map(fn ($item) => (int) $item->product_id, $ordered))),
+                function () use ($ordered, $storeId, $id, $actor, $gr, &$lines, &$replacementBatches, &$damagedUnits, $acceptedByPoItem, &$receivedByPoItem) {
+                    foreach ($ordered as $item) {
+                        $received = Decimal::qty($item->qty_received);
+                        $damagedUnits += Decimal::qty($item->qty_damaged);
 
-                $quarantined = $item->damage_disposition === 'quarantine' ? Decimal::qty($item->qty_damaged) : 0;
-                foreach ([
-                    ['qty' => $received, 'bucket' => 'sellable'],
-                    ['qty' => $quarantined, 'bucket' => 'quarantine'],
-                ] as $receiptPart) {
-                    if ($receiptPart['qty'] <= 0) {
-                        continue;
-                    }
+                        $quarantined = $item->damage_disposition === 'quarantine' ? Decimal::qty($item->qty_damaged) : 0;
+                        foreach ([
+                            ['qty' => $received, 'bucket' => 'sellable'],
+                            ['qty' => $quarantined, 'bucket' => 'quarantine'],
+                        ] as $receiptPart) {
+                            if ($receiptPart['qty'] <= 0) {
+                                continue;
+                            }
 
-                    $qty = Decimal::qtyString($receiptPart['qty']);
-                    $in = $this->inventory->receive(
-                        $storeId,
-                        (int) $item->product_id,
-                        $qty,
-                        (string) $item->unit_cost,
-                        $item->expiry_date,
-                        $item->batch_code,
-                        (int) $item->id,
-                        'goods_receipt',
-                        $id,
-                        $actor->id,
-                        (int) $gr->receiving_location_id,
-                        $item->shelf_position_id === null ? null : (int) $item->shelf_position_id,
-                        bucket: $receiptPart['bucket'],
-                    );
+                            $qty = Decimal::qtyString($receiptPart['qty']);
+                            $in = $this->inventory->receive(
+                                $storeId,
+                                (int) $item->product_id,
+                                $qty,
+                                (string) $item->unit_cost,
+                                $item->expiry_date,
+                                $item->batch_code,
+                                (int) $item->id,
+                                'goods_receipt',
+                                $id,
+                                $actor->id,
+                                (int) $gr->receiving_location_id,
+                                $item->shelf_position_id === null ? null : (int) $item->shelf_position_id,
+                                bucket: $receiptPart['bucket'],
+                            );
 
-                    $lines[] = [
-                        'product_id' => (int) $item->product_id,
-                        'batch_id' => $in['batch_id'],
-                        'qty' => $qty,
-                        'bucket' => $receiptPart['bucket'],
-                        'unit_cost' => $item->unit_cost,
-                    ];
-                    if ($item->supplier_return_item_id !== null) {
-                        $replacementBatches[(int) $item->supplier_return_item_id] = $in['batch_id'];
-                    }
-                    if ($receiptPart['bucket'] === 'quarantine') {
-                        DB::table('supplier_return_items')
-                            ->where('goods_receipt_item_id', $item->id)
-                            ->where('disposition', 'quarantine')
-                            ->update([
+                            $lines[] = [
+                                'product_id' => (int) $item->product_id,
                                 'batch_id' => $in['batch_id'],
-                                'shelf_position_id' => $item->shelf_position_id,
-                            ]);
+                                'qty' => $qty,
+                                'bucket' => $receiptPart['bucket'],
+                                'unit_cost' => $item->unit_cost,
+                            ];
+                            if ($item->supplier_return_item_id !== null) {
+                                $replacementBatches[(int) $item->supplier_return_item_id] = $in['batch_id'];
+                            }
+                            if ($receiptPart['bucket'] === 'quarantine') {
+                                DB::table('supplier_return_items')
+                                    ->where('goods_receipt_item_id', $item->id)
+                                    ->where('disposition', 'quarantine')
+                                    ->update([
+                                        'batch_id' => $in['batch_id'],
+                                        'shelf_position_id' => $item->shelf_position_id,
+                                    ]);
+                            }
+                        }
+
+                        $accepted = $acceptedByPoItem[$item->po_item_id] ?? 0;
+                        if ($accepted > 0) {
+                            $receivedByPoItem[$item->po_item_id] = ($receivedByPoItem[$item->po_item_id] ?? 0) + $accepted;
+                        }
                     }
                 }
-
-                $accepted = $acceptedByPoItem[$item->po_item_id] ?? 0;
-                if ($accepted > 0) {
-                    $receivedByPoItem[$item->po_item_id] = ($receivedByPoItem[$item->po_item_id] ?? 0) + $accepted;
-                }
-            }
+            );
 
             // Replacement GRs replenish returned stock but do not fulfill the original PO again.
             if ($isReplacementReceipt) {

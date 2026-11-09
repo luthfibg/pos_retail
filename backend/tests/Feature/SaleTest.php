@@ -121,6 +121,29 @@ class SaleTest extends SeededTestCase
             ->assertJsonPath('data.summary.cash_sales_total', '27500.00');
     }
 
+    public function test_cashier_checkout_is_rejected_by_active_opname_without_changing_stock(): void
+    {
+        $this->openShift();
+        $productId = $this->makeProduct();
+        $this->stock($productId, '10.000');
+        $admin = $this->makeUser('Admin', 'admin-opname-lock');
+        Sanctum::actingAs($admin, ['*']);
+        $session = $this->postJson('/api/stock-opname-sessions', [
+            'scope_type' => 'all',
+            'client_request_id' => (string) Str::uuid(),
+        ])->assertCreated();
+        Sanctum::actingAs($this->cashier, ['*']);
+
+        $this->cashSale([['product_id' => $productId, 'qty' => '2']], '20000')
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'stock_locked_by_opname')
+            ->assertJsonPath('locked_products.0.product_id', $productId)
+            ->assertJsonPath('locked_products.0.session_number', $session->json('data.number'))
+            ->assertJsonMissingPath('locked_products.0.stock');
+        $this->assertSame('10.000', $this->onHand($productId));
+        $this->assertSame(0, DB::table('sales')->count());
+    }
+
     public function test_idempotent_resend_returns_same_receipt_and_does_not_double_post(): void
     {
         $this->openShift();

@@ -10,6 +10,7 @@ import { parseApiTime } from '@/lib/format';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { StartOpnameForm } from './StartOpnameForm';
 import { OpnameWorkspaceProvider, useOpnameWorkspace } from './OpnameWorkspaceContext';
+import { CountEntryForm } from './CountEntryForm';
 
 const PER_PAGE = 20;
 const STATUS_FILTERS: Array<{ value: OpnameSessionStatus | ''; label: string }> = [
@@ -284,6 +285,8 @@ export function OpnameSessionDetailPage() {
   const [reason, setReason] = useState('');
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [openNodeIds, setOpenNodeIds] = useState<Set<string>>(() => new Set());
+  const [selectedItem, setSelectedItem] = useState<OpnameItem | null>(null);
+  const [highlightedItemId, setHighlightedItemId] = useState<number | null>(null);
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [onlyUncounted, setOnlyUncounted] = useState(false);
@@ -361,6 +364,23 @@ export function OpnameSessionDetailPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
+  function loadItem(item: OpnameItem) {
+    setSelectedItem(item);
+    let candidates = tree?.nodes ?? [];
+    const expanded: string[] = [];
+    let selectedId = 'other';
+    for (const name of item.category_path) {
+      const node = candidates.find((candidate) => candidate.name === name);
+      if (!node) break;
+      selectedId = String(node.id);
+      expanded.push(selectedId);
+      candidates = node.children;
+    }
+    setActiveNodeId(selectedId);
+    setOpenNodeIds((current) => new Set([...current, ...expanded]));
+    changeView('input');
+  }
+
   function updateSearch(value: string) {
     setSearchDraft(value);
     if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
@@ -417,7 +437,16 @@ export function OpnameSessionDetailPage() {
         </div>
       </header>
 
-      <OpnameWorkspaceProvider value={{ activeNodeId, setActiveNodeId, tree: tree ?? EMPTY_TREE }}>
+      <OpnameWorkspaceProvider value={{
+        activeNodeId,
+        setActiveNodeId,
+        tree: tree ?? EMPTY_TREE,
+        selectedItem,
+        setSelectedItem,
+        highlightedItemId,
+        setHighlightedItemId,
+        loadItem,
+      }}>
         {view === 'ringkasan' && mobile && <WorkspaceSummary session={session} tree={tree} timezone={timezone} />}
         {summaryOpen && (
           <div className="fixed inset-0 z-40 flex items-stretch justify-center overflow-y-auto bg-slate-900/50 md:items-center md:p-4">
@@ -439,11 +468,6 @@ export function OpnameSessionDetailPage() {
           search={search}
           searchDraft={searchDraft}
           updateSearch={updateSearch}
-          clearSearch={() => {
-            if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
-            setSearchDraft('');
-            setSearch('');
-          }}
           searchResults={productSearch.data?.pages.flatMap((page) => page.data) ?? []}
           searchLoading={productSearch.isFetching}
           productSearchHasNext={productSearch.hasNextPage}
@@ -456,6 +480,9 @@ export function OpnameSessionDetailPage() {
           setOpenNodeIds={setOpenNodeIds}
           view={view}
           onViewChange={changeView}
+          active={session.status === 'in_progress'}
+          canCount={can('opname.count')}
+          revealsSystemQty={tree?.display.reveals_system_qty ?? false}
         />
       </OpnameWorkspaceProvider>
 
@@ -550,6 +577,9 @@ function WorkspaceSummary({
         </>
       )}
       <div className="rounded-md border border-dashed border-slate-300 p-3 text-sm text-slate-500 sm:col-span-2 lg:col-span-3">
+        Produk baru yang muncul setelah sesi dimulai tidak ikut dihitung dan baru masuk pada opname berikutnya.
+      </div>
+      <div className="rounded-md border border-dashed border-slate-300 p-3 text-sm text-slate-500 sm:col-span-2 lg:col-span-3">
         Ringkasan selisih tersedia pada tahap berikutnya.
       </div>
     </section>
@@ -565,7 +595,6 @@ function WorkspacePanels({
   search,
   searchDraft,
   updateSearch,
-  clearSearch,
   searchResults,
   searchLoading,
   productSearchHasNext,
@@ -578,6 +607,9 @@ function WorkspacePanels({
   setOpenNodeIds,
   view,
   onViewChange,
+  active,
+  canCount,
+  revealsSystemQty,
 }: {
   id: number;
   tree: OpnameProgressTree | undefined;
@@ -587,7 +619,6 @@ function WorkspacePanels({
   search: string;
   searchDraft: string;
   updateSearch: (value: string) => void;
-  clearSearch: () => void;
   searchResults: OpnameItem[];
   searchLoading: boolean;
   productSearchHasNext: boolean;
@@ -600,36 +631,17 @@ function WorkspacePanels({
   setOpenNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
+  active: boolean;
+  canCount: boolean;
+  revealsSystemQty: boolean;
 }) {
-  const { activeNodeId, setActiveNodeId } = useOpnameWorkspace();
+  const { activeNodeId, setActiveNodeId, loadItem, highlightedItemId, selectedItem } = useOpnameWorkspace();
   const [listCollapsed, setListCollapsed] = useState(false);
   const searching = search.trim().length >= 2;
   const mobile = useMobileViewport();
   const showList = (!mobile || view === 'daftar') && !listCollapsed;
   const showInput = !mobile || view === 'input';
   const visibleNodes = tree?.nodes ?? [];
-  const expandedSearchPath = (item: OpnameItem) => {
-    const path = item.category_path;
-    let node: OpnameProgressNode | undefined;
-    let candidates = visibleNodes;
-    const ids: string[] = [];
-    for (const name of path) {
-      node = candidates.find((candidate) => candidate.name === name);
-      if (!node) break;
-      ids.push(String(node.id));
-      candidates = node.children;
-    }
-    if (!node) node = visibleNodes.find((candidate) => candidate.id === 'other');
-    const selected = node ? String(node.id) : null;
-    if (selected) {
-      clearSearch();
-      setActiveNodeId(selected);
-      setOpenNodeIds((current) => new Set([...current, ...ids, selected]));
-      window.setTimeout(() => document.getElementById(`opname-node-${selected}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 0);
-      onViewChange('daftar');
-    }
-  };
-
   return (
     <>
       <nav aria-label="Tampilan sesi opname" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
@@ -677,7 +689,7 @@ function WorkspacePanels({
                   {searchLoading && <p role="status" className="text-sm text-slate-500">Mencari produk…</p>}
                   {!searchLoading && searchResults.length === 0 && !searchError && <p className="text-sm text-slate-500">Tidak ada produk yang cocok.</p>}
                   {searchResults.map((item) => (
-                    <button key={item.id} type="button" onClick={() => expandedSearchPath(item)} className="w-full rounded-md border border-slate-200 p-3 text-left hover:bg-slate-50">
+                    <button key={item.id} type="button" onClick={() => loadItem(item)} className="w-full rounded-md border border-slate-200 p-3 text-left hover:bg-slate-50">
                       <span className="block font-medium">{item.name}</span>
                       <span className="block break-words text-xs text-slate-500">{item.barcode || 'Tanpa barcode'} · {item.category_path.join(' › ') || 'Lainnya'}</span>
                       <span className="mt-1 block"><ItemStatus status={item.status} /></span>
@@ -703,6 +715,9 @@ function WorkspacePanels({
                     setActiveNodeId={setActiveNodeId}
                     openNodeIds={openNodeIds}
                     setOpenNodeIds={setOpenNodeIds}
+                    loadItem={loadItem}
+                    highlightedItemId={highlightedItemId}
+                    selectedItemId={selectedItem?.id ?? null}
                   />
                 ))}
                 {visibleNodes.length === 0 && <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Belum ada produk dalam cakupan sesi.</p>}
@@ -712,9 +727,13 @@ function WorkspacePanels({
           )}
         </section>
         {listCollapsed && <button type="button" onClick={() => setListCollapsed(false)} className="hidden min-h-11 rounded-md border border-slate-300 px-3 text-sm md:inline-flex md:items-center lg:hidden">Buka daftar progres</button>}
-        <section aria-label="Panel input" className={`${showInput ? '' : 'hidden'} max-h-[calc(100dvh-14rem)] min-w-0 overflow-y-auto rounded-lg border border-slate-200 bg-white p-4`}>
-          <h3 className="font-semibold">Input hitungan</h3>
-          <div className="mt-3 rounded-md bg-slate-50 p-4 text-sm text-slate-600">Panel input dibangun di tahap berikutnya.</div>
+        <section aria-label="Panel input" className={`${showInput ? '' : 'hidden'} min-w-0 rounded-lg border border-slate-200 bg-white p-4 pb-16 md:max-h-[calc(100dvh-14rem)] md:overflow-y-auto`}>
+          <CountEntryForm
+            sessionId={id}
+            active={active}
+            canCount={canCount}
+            revealsSystemQty={revealsSystemQty}
+          />
         </section>
       </div>
     </>
@@ -736,6 +755,9 @@ function CategoryNode({
   setActiveNodeId,
   openNodeIds,
   setOpenNodeIds,
+  loadItem,
+  highlightedItemId,
+  selectedItemId,
 }: {
   sessionId: number;
   node: OpnameProgressNode;
@@ -746,6 +768,9 @@ function CategoryNode({
   setActiveNodeId: (id: string) => void;
   openNodeIds: Set<string>;
   setOpenNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  loadItem: (item: OpnameItem) => void;
+  highlightedItemId: number | null;
+  selectedItemId: number | null;
 }) {
   const nodeId = String(node.id);
   const opened = openNodeIds.has(nodeId);
@@ -811,12 +836,34 @@ function CategoryNode({
       {opened && (
         <div role="group" className="space-y-1">
           {childNodes.map((child) => (
-            <CategoryNode key={child.id} sessionId={sessionId} node={child} onlyUncounted={onlyUncounted} query={query} depth={depth + 1} activeNodeId={activeNodeId} setActiveNodeId={setActiveNodeId} openNodeIds={openNodeIds} setOpenNodeIds={setOpenNodeIds} />
+            <CategoryNode
+              key={child.id}
+              sessionId={sessionId}
+              node={child}
+              onlyUncounted={onlyUncounted}
+              query={query}
+              depth={depth + 1}
+              activeNodeId={activeNodeId}
+              setActiveNodeId={setActiveNodeId}
+              openNodeIds={openNodeIds}
+              setOpenNodeIds={setOpenNodeIds}
+              loadItem={loadItem}
+              highlightedItemId={highlightedItemId}
+              selectedItemId={selectedItemId}
+            />
           ))}
           {directProductCount > 0 && <p className="pl-10 pt-2 text-xs font-medium text-slate-500">Tanpa sub-kategori ({directProductCount})</p>}
           {opened && directProductCount > 0 && directItems.isLoading && <div role="status" className="space-y-2 px-4 py-2">{[1, 2].map((n) => <div key={n} className="h-14 animate-pulse rounded bg-slate-100" />)}</div>}
           {directItems.error && <div className="px-4 py-2"><ErrorNotice error={directItems.error} /><button type="button" onClick={() => void directItems.refetch()} className="mt-2 min-h-11 rounded-md border px-3 text-sm">Coba lagi</button></div>}
-          {items.map((item) => <ProductRow key={item.id} item={item} />)}
+          {items.map((item) => (
+            <ProductRow
+              key={item.id}
+              item={item}
+              selected={selectedItemId === item.id}
+              highlighted={highlightedItemId === item.id}
+              onSelect={() => loadItem(item)}
+            />
+          ))}
           {directItems.data && directProductCount > 0 && !directItems.isLoading && !directItems.error && items.length === 0 && <p className="py-2 pl-10 text-sm text-slate-500">Tidak ada produk pada kategori ini untuk filter yang dipilih.</p>}
           {directItems.hasNextPage && (
             <button type="button" disabled={directItems.isFetchingNextPage} onClick={loadMore} className="ml-10 min-h-11 rounded-md border border-slate-300 px-3 text-sm disabled:opacity-50">{directItems.isFetchingNextPage ? 'Memuat…' : 'Muat lagi'}</button>
@@ -828,9 +875,23 @@ function CategoryNode({
   );
 }
 
-function ProductRow({ item }: { item: OpnameItem }) {
+function ProductRow({
+  item,
+  selected,
+  highlighted,
+  onSelect,
+}: {
+  item: OpnameItem;
+  selected: boolean;
+  highlighted: boolean;
+  onSelect: () => void;
+}) {
   return (
-    <div className="ml-8 flex min-h-14 items-center gap-2 border-b border-slate-100 px-2 py-2 sm:ml-10">
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`ml-8 flex min-h-14 w-[calc(100%-2rem)] items-center gap-2 border-b border-slate-100 px-2 py-2 text-left sm:ml-10 sm:w-[calc(100%-2.5rem)] ${highlighted ? 'bg-emerald-50' : selected ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+    >
       <div className="min-w-0 flex-1">
         <p className="break-words text-sm font-medium">{item.name}</p>
         <p className="break-all text-xs text-slate-500">{item.barcode || 'Tanpa barcode'}</p>
@@ -840,7 +901,7 @@ function ProductRow({ item }: { item: OpnameItem }) {
         <ItemStatus status={item.status} />
         {item.system_qty !== undefined && <span className="text-xs text-slate-500">Stok: {item.system_qty}</span>}
       </div>
-    </div>
+    </button>
   );
 }
 

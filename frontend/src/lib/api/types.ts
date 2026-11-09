@@ -431,12 +431,46 @@ export interface OpnameProgressTree {
 export interface OpnameItem {
   id: number;
   product_id: number;
+  category_id: number | null;
   name: string;
   barcode: string;
   category_path: string[];
   status: OpnameItemStatus;
   counted_qty: Decimal | null;
   system_qty?: Decimal;
+}
+
+export type OpnameCountMode = 'set' | 'add';
+
+export interface OpnameCountResult {
+  item: OpnameItem;
+  summary: { total_products: number; counted_products: number };
+  nodes: Array<Pick<OpnameProgressNode, 'id' | 'counted_count' | 'product_count' | 'status'> & {
+    direct_product_count?: number;
+    direct_counted_count?: number;
+    variance_count?: number;
+  }>;
+}
+
+export interface OpnameCountLog {
+  log_id: number;
+  item: { id: number; name: string; barcode: string };
+  action: OpnameCountMode | 'clear';
+  input_qty: number | null;
+  counted_after: number | null;
+  created_at: string;
+  created_by: { id: number; name: string };
+}
+
+export interface OpnameLockStatus {
+  locked: boolean;
+  store_wide: boolean;
+  sessions: Array<{ number: string; scope_summary: string }>;
+}
+
+export interface OpnameLookupError extends Error {
+  code: 'not_in_session' | 'unknown_barcode';
+  productName?: string;
 }
 
 export interface OpnameDisplaySetting {

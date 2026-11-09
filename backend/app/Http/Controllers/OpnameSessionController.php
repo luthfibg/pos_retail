@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\OpnameCountConflictException;
+use App\Exceptions\OpnameLookupException;
 use App\Exceptions\OpnameOverlapException;
 use App\Http\Requests\CancelOpnameSessionRequest;
+use App\Http\Requests\ClearOpnameCountRequest;
 use App\Http\Requests\StartOpnameSessionRequest;
+use App\Http\Requests\StoreOpnameCountRequest;
+use App\Services\OpnameCountService;
 use App\Services\OpnameProgressService;
 use App\Services\OpnameSessionService;
 use App\Services\StoreContext;
@@ -16,6 +21,7 @@ class OpnameSessionController extends Controller
     public function __construct(
         private OpnameSessionService $sessions,
         private OpnameProgressService $progress,
+        private OpnameCountService $counts,
         private StoreContext $stores,
     ) {}
 
@@ -107,6 +113,78 @@ class OpnameSessionController extends Controller
             $session,
             $filters,
             (int) ($filters['per_page'] ?? 100),
+        ));
+    }
+
+    public function storeCount(StoreOpnameCountRequest $request, int $session): JsonResponse
+    {
+        try {
+            $data = $this->counts->store(
+                $request->user(),
+                $this->stores->requireIdFor($request->user()),
+                $session,
+                $request->validated(),
+            );
+        } catch (OpnameCountConflictException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], 409);
+        }
+
+        return response()->json($data);
+    }
+
+    public function clearCount(ClearOpnameCountRequest $request, int $session, int $item): JsonResponse
+    {
+        try {
+            $data = $this->counts->clear(
+                $request->user(),
+                $this->stores->requireIdFor($request->user()),
+                $session,
+                $item,
+                $request->validated('client_request_id'),
+            );
+        } catch (OpnameCountConflictException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+            ], 409);
+        }
+
+        return response()->json($data);
+    }
+
+    public function lookup(Request $request, int $session): JsonResponse
+    {
+        $filters = $request->validate([
+            'q' => ['required', 'string', 'min:1', 'max:120'],
+            'mode' => ['sometimes', 'in:auto,barcode,search'],
+        ]);
+        try {
+            return response()->json($this->counts->lookup(
+                $this->stores->requireIdFor($request->user()),
+                $session,
+                trim($filters['q']),
+                $filters['mode'] ?? 'auto',
+            ));
+        } catch (OpnameLookupException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode,
+                'product_name' => $exception->productName,
+            ], 404);
+        }
+    }
+
+    public function counts(Request $request, int $session): JsonResponse
+    {
+        $filters = $request->validate(['limit' => ['sometimes', 'integer', 'min:1', 'max:10']]);
+
+        return response()->json($this->counts->recent(
+            $this->stores->requireIdFor($request->user()),
+            $session,
+            (int) ($filters['limit'] ?? 10),
         ));
     }
 }

@@ -1,17 +1,24 @@
-import { useState } from 'react';
+import { useState, type RefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Field, inputCls } from '@/components/ui/Field';
 import { useDebounce } from '@/hooks/useDebounce';
 import { productApi } from '@/lib/api/endpoints';
 import { ApiError } from '@/lib/api/client';
-import type { Product } from '@/lib/api/types';
+import type { OpnameItem, Product } from '@/lib/api/types';
 import { formatQty } from '@/lib/format';
 import type { ProductOption } from '@/features/inventory/openingForm';
+
+export type ProductPickerResult = Product | OpnameItem;
+export type ProductSearchAdapter = (query: string, mode: 'auto' | 'search') => Promise<ProductPickerResult[]>;
 
 interface Props {
   value: ProductOption | null;
   onChange: (product: ProductOption | null) => void;
   onSelect?: (product: Product) => void;
+  onSelectResult?: (product: ProductPickerResult) => void;
+  searchAdapter?: ProductSearchAdapter;
+  searchAdapterKey?: string | number;
+  inputRef?: RefObject<HTMLInputElement | null>;
   placeholder?: string;
   includeInactive?: boolean;
   autoFocus?: boolean;
@@ -24,6 +31,10 @@ export function ProductPicker({
   value,
   onChange,
   onSelect,
+  onSelectResult,
+  searchAdapter,
+  searchAdapterKey,
+  inputRef,
   placeholder = 'Cari nama, SKU, atau barcode',
   includeInactive = false,
   autoFocus,
@@ -37,21 +48,26 @@ export function ProductPicker({
   const [barcodeError, setBarcodeError] = useState('');
   const debounced = useDebounce(text.trim(), 250);
   const results = useQuery({
-    queryKey: ['products', 'picker', debounced, includeInactive],
-    queryFn: () => productApi.list({ q: debounced, status: includeInactive ? undefined : 'active', per_page: 8 }),
+    queryKey: ['products', 'picker', debounced, includeInactive, Boolean(searchAdapter), searchAdapterKey],
+    queryFn: async () => searchAdapter
+      ? searchAdapter(debounced, 'search')
+      : (await productApi.list({ q: debounced, status: includeInactive ? undefined : 'active', per_page: 8 })).data,
     enabled: open && debounced.length >= 2,
   });
-  const options = (results.data?.data ?? []).filter((product) => includeInactive || product.status === 'active');
+  const options = (results.data ?? []).filter((product) => (
+    searchAdapter || includeInactive || !('status' in product) || product.status === 'active'
+  ));
 
-  function pick(product: Product) {
+  function pick(product: ProductPickerResult) {
     onChange({
       id: product.id,
-      sku: product.sku,
+      sku: 'sku' in product ? product.sku : '',
       name: product.name,
-      unit_name: product.unit_name,
-      track_expiry: product.track_expiry,
+      unit_name: 'unit_name' in product ? product.unit_name : '',
+      track_expiry: 'track_expiry' in product ? product.track_expiry : false,
     });
-    onSelect?.(product);
+    if ('sell_price' in product) onSelect?.(product);
+    onSelectResult?.(product);
     setText('');
     setOpen(false);
     setBarcodeError('');
@@ -69,6 +85,15 @@ export function ProductPicker({
     setBarcodeLoading(true);
     setBarcodeError('');
     try {
+      if (searchAdapter) {
+        const found = await searchAdapter(barcode, 'auto');
+        if (found[0]) {
+          pick(found[0]);
+          return;
+        }
+        setBarcodeError('Barcode tidak dikenal.');
+        return;
+      }
       const product = await productApi.byBarcode(barcode);
       if (product.status !== 'active' && !includeInactive) {
         setBarcodeError('Produk dengan barcode ini tidak aktif.');
@@ -76,12 +101,16 @@ export function ProductPicker({
       }
       pick(product);
     } catch (error) {
+      if (searchAdapter) {
+        setBarcodeError(error instanceof ApiError ? error.message : 'Produk tidak dapat dicari. Coba lagi.');
+        return;
+      }
       if (error instanceof ApiError && error.status === 404 && options[0]) {
         pick(options[0]);
       } else {
         setBarcodeError(error instanceof ApiError && error.status !== 404
           ? error.firstError()
-          : 'Barcode tidak ditemukan. Periksa kode atau cari berdasarkan nama.');
+          : error instanceof ApiError ? error.message : 'Barcode tidak ditemukan. Periksa kode atau cari berdasarkan nama.');
       }
     } finally {
       setBarcodeLoading(false);
@@ -102,6 +131,7 @@ export function ProductPicker({
   return (
     <div className="relative">
       <input
+        ref={inputRef}
         role="combobox"
         aria-expanded={open && debounced.length >= 2}
         aria-controls="product-picker-results"
@@ -151,8 +181,8 @@ export function ProductPicker({
                 className={`min-h-14 w-full px-3 py-2 text-left text-sm ${activeIndex === index ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
               >
                 <span className="block font-medium">{product.name}</span>
-                <span className="block font-mono text-xs text-slate-500">{product.barcode} · {product.category_name ?? 'Tanpa kategori'}</span>
-                {showStock && <span className="block text-xs text-slate-500">Stok toko {formatQty(product.store_floor_stock_sellable ?? '0')} {product.unit_name}</span>}
+                <span className="block font-mono text-xs text-slate-500">{product.barcode ?? ('sku' in product ? product.sku : '')} · {('category_name' in product ? product.category_name : product.category_path?.join(' › ')) ?? 'Tanpa kategori'}</span>
+                {showStock && 'store_floor_stock_sellable' in product && <span className="block text-xs text-slate-500">Stok toko {formatQty(product.store_floor_stock_sellable ?? '0')} {product.unit_name}</span>}
               </button>
             </li>
           ))}

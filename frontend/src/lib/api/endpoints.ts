@@ -17,6 +17,10 @@ import type {
   Adjustment, AdjustmentInput, AdjustmentMeta, AdjustmentReasonCode, AdjustmentType,
   OpnameCategoryOption, OpnameSession, OpnameSessionSummary, OpnameSessionStatus, OpnameScopeType,
   OpnameDisplaySetting, OpnameItem, OpnameProgressTree, PurchaseOrderResetPeriod, PurchaseOrderResetPreview, PurchaseOrderResetResult,
+  OpnameCountLog,
+  OpnameCountMode,
+  OpnameCountResult,
+  OpnameLockStatus,
 } from './types';
 
 export const authApi = {
@@ -200,6 +204,17 @@ export const opnameApi = {
     page?: number;
     per_page?: number;
   } = {}) => api<Paginated<OpnameItem>>(`/stock-opname-sessions/${id}/items`, { query: { ...filters } }),
+  lookup: (id: number, q: string, mode: 'auto' | 'search' = 'auto') =>
+    api<{ data: OpnameItem[] }>(`/stock-opname-sessions/${id}/lookup`, { query: { q, mode } }).then((r) => r.data),
+  counts: (id: number, limit = 10) =>
+    api<{ data: OpnameCountLog[] }>(`/stock-opname-sessions/${id}/counts`, { query: { limit } }).then((r) => r.data),
+  storeCount: (id: number, input: { item_id: number; mode: OpnameCountMode; quantity: number; client_request_id: string }) =>
+    api<OpnameCountResult>(`/stock-opname-sessions/${id}/counts`, { method: 'POST', body: input }),
+  clearCount: (id: number, itemId: number, client_request_id: string) =>
+    api<OpnameCountResult>(`/stock-opname-sessions/${id}/counts/${itemId}/clear`, {
+      method: 'POST',
+      body: { client_request_id },
+    }),
   scopeOptions: () =>
     api<{ data: OpnameCategoryOption[]; total_products: number }>('/stock-opname/scope-options'),
   start: (input: {
@@ -214,6 +229,10 @@ export const opnameApi = {
       method: 'POST',
       body: { reason },
     }).then((r) => r.data),
+};
+
+export const opnameLockApi = {
+  status: () => api<OpnameLockStatus>('/stock-opname/lock-status'),
 };
 
 export const opnameSettingsApi = {

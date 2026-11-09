@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api/client';
-import { saleApi, shiftApi } from '@/lib/api/endpoints';
+import { opnameLockApi, saleApi, shiftApi } from '@/lib/api/endpoints';
 import type { CreditExceptionInput, Customer, PaymentMode, Sale, SaleInput, SalePreviewInput } from '@/lib/api/types';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -50,6 +50,13 @@ export function PosPage() {
   const [thermalPaperSize, setThermalPaperSize] = useState<ThermalPaperSize>('80');
 
   const shiftQuery = useQuery({ queryKey: ['shifts', 'current'], queryFn: shiftApi.current });
+  const opnameLock = useQuery({
+    queryKey: ['stock-opname', 'lock-status'],
+    queryFn: opnameLockApi.status,
+    refetchInterval: () => document.visibilityState === 'visible' ? 30_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
   const shift = shiftQuery.data ?? null;
   const sellingAllowed = canSell(shift?.status);
 
@@ -229,6 +236,14 @@ export function PosPage() {
         </div>
 
         <ErrorNotice error={shiftQuery.error} />
+        <ErrorNotice error={opnameLock.error} />
+        {opnameLock.data?.locked && (
+          <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            {opnameLock.data.store_wide
+              ? 'Opname sedang berjalan. Penjualan seluruh toko sedang ditutup.'
+              : `Opname sedang berjalan. Penjualan produk tertentu sedang ditutup. Cakupan: ${opnameLock.data.sessions.map((session) => `${session.scope_summary} (${session.number})`).join('; ')}.`}
+          </div>
+        )}
         {!shiftQuery.error && !sellingAllowed && (
           <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             {shift?.status === 'counting'

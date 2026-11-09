@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\OpnameLookupException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -185,6 +186,7 @@ class OpnameProgressService
                 $row = [
                     'id' => (int) $item->id,
                     'product_id' => (int) $item->product_id,
+                    'category_id' => $item->category_id === null ? null : (int) $item->category_id,
                     'name' => $item->product_name_snapshot,
                     'barcode' => $item->barcode_snapshot,
                     'category_path' => $this->categoryPath($item, $staleCategoryIds, $categoryMap),
@@ -199,6 +201,97 @@ class OpnameProgressService
             });
 
         return $page;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function item(int $storeId, int $sessionId, int $itemId): ?array
+    {
+        if ($this->session($storeId, $sessionId) === null) {
+            return null;
+        }
+
+        $item = DB::table('stock_opname_items')
+            ->where('session_id', $sessionId)
+            ->where('id', $itemId)
+            ->first();
+
+        return $item === null ? null : $this->presentItemRows($storeId, $sessionId, collect([$item]))[0];
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function lookup(int $storeId, int $sessionId, string $query, string $mode = 'auto'): array
+    {
+        abort_if($this->session($storeId, $sessionId) === null, 404, 'Sesi opname tidak ditemukan.');
+        $query = trim($query);
+
+        $exact = DB::table('stock_opname_items')
+            ->where('session_id', $sessionId)
+            ->where('barcode_snapshot', $query)
+            ->first();
+        if ($exact !== null) {
+            return $this->presentItemRows($storeId, $sessionId, collect([$exact]));
+        }
+
+        if ($mode !== 'search') {
+            $product = DB::table('products')
+                ->where('store_id', $storeId)
+                ->where('barcode', $query)
+                ->first(['name']);
+            if ($product !== null) {
+                throw new OpnameLookupException(
+                    'not_in_session',
+                    "Produk {$product->name} tidak termasuk dalam sesi ini (produk baru dihitung di opname berikutnya).",
+                    $product->name,
+                );
+            }
+
+            if ($mode === 'barcode' || preg_match('/^[\pL\pN-]{8,}$/u', $query) === 1) {
+                throw new OpnameLookupException('unknown_barcode', 'Barcode tidak dikenal.');
+            }
+        }
+
+        if (mb_strlen($query) < 2) {
+            return [];
+        }
+
+        $term = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $query);
+        $items = DB::table('stock_opname_items')
+            ->where('session_id', $sessionId)
+            ->where('product_name_snapshot', 'like', "%{$term}%")
+            ->orderBy('product_name_snapshot')
+            ->limit(10)
+            ->get();
+
+        return $this->presentItemRows($storeId, $sessionId, $items);
+    }
+
+    /** @param Collection<int, object> $items
+     * @return list<array<string, mixed>>
+     */
+    private function presentItemRows(int $storeId, int $sessionId, Collection $items): array
+    {
+        $reveals = $this->displayPolicy->revealsSystemQty($storeId);
+        $staleCategoryIds = $this->staleCategoryIds($sessionId, $storeId);
+        $categoryMap = DB::table('categories')->where('store_id', $storeId)
+            ->get(['id', 'parent_id', 'name'])->keyBy('id');
+
+        return $items->map(function (object $item) use ($reveals, $staleCategoryIds, $categoryMap) {
+            $presented = [
+                'id' => (int) $item->id,
+                'product_id' => (int) $item->product_id,
+                'category_id' => $item->category_id === null ? null : (int) $item->category_id,
+                'name' => $item->product_name_snapshot,
+                'barcode' => $item->barcode_snapshot,
+                'category_path' => $this->categoryPath($item, $staleCategoryIds, $categoryMap),
+                'status' => $this->displayPolicy->itemStatus($item, $reveals),
+                'counted_qty' => $item->counted_qty,
+            ];
+            if ($reveals) {
+                $presented['system_qty'] = $item->system_qty_at_count ?? $item->system_qty_at_start;
+            }
+
+            return $presented;
+        })->all();
     }
 
     /** @return list<object> */

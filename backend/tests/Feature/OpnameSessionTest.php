@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\InventoryService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -432,7 +433,7 @@ class OpnameSessionTest extends SeededTestCase
         $treeStartedAt = hrtime(true);
         $this->getJson("/api/stock-opname-sessions/{$response->json('data.id')}/tree")->assertOk();
         $treeElapsed = (hrtime(true) - $treeStartedAt) / 1_000_000_000;
-        $queryCounts = ['tree' => 0, 'items' => 0];
+        $queryCounts = ['tree' => 0, 'items' => 0, 'guard' => 0];
         $phase = null;
         DB::listen(function ($query) use (&$queryCounts, &$phase) {
             if ($phase !== null && str_contains(strtolower($query->sql), 'stock_opname_items')) {
@@ -446,11 +447,46 @@ class OpnameSessionTest extends SeededTestCase
         $this->getJson("/api/stock-opname-sessions/{$response->json('data.id')}/items?per_page=100")->assertOk();
         $phase = null;
         $itemsElapsed = (hrtime(true) - $itemsStartedAt) / 1_000_000_000;
+
+        $sessionId = (int) $response->json('data.id');
+        $item = DB::table('stock_opname_items')->where('session_id', $sessionId)->first(['id', 'barcode_snapshot']);
+        $lookupStartedAt = hrtime(true);
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/lookup?q={$item->barcode_snapshot}&mode=auto")->assertOk();
+        $lookupElapsed = (hrtime(true) - $lookupStartedAt) / 1_000_000_000;
+        $countStartedAt = hrtime(true);
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
+            'item_id' => $item->id,
+            'mode' => 'set',
+            'quantity' => 17,
+            'client_request_id' => fake()->uuid(),
+        ])->assertOk();
+        $countElapsed = (hrtime(true) - $countStartedAt) / 1_000_000_000;
+        DB::table('stock_opname_sessions')->where('id', $sessionId)->update(['status' => 'posted']);
+        $guardIds = DB::table('products')->where('store_id', $this->storeId())->orderBy('id')->limit(20)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $guardQueries = 0;
+        $phase = 'guard';
+        DB::listen(function ($query) use (&$guardQueries, &$phase) {
+            if ($phase === 'guard' && str_contains(strtolower($query->sql), 'stock_opname_sessions')) {
+                $guardQueries++;
+            }
+        });
+        $guardStartedAt = hrtime(true);
+        DB::transaction(fn () => app(InventoryService::class)->withUnlockedProducts(
+            $this->storeId(),
+            $guardIds,
+            fn () => null,
+        ));
+        $phase = null;
+        $guardElapsed = (hrtime(true) - $guardStartedAt) / 1_000_000_000;
         fwrite(STDOUT, sprintf(
-            "Opname 5,000 products: start %.3fs, tree %.3fs, items/100 %.3fs\n",
+            "Opname 5,000 products: start %.3fs, tree %.3fs, items/100 %.3fs, lookup %.3fs, count %.3fs, 20-product guard %.3fs (%d lock queries)\n",
             $elapsed,
             $treeElapsed,
             $itemsElapsed,
+            $lookupElapsed,
+            $countElapsed,
+            $guardElapsed,
+            $guardQueries,
         ));
         $this->assertLessThan(1.0, $treeElapsed);
         $this->assertLessThan(0.3, $itemsElapsed);

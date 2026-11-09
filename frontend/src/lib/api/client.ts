@@ -14,6 +14,9 @@ export class ApiError extends Error {
     message: string,
     public errors?: Record<string, string[]>,
     public conflictingSessions?: Array<{ id: number; number: string }>,
+    public code?: string,
+    public lockedProducts?: Array<{ product_id: number; name: string; session_number: string }>,
+    public productName?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -84,10 +87,13 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
       message?: string;
       errors?: Record<string, string[]>;
       conflicting_sessions?: Array<{ id: number; number: string }>;
+      code?: string;
+      locked_products?: Array<{ product_id: number; name: string; session_number: string }>;
+      product_name?: string;
     };
     // 401 pada request ber-token = sesi habis. Login yang salah membalas 422, bukan 401.
     if (res.status === 401 && token) onUnauthorized?.();
-    throw new ApiError(res.status, p.message ?? `Permintaan gagal (${res.status}).`, p.errors, p.conflicting_sessions);
+    throw new ApiError(res.status, p.message ?? `Permintaan gagal (${res.status}).`, p.errors, p.conflicting_sessions, p.code, p.locked_products, p.product_name);
   }
 
   return payload as T;
@@ -107,9 +113,9 @@ export async function apiDownload(path: string): Promise<Blob> {
 
   if (!res.ok) {
     const payload: unknown = await res.json().catch(() => null);
-    const p = (payload ?? {}) as { message?: string; errors?: Record<string, string[]> };
+    const p = (payload ?? {}) as { message?: string; errors?: Record<string, string[]>; code?: string };
     if (res.status === 401 && token) onUnauthorized?.();
-    throw new ApiError(res.status, p.message ?? `Permintaan gagal (${res.status}).`, p.errors);
+    throw new ApiError(res.status, p.message ?? `Permintaan gagal (${res.status}).`, p.errors, undefined, p.code);
   }
 
   return res.blob();

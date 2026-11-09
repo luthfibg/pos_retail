@@ -396,36 +396,42 @@ class SaleService
             'posted_at' => $now,
         ]);
 
-        // 7. baris + stok FEFO
-        foreach ($computed as $line) {
-            $product = $products->get($line['product_id']);
+        // 7. Baris dan pengurangan stok dicek sekaligus agar satu checkout hanya satu kueri kunci opname.
+        $this->inventory->withUnlockedProducts(
+            $storeId,
+            $computed ? array_map(fn (array $line) => (int) $line['product_id'], $computed) : [],
+            function () use ($computed, $products, $saleId, $actor, $storeId) {
+                foreach ($computed as $line) {
+                    $product = $products->get($line['product_id']);
 
-            $itemId = DB::table('sale_items')->insertGetId([
-                'sale_id' => $saleId,
-                'product_id' => $product->id,
-                'qty' => Decimal::qtyString($line['qty']),
-                'unit_price' => Decimal::moneyString($line['price']),
-                'discount_id' => $line['discount_id'],
-                'discount_amount' => Decimal::moneyString($line['discount']),
-                'line_total' => Decimal::moneyString($line['line_total']),
-                'cost_snapshot' => $product->unit_cost ?? '0.0000',
-            ]);
+                    $itemId = DB::table('sale_items')->insertGetId([
+                        'sale_id' => $saleId,
+                        'product_id' => $product->id,
+                        'qty' => Decimal::qtyString($line['qty']),
+                        'unit_price' => Decimal::moneyString($line['price']),
+                        'discount_id' => $line['discount_id'],
+                        'discount_amount' => Decimal::moneyString($line['discount']),
+                        'line_total' => Decimal::moneyString($line['line_total']),
+                        'cost_snapshot' => $product->unit_cost ?? '0.0000',
+                    ]);
 
-            try {
-                $allocations = $this->inventory->sell($storeId, (int) $product->id, Decimal::qtyString($line['qty']), 'sale', $saleId, $actor->id);
-            } catch (ValidationException $e) {
-                throw ValidationException::withMessages(["items.{$line['index']}.qty" => $e->errors()['qty'] ?? ['Stok tidak mencukupi.']]);
+                    try {
+                        $allocations = $this->inventory->sell($storeId, (int) $product->id, Decimal::qtyString($line['qty']), 'sale', $saleId, $actor->id);
+                    } catch (ValidationException $e) {
+                        throw ValidationException::withMessages(["items.{$line['index']}.qty" => $e->errors()['qty'] ?? ['Stok tidak mencukupi.']]);
+                    }
+
+                    foreach ($allocations as $allocation) {
+                        DB::table('sale_item_batches')->insert([
+                            'sale_item_id' => $itemId,
+                            'batch_id' => $allocation['batch_id'],
+                            'shelf_position_id' => $allocation['shelf_position_id'],
+                            'qty' => $allocation['qty'],
+                        ]);
+                    }
+                }
             }
-
-            foreach ($allocations as $allocation) {
-                DB::table('sale_item_batches')->insert([
-                    'sale_item_id' => $itemId,
-                    'batch_id' => $allocation['batch_id'],
-                    'shelf_position_id' => $allocation['shelf_position_id'],
-                    'qty' => $allocation['qty'],
-                ]);
-            }
-        }
+        );
 
         $this->inventory->synchronizeAutomaticPurchaseRequisitions(
             $actor,

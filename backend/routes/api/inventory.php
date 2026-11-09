@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\OpnameDisplaySettingController;
+use App\Http\Controllers\OpnameLockStatusController;
 use App\Http\Controllers\OpnameSessionController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\StockTransferController;
@@ -37,6 +38,7 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('stock-opname/lock-status', [OpnameLockStatusController::class, 'show']);
     Route::get('settings/opname', [OpnameDisplaySettingController::class, 'show'])->middleware('can:opname.settings.manage');
     Route::put('settings/opname', [OpnameDisplaySettingController::class, 'update'])->middleware('can:opname.settings.manage');
     Route::get('stock-opname-sessions', [OpnameSessionController::class, 'index'])->middleware('can:opname.view');
@@ -46,6 +48,14 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('session')->middleware('can:opname.view');
     Route::get('stock-opname-sessions/{session}/items', [OpnameSessionController::class, 'items'])
         ->whereNumber('session')->middleware('can:opname.view');
+    Route::post('stock-opname-sessions/{session}/counts', [OpnameSessionController::class, 'storeCount'])
+        ->whereNumber('session')->middleware('can:opname.count');
+    Route::post('stock-opname-sessions/{session}/counts/{item}/clear', [OpnameSessionController::class, 'clearCount'])
+        ->whereNumber('session')->whereNumber('item')->middleware('can:opname.count');
+    Route::get('stock-opname-sessions/{session}/lookup', [OpnameSessionController::class, 'lookup'])
+        ->whereNumber('session')->middleware('can:opname.count');
+    Route::get('stock-opname-sessions/{session}/counts', [OpnameSessionController::class, 'counts'])
+        ->whereNumber('session')->middleware('can:opname.count');
     Route::post('stock-opname-sessions', [OpnameSessionController::class, 'store'])->middleware('can:opname.create');
     Route::post('stock-opname-sessions/{session}/cancel', [OpnameSessionController::class, 'cancel'])
         ->whereNumber('session')->middleware('can:opname.cancel');

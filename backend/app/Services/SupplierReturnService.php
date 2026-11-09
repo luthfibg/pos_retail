@@ -689,46 +689,52 @@ class SupplierReturnService
                     $items,
                     fn (array $item): bool => $item['disposition'] === 'quarantine',
                 ));
-                if ($accepted && $quarantinedItems !== []) {
-                    $this->inventory->closeSupplierReturn(
-                        $storeId,
-                        $id,
-                        $quarantinedItems,
-                        $actor->id,
-                        'supplier_return_out',
-                    );
-                }
-
                 if ($accepted) {
-                    foreach ($items as $item) {
-                        $sourceReceiptItem = DB::table('goods_receipt_items')
-                            ->where('id', $item['goods_receipt_item_id'])
-                            ->first(['product_id', 'expiry_date', 'batch_code', 'shelf_position_id']);
-                        if ($sourceReceiptItem === null) {
-                            throw ValidationException::withMessages([
-                                'items' => ['Baris GR sumber tidak ditemukan untuk penerimaan barang pengganti.'],
-                            ]);
-                        }
+                    $this->inventory->withUnlockedProducts(
+                        $storeId,
+                        array_values(array_unique(array_map('intval', array_column($items, 'product_id')))),
+                        function () use ($storeId, $id, $actor, $items, $quarantinedItems, &$nextStatus) {
+                            if ($quarantinedItems !== []) {
+                                $this->inventory->closeSupplierReturn(
+                                    $storeId,
+                                    $id,
+                                    $quarantinedItems,
+                                    $actor->id,
+                                    'supplier_return_out',
+                                );
+                            }
 
-                        $replacement = $this->inventory->receive(
-                            $storeId,
-                            (int) $item['product_id'],
-                            (string) $item['qty'],
-                            (string) $item['unit_cost'],
-                            $sourceReceiptItem->expiry_date,
-                            $sourceReceiptItem->batch_code,
-                            (int) $item['goods_receipt_item_id'],
-                            'supplier_return',
-                            $id,
-                            $actor->id,
-                            (int) $item['location_id'],
-                            $sourceReceiptItem->shelf_position_id === null ? null : (int) $sourceReceiptItem->shelf_position_id,
-                            movementType: 'supplier_replacement_in',
-                        );
-                        DB::table('supplier_return_items')->where('id', $item['id'])
-                            ->update(['replacement_batch_id' => $replacement['batch_id']]);
-                    }
-                    $nextStatus = 'replacement_received';
+                            foreach ($items as $item) {
+                                $sourceReceiptItem = DB::table('goods_receipt_items')
+                                    ->where('id', $item['goods_receipt_item_id'])
+                                    ->first(['product_id', 'expiry_date', 'batch_code', 'shelf_position_id']);
+                                if ($sourceReceiptItem === null) {
+                                    throw ValidationException::withMessages([
+                                        'items' => ['Baris GR sumber tidak ditemukan untuk penerimaan barang pengganti.'],
+                                    ]);
+                                }
+
+                                $replacement = $this->inventory->receive(
+                                    $storeId,
+                                    (int) $item['product_id'],
+                                    (string) $item['qty'],
+                                    (string) $item['unit_cost'],
+                                    $sourceReceiptItem->expiry_date,
+                                    $sourceReceiptItem->batch_code,
+                                    (int) $item['goods_receipt_item_id'],
+                                    'supplier_return',
+                                    $id,
+                                    $actor->id,
+                                    (int) $item['location_id'],
+                                    $sourceReceiptItem->shelf_position_id === null ? null : (int) $sourceReceiptItem->shelf_position_id,
+                                    movementType: 'supplier_replacement_in',
+                                );
+                                DB::table('supplier_return_items')->where('id', $item['id'])
+                                    ->update(['replacement_batch_id' => $replacement['batch_id']]);
+                            }
+                            $nextStatus = 'replacement_received';
+                        },
+                    );
                 }
             } elseif ($accepted) {
                 $this->inventory->closeSupplierReturn($storeId, $id, $items, $actor->id, 'supplier_return_out');

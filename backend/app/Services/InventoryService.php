@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\Decimal;
 use App\Support\DocumentNumber;
 use Carbon\Carbon;
+use Closure;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -38,7 +39,39 @@ class InventoryService
         private AuditLogger $audit,
         private NumberSequence $sequences,
         private PurchaseRequisitionService $requisitions,
+        private OpnameLockService $opnameLocks,
     ) {}
+
+    /**
+     * Run a multi-product stock mutation after one batched opname-lock check.
+     * The authorization is scoped to this callback and current transaction only.
+     *
+     * @param  list<int>  $productIds
+     */
+    public function withUnlockedProducts(int $storeId, array $productIds, Closure $callback): mixed
+    {
+        $this->requireTransaction();
+        $productIds = array_values(array_unique(array_map('intval', $productIds)));
+        sort($productIds);
+        $this->lockStockRows($productIds);
+        $this->opnameLocks->assertUnlocked($storeId, $productIds);
+
+        $previous = $this->authorizedStockMutation;
+        $this->authorizedStockMutation = [
+            'store_id' => $storeId,
+            'product_ids' => $productIds,
+            'transaction_level' => DB::transactionLevel(),
+        ];
+
+        try {
+            return $callback();
+        } finally {
+            $this->authorizedStockMutation = $previous;
+        }
+    }
+
+    /** @var array{store_id: int, product_ids: list<int>, transaction_level: int}|null */
+    private ?array $authorizedStockMutation = null;
 
     /** @param list<int>|null $productIds */
     public function synchronizeAutomaticPurchaseRequisitions(User $actor, int $storeId, ?array $productIds = null): ?array
@@ -114,6 +147,7 @@ class InventoryService
                 throw ValidationException::withMessages($errors);
             }
 
+            $this->assertStockUnlocked($storeId, $ids);
             $number = $this->sequences->next($storeId, 'OPEN');
             $documentNo = DocumentNumber::format('OPEN', $number);
             $lines = [];
@@ -192,6 +226,7 @@ class InventoryService
 
         $product = DB::table('products')->where('store_id', $storeId)->where('id', $productId)->lockForUpdate()->first();
         abort_if($product === null, 404, 'Produk tidak ditemukan.');
+        $this->assertStockUnlocked($storeId, [$productId], $refType, $refId);
 
         if ($product->track_expiry && $expiryDate === null) {
             throw ValidationException::withMessages(['expiry_date' => ["Tanggal kadaluarsa wajib diisi untuk {$product->name}."]]);
@@ -240,6 +275,7 @@ class InventoryService
             ->lockForUpdate()
             ->first();
         abort_if($product === null, 404, 'Produk tidak ditemukan.');
+        $this->assertStockUnlocked($storeId, [$productId], 'stock_adjustment', $adjustmentId);
         if ($product->status !== 'active') {
             throw ValidationException::withMessages(['product_id' => ['Produk harus berstatus aktif.']]);
         }
@@ -374,6 +410,7 @@ class InventoryService
         $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
         DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
             ->orderBy('id')->lockForUpdate()->get(['id']);
+        $this->assertStockUnlocked($storeId, $productIds, 'supplier_return', $returnId);
 
         $balances = [];
         $errors = [];
@@ -448,6 +485,7 @@ class InventoryService
         $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
         DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
             ->orderBy('id')->lockForUpdate()->get(['id']);
+        $this->assertStockUnlocked($storeId, $productIds, 'supplier_return', $returnId);
 
         $balances = [];
         $errors = [];
@@ -537,6 +575,7 @@ class InventoryService
 
         $product = DB::table('products')->where('store_id', $storeId)->where('id', $productId)->lockForUpdate()->first();
         abort_if($product === null, 404, 'Produk tidak ditemukan.');
+        $this->assertStockUnlocked($storeId, [$productId], $refType, $refId);
 
         $locationId ??= $this->sellingLocationId($storeId);
         $today = Carbon::now('Asia/Jakarta')->toDateString();
@@ -630,6 +669,7 @@ class InventoryService
         // kunci berurutan: produk dulu (urut id), lalu baris saldo
         $productIds = collect($allocations)->pluck('product_id')->unique()->sort()->values()->all();
         DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)->orderBy('id')->lockForUpdate()->get(['id']);
+        $this->assertStockUnlocked($storeId, $productIds, $refType, $refId);
 
         $now = $this->now();
 
@@ -677,6 +717,7 @@ class InventoryService
         $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
         $products = DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
             ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $this->assertStockUnlocked($storeId, $productIds, $refType, $refId);
 
         $errors = [];
         $sourceBalances = [];
@@ -1070,5 +1111,46 @@ class InventoryService
         if (DB::transactionLevel() < 1) {
             throw new LogicException('Operasi stok harus dijalankan di dalam DB::transaction.');
         }
+    }
+
+    /** @param list<int> $productIds */
+    private function assertStockUnlocked(
+        int $storeId,
+        array $productIds,
+        ?string $sourceRefType = null,
+        ?int $sourceRefId = null,
+    ): void {
+        $productIds = array_values(array_unique(array_map('intval', $productIds)));
+        sort($productIds);
+        if ($productIds === []) {
+            return;
+        }
+
+        if (
+            $this->authorizedStockMutation !== null
+            && $this->authorizedStockMutation['store_id'] === $storeId
+            && $this->authorizedStockMutation['transaction_level'] === DB::transactionLevel()
+            && array_diff($productIds, $this->authorizedStockMutation['product_ids']) === []
+        ) {
+            return;
+        }
+
+        $this->lockStockRows($productIds);
+        $this->opnameLocks->assertUnlocked($storeId, $productIds, $sourceRefType, $sourceRefId);
+    }
+
+    /** @param list<int> $productIds */
+    private function lockStockRows(array $productIds): void
+    {
+        if ($productIds === []) {
+            return;
+        }
+
+        DB::table('inventory_balances')
+            ->whereIn('product_id', $productIds)
+            ->orderBy('product_id')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get(['id']);
     }
 }
