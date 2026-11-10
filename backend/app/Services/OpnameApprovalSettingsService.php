@@ -14,6 +14,12 @@ class OpnameApprovalSettingsService
 
     private const REQUIRE_FIRST = 'opname.approval.require_first_opname';
 
+    private const REMINDER_ENABLED = 'opname.reminder.enabled';
+
+    private const REMINDER_INTERVAL = 'opname.reminder.interval_days';
+
+    private const REMINDER_BASIS = 'opname.reminder.basis';
+
     public function __construct(
         private OpnameDisplayPolicy $display,
         private PermissionResolver $permissions,
@@ -23,7 +29,10 @@ class OpnameApprovalSettingsService
     /** @return array<string, mixed> */
     public function get(User $user, int $storeId): array
     {
-        $settings = ['show_system_qty' => $this->display->revealsSystemQty($storeId)];
+        $settings = [
+            'show_system_qty' => $this->display->revealsSystemQty($storeId),
+            ...$this->reminderSettings($storeId),
+        ];
         if ($this->permissions->allows($user, 'opname.view_value', $storeId)) {
             $settings += $this->thresholds($storeId);
         }
@@ -37,11 +46,17 @@ class OpnameApprovalSettingsService
         $hasThresholds = array_key_exists('per_product_threshold', $data)
             || array_key_exists('per_session_threshold', $data)
             || array_key_exists('require_first_opname', $data);
+        $hasReminder = array_key_exists('reminder_enabled', $data)
+            || array_key_exists('reminder_interval_days', $data)
+            || array_key_exists('reminder_basis', $data);
         if ($hasThresholds && ! $this->isOwner($user, $storeId)) {
             abort(403, 'Hanya Owner yang dapat mengubah ambang persetujuan opname.');
         }
+        if ($hasReminder && ! $this->isAdminOrOwner($user, $storeId)) {
+            abort(403, 'Hanya Admin atau Owner yang dapat mengubah pengingat opname.');
+        }
 
-        return DB::transaction(function () use ($user, $storeId, $data, $hasThresholds) {
+        return DB::transaction(function () use ($user, $storeId, $data, $hasThresholds, $hasReminder) {
             if (array_key_exists('show_system_qty', $data)) {
                 $this->display->update($user, $storeId, (bool) $data['show_system_qty']);
             }
@@ -64,6 +79,33 @@ class OpnameApprovalSettingsService
                 if ($before !== $after) {
                     $this->audit->log(
                         'settings.opname_approval',
+                        'setting',
+                        null,
+                        before: $before,
+                        after: $after,
+                        storeId: $storeId,
+                        actorId: $user->id,
+                    );
+                }
+            }
+
+            if ($hasReminder) {
+                $before = $this->reminderSettings($storeId);
+                $after = [
+                    'reminder_enabled' => (bool) ($data['reminder_enabled'] ?? $before['reminder_enabled']),
+                    'reminder_interval_days' => (int) ($data['reminder_interval_days'] ?? $before['reminder_interval_days']),
+                    'reminder_basis' => (string) ($data['reminder_basis'] ?? $before['reminder_basis']),
+                ];
+                foreach ([
+                    self::REMINDER_ENABLED => $after['reminder_enabled'],
+                    self::REMINDER_INTERVAL => $after['reminder_interval_days'],
+                    self::REMINDER_BASIS => $after['reminder_basis'],
+                ] as $key => $value) {
+                    $this->write($storeId, $key, $value, $user->id);
+                }
+                if ($before !== $after) {
+                    $this->audit->log(
+                        'settings.opname_reminder',
                         'setting',
                         null,
                         before: $before,
@@ -98,6 +140,26 @@ class OpnameApprovalSettingsService
             ->exists();
     }
 
+    private function isAdminOrOwner(User $user, int $storeId): bool
+    {
+        return DB::table('user_roles as ur')
+            ->join('roles as r', 'r.id', '=', 'ur.role_id')
+            ->where('ur.user_id', $user->id)
+            ->where('ur.store_id', $storeId)
+            ->whereIn('r.name', ['Admin', 'Owner'])
+            ->exists();
+    }
+
+    /** @return array{reminder_enabled: bool, reminder_interval_days: int, reminder_basis: string} */
+    private function reminderSettings(int $storeId): array
+    {
+        return [
+            'reminder_enabled' => $this->readBool($storeId, self::REMINDER_ENABLED, false),
+            'reminder_interval_days' => $this->readInt($storeId, self::REMINDER_INTERVAL, 30),
+            'reminder_basis' => $this->readString($storeId, self::REMINDER_BASIS, 'all'),
+        ];
+    }
+
     private function readInt(int $storeId, string $key, int $default): int
     {
         $value = DB::table('settings')->where('store_id', $storeId)->where('setting_key', $key)->value('setting_value');
@@ -112,7 +174,14 @@ class OpnameApprovalSettingsService
         return $value === null ? $default : json_decode((string) $value, true) === true;
     }
 
-    private function write(int $storeId, string $key, int|bool $value, int $actorId): void
+    private function readString(int $storeId, string $key, string $default): string
+    {
+        $value = DB::table('settings')->where('store_id', $storeId)->where('setting_key', $key)->value('setting_value');
+
+        return $value === null ? $default : (string) json_decode((string) $value, true);
+    }
+
+    private function write(int $storeId, string $key, int|bool|string $value, int $actorId): void
     {
         DB::table('settings')->upsert([[
             'store_id' => $storeId,

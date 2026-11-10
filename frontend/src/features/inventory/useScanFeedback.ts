@@ -1,13 +1,16 @@
-import { useState } from 'react';
-
-const PREFERENCE_KEY = 'pos.opname.scan-feedback';
+import { useEffect, useState } from 'react';
+import { readScannerSettings, writeScannerSettings } from './scannerSettings';
 
 export function useScanFeedback() {
-  const [enabled, setEnabled] = useState(() => localStorage.getItem(PREFERENCE_KEY) !== 'false');
+  const [enabled, setEnabled] = useState(() => readScannerSettings().soundAndVibration);
+  useEffect(() => {
+    const update = () => setEnabled(readScannerSettings().soundAndVibration);
+    window.addEventListener('opname-scanner-settings-changed', update);
+    return () => window.removeEventListener('opname-scanner-settings-changed', update);
+  }, []);
 
   function setPreference(value: boolean) {
-    localStorage.setItem(PREFERENCE_KEY, String(value));
-    setEnabled(value);
+    writeScannerSettings({ ...readScannerSettings(), soundAndVibration: value });
   }
 
   function play(kind: 'success' | 'error') {

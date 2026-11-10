@@ -9,6 +9,8 @@ import { useOpnameWorkspace } from './OpnameWorkspaceContext';
 import { CountEntryForm } from './CountEntryForm';
 import { nextIncompleteNode } from './opnameWorkingNode';
 import { useScanFeedback } from './useScanFeedback';
+import { getPendingOfflineItems, toOfflineOpnameItem } from './useOpnameOffline';
+import { PendingBadge } from './SyncStatus';
 
 interface Props {
   sessionId: number;
@@ -19,8 +21,8 @@ interface Props {
   workingNode: OpnameProgressNode | null;
 }
 
-function useVisiblePolling(enabled: boolean) {
-  return () => enabled && document.visibilityState === 'visible' ? 15_000 : false;
+function useVisiblePolling(enabled: boolean, isOnline: boolean) {
+  return () => enabled && isOnline && document.visibilityState === 'visible' ? 15_000 : false;
 }
 
 function Status({ item }: { item: OpnameItem }) {
@@ -34,21 +36,23 @@ function ItemCard({
   kind,
   revealsSystemQty,
   onSelect,
+  pending = false,
 }: {
   item: OpnameItem;
   kind: 'counted' | 'recommendation';
   revealsSystemQty: boolean;
   onSelect: () => void;
+  pending?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="opname-short-card min-h-14 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition-transform duration-200 motion-reduce:transition-none hover:bg-slate-50"
+      className="opname-short-card min-h-14 w-full touch-manipulation select-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition-transform duration-200 motion-reduce:transition-none hover:bg-slate-50"
     >
       <span className="flex items-center justify-between gap-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.name}</span>
-        {kind === 'counted' && revealsSystemQty && <Status item={item} />}
+        {pending ? <PendingBadge /> : kind === 'counted' && revealsSystemQty ? <Status item={item} /> : null}
       </span>
       {kind === 'counted' ? (
         <span className="mt-1 block text-xs text-slate-600">Hitungan: {item.counted_qty ?? '—'}</span>
@@ -63,15 +67,18 @@ function ItemCard({
 }
 
 export function CountingStack({ sessionId, active, canCount, revealsSystemQty, tree, workingNode }: Props) {
-  const { selectedItem, activeNodeId, selectItem, startNode } = useOpnameWorkspace();
+  const {
+    selectedItem, activeNodeId, selectItem, startNode, pendingOperations, failedOperations,
+    isOnline, offlineIndex, isSyncing,
+  } = useOpnameWorkspace();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySelectionError, setHistorySelectionError] = useState('');
   const feedback = useScanFeedback();
   const recentCounts = useQuery({
     queryKey: ['opname', 'stack-counted', sessionId],
     queryFn: () => opnameApi.items(sessionId, { only_counted: true, sort: '-counted_at', per_page: 2 }),
-    enabled: active && canCount,
-    refetchInterval: useVisiblePolling(active && canCount),
+    enabled: active && canCount && isOnline,
+    refetchInterval: useVisiblePolling(active && canCount, isOnline),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -84,19 +91,35 @@ export function CountingStack({ sessionId, active, canCount, revealsSystemQty, t
       per_page: 2,
       ...(selectedItem ? { exclude_item_ids: [selectedItem.id] } : {}),
     }),
-    enabled: active && canCount && workingNode !== null,
-    refetchInterval: useVisiblePolling(active && canCount),
+    enabled: active && canCount && isOnline && workingNode !== null,
+    refetchInterval: useVisiblePolling(active && canCount, isOnline),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
   const history = useQuery({
     queryKey: ['opname', 'counts', sessionId],
     queryFn: () => opnameApi.counts(sessionId, 10),
-    enabled: historyOpen && active && canCount,
+    enabled: historyOpen && active && canCount && isOnline,
   });
   const allCounted = tree.summary.total_products > 0 && tree.summary.counted_products >= tree.summary.total_products;
   const selectedNode = findNodeById(tree.nodes, activeNodeId);
   const nextNode = nextIncompleteNode(tree, activeNodeId);
+  const pendingItems = getPendingOfflineItems(offlineIndex, pendingOperations);
+  const pendingMap = new Map(pendingItems.map((item) => [item.id, item]));
+  const pendingCountedItems = pendingItems.filter((item) => item.counted_qty !== null);
+  const recentItems = [
+    ...pendingCountedItems,
+    ...(recentCounts.data?.data ?? []).filter((item) => !pendingMap.has(item.id)),
+  ].slice(0, 2);
+  const pendingCountedIds = new Set(pendingCountedItems.map((item) => item.id));
+  const offlineRecommendations = offlineIndex?.items
+    .map((item) => pendingMap.get(item.item_id) ?? toOfflineOpnameItem(offlineIndex, item))
+    .filter((item) => item.counted_qty === null
+      && item.id !== selectedItem?.id
+      && (workingNode?.id === 'other' ? item.category_id === null : item.category_id === Number(workingNode?.id)))
+    .slice(0, 2) ?? [];
+  const recommendationItems = !isOnline ? offlineRecommendations
+    : (recommendations.data?.data ?? []).filter((item) => !pendingCountedIds.has(item.id));
 
   return (
     <div className="opname-count-stack space-y-2" aria-label="Rangkaian hitung">
@@ -112,11 +135,11 @@ export function CountingStack({ sessionId, active, canCount, revealsSystemQty, t
           </div>
         )}
       </div>
-      <ErrorNotice error={recentCounts.error ?? recommendations.error} />
-      {recentCounts.data?.data.length ? (
+      <ErrorNotice error={isOnline ? recentCounts.error ?? recommendations.error : null} />
+      {recentItems.length ? (
         <div className="opname-counted-items space-y-1">
-          {[...recentCounts.data.data].reverse().map((item) => (
-            <ItemCard key={item.id} item={item} kind="counted" revealsSystemQty={revealsSystemQty} onSelect={() => selectItem(item)} />
+          {[...recentItems].reverse().map((item) => (
+            <ItemCard key={item.id} item={item} kind="counted" pending={pendingMap.has(item.id)} revealsSystemQty={isOnline && revealsSystemQty} onSelect={() => selectItem(item)} />
           ))}
         </div>
       ) : (
@@ -129,7 +152,7 @@ export function CountingStack({ sessionId, active, canCount, revealsSystemQty, t
           sessionId={sessionId}
           active={active}
           canCount={canCount}
-          revealsSystemQty={revealsSystemQty}
+          revealsSystemQty={isOnline && revealsSystemQty}
           onScanSuccess={feedback.success}
           onScanError={feedback.error}
         />
@@ -140,12 +163,12 @@ export function CountingStack({ sessionId, active, canCount, revealsSystemQty, t
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
           Semua produk sudah dihitung. <Link to="?view=ringkasan" className="font-medium underline">Buka Ringkasan</Link>
         </div>
-      ) : workingNode ? recommendations.isLoading ? (
+      ) : workingNode ? isOnline && recommendations.isLoading ? (
         <p role="status" className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">Memuat rekomendasi…</p>
-      ) : recommendations.data?.data.length ? (
+      ) : recommendationItems.length ? (
         <div className="opname-recommendation-items space-y-1">
-          {recommendations.data.data.map((item) => (
-            <ItemCard key={item.id} item={item} kind="recommendation" revealsSystemQty={revealsSystemQty} onSelect={() => selectItem(item)} />
+          {recommendationItems.map((item) => (
+            <ItemCard key={item.id} item={item} kind="recommendation" revealsSystemQty={isOnline && revealsSystemQty} pending={pendingMap.has(item.id)} onSelect={() => selectItem(item)} />
           ))}
         </div>
       ) : (
@@ -161,6 +184,9 @@ export function CountingStack({ sessionId, active, canCount, revealsSystemQty, t
       ) : (
         <p className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-600">Scan produk atau ketuk Mulai pada sub-kategori di Daftar.</p>
       )}
+      {(pendingOperations.length > 0 || failedOperations.length > 0 || isSyncing) && (
+        <p className="text-xs text-slate-600">{pendingOperations.length} operasi menunggu · {failedOperations.length} gagal tersinkron</p>
+      )}
 
       {historyOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 md:items-center md:p-4">
@@ -173,6 +199,20 @@ export function CountingStack({ sessionId, active, canCount, revealsSystemQty, t
             {history.error && <button type="button" onClick={() => void history.refetch()} className="min-h-11 px-3 text-sm underline">Coba lagi</button>}
             {history.data?.length === 0 && <p className="py-4 text-sm text-slate-500">Belum ada hitungan yang disimpan.</p>}
             <div className="mt-2 space-y-2">
+              {pendingOperations.map((operation) => {
+                const offlineItem = offlineIndex?.items.find((candidate) => candidate.item_id === operation.item.item_id);
+                const selected = pendingMap.get(operation.item.item_id)
+                  ?? (offlineItem && offlineIndex ? toOfflineOpnameItem(offlineIndex, offlineItem) : null);
+                return (
+                  <div key={operation.sequence} className="flex items-center justify-between gap-2 rounded-md border border-amber-200 p-3 text-sm">
+                    <button type="button" onClick={() => { if (selected) selectItem(selected); setHistoryOpen(false); }} className="min-h-11 min-w-0 flex-1 text-left">
+                      <span className="block truncate font-medium">{operation.item.name}</span>
+                      <span className="block text-xs text-slate-600">{operation.input.action === 'clear' ? 'Hapus hitungan' : `Hitungan ${operation.input.quantity}`}</span>
+                    </button>
+                    <PendingBadge />
+                  </div>
+                );
+              })}
               {history.data?.map((log) => (
                 <button key={log.log_id} type="button" onClick={async () => {
                   setHistorySelectionError('');

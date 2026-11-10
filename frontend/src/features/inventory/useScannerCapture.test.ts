@@ -21,6 +21,21 @@ describe('ScannerBurstBuffer', () => {
     expect(buffer.flush()).toBe('');
   });
 
+  it.each([10, 70])('recognizes a scanner configured for %i ms inter-key delay', (delay) => {
+    const buffer = new ScannerBurstBuffer(delay, 6);
+    const barcode = 'ABC-123';
+    [...barcode].forEach((key, index) => buffer.input(key, index * delay));
+    expect(buffer.input('Enter', barcode.length * delay).scan).toBe(barcode);
+  });
+
+  it('reports a barcode-sized burst when the scanner sends no suffix', () => {
+    const buffer = new ScannerBurstBuffer(80, 6);
+    [...'8996000012345'].forEach((key, index) => buffer.input(key, index * 70));
+    const result = buffer.finishWithoutSuffix();
+    expect(result.digits).toBe('');
+    expect(result.diagnostic).toMatchObject({ raw: '8996000012345', suffix: 'none' });
+  });
+
   it('treats a slower human quantity followed by Enter as digits, not a scan', () => {
     const buffer = new ScannerBurstBuffer();
     expect(buffer.input('1', 0).digits).toBe('');

@@ -1,5 +1,6 @@
 import { createContext, useContext, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { OpnameItem, OpnameProgressTree } from '@/lib/api/types';
+import type { OfflineSessionIndex, QueuedCountOperation } from './opnameOfflineStore';
 
 interface OpnameWorkspaceValue {
   activeNodeId: string | null;
@@ -9,6 +10,21 @@ interface OpnameWorkspaceValue {
   setSelectedItem: Dispatch<SetStateAction<OpnameItem | null>>;
   highlightedItemId: number | null;
   setHighlightedItemId: Dispatch<SetStateAction<number | null>>;
+  pendingOperations: QueuedCountOperation[];
+  failedOperations: QueuedCountOperation[];
+  isOnline: boolean;
+  markOffline: () => void;
+  isSyncing: boolean;
+  queueError: string | null;
+  syncNow: () => Promise<void>;
+  retryFailed: (operation: QueuedCountOperation) => Promise<void>;
+  removeFailed: (operation: QueuedCountOperation) => Promise<void>;
+  offlineIndex: OfflineSessionIndex | null;
+  offlineIndexReady: boolean;
+  offlineIndexRefreshing: boolean;
+  offlineIndexError: string | null;
+  lastScanAt: number | null;
+  setLastScanAt: Dispatch<SetStateAction<number | null>>;
   loadItem: (item: OpnameItem) => void;
   selectItem: (item: OpnameItem) => void;
   startNode: (nodeId: string) => void;

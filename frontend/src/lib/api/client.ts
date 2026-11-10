@@ -44,6 +44,8 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Header tambahan. (Kunci idempotensi penjualan dikirim di body `idempotency_key`, bukan header.) */
   headers?: Record<string, string>;
+  allowNotModified?: boolean;
+  onResponseHeaders?: (headers: Headers) => void;
 }
 
 function buildUrl(path: string, query?: Query): string {
@@ -83,6 +85,9 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
     throw new ApiError(0, 'Tidak dapat terhubung ke server. Periksa koneksi atau pastikan backend berjalan.');
   }
+
+  opts.onResponseHeaders?.(res.headers);
+  if (res.status === 304 && opts.allowNotModified) return null as T;
 
   const payload: unknown = res.status === 204 ? null : await res.json().catch(() => null);
 

@@ -130,11 +130,51 @@ class OpnameSessionService
                     ->orWhere('s.name', 'like', "%{$term}%");
             });
         }
-        if (! empty($filters['date_from'])) {
-            $query->whereDate('s.started_at', '>=', $filters['date_from']);
+        if (! empty($filters['scope_type'])) {
+            $query->where('s.scope_type', $filters['scope_type']);
         }
-        if (! empty($filters['date_to'])) {
-            $query->whereDate('s.started_at', '<=', $filters['date_to']);
+        if (! empty($filters['result'])) {
+            $query->where('s.status', 'posted')->where(
+                's.variance_products',
+                $filters['result'] === 'clean' ? '=' : '>',
+                0,
+            );
+        }
+
+        $timezone = $this->timezone($storeId);
+        $dateFrom = $filters['date_from'] ?? null;
+        $dateTo = $filters['date_to'] ?? null;
+        if (! empty($filters['period'])) {
+            [$periodFrom, $periodTo] = $this->periodBounds($filters['period'], $timezone);
+            $dateFrom = max($dateFrom ?? $periodFrom, $periodFrom);
+            $dateTo = min($dateTo ?? $periodTo, $periodTo);
+        }
+        if ($dateFrom !== null || $dateTo !== null) {
+            $fromUtc = $dateFrom === null
+                ? null
+                : Carbon::createFromFormat('!Y-m-d', $dateFrom, $timezone)->utc()->format('Y-m-d H:i:s');
+            $toUtc = $dateTo === null
+                ? null
+                : Carbon::createFromFormat('!Y-m-d', $dateTo, $timezone)->addDay()->utc()->format('Y-m-d H:i:s');
+            $query->where(function ($base) use ($fromUtc, $toUtc) {
+                $base->where(function ($posted) use ($fromUtc, $toUtc) {
+                    $posted->where('s.status', 'posted');
+                    if ($fromUtc !== null) {
+                        $posted->where('s.posted_at', '>=', $fromUtc);
+                    }
+                    if ($toUtc !== null) {
+                        $posted->where('s.posted_at', '<', $toUtc);
+                    }
+                })->orWhere(function ($notPosted) use ($fromUtc, $toUtc) {
+                    $notPosted->where('s.status', '<>', 'posted');
+                    if ($fromUtc !== null) {
+                        $notPosted->where('s.started_at', '>=', $fromUtc);
+                    }
+                    if ($toUtc !== null) {
+                        $notPosted->where('s.started_at', '<', $toUtc);
+                    }
+                });
+            });
         }
 
         $direction = ($filters['sort'] ?? 'newest') === 'oldest' ? 'asc' : 'desc';
@@ -160,6 +200,35 @@ class OpnameSessionService
             countedProducts: (int) $counted->get($row->id, 0),
             scopeCategories: $categories->get($row->id, []),
         ));
+    }
+
+    private function timezone(int $storeId): string
+    {
+        $timezone = DB::table('stores')->where('id', $storeId)->value('timezone');
+
+        return is_string($timezone) && $timezone !== '' ? $timezone : 'Asia/Jakarta';
+    }
+
+    /** @return array{string, string} Local inclusive date bounds for the requested period. */
+    private function periodBounds(string $period, string $timezone): array
+    {
+        if (preg_match('/^(\d{4})-(\d{2})$/', $period, $matches) === 1) {
+            $start = Carbon::create((int) $matches[1], (int) $matches[2], 1, 0, 0, 0, $timezone)->startOfMonth();
+
+            return [$start->toDateString(), $start->copy()->endOfMonth()->toDateString()];
+        }
+        if (preg_match('/^(\d{4})-Q([1-4])$/', $period, $matches) === 1) {
+            $start = Carbon::create((int) $matches[1], ((int) $matches[2] - 1) * 3 + 1, 1, 0, 0, 0, $timezone)->startOfMonth();
+
+            return [$start->toDateString(), $start->copy()->addMonths(2)->endOfMonth()->toDateString()];
+        }
+        if (preg_match('/^\d{4}$/', $period) === 1) {
+            $start = Carbon::create((int) $period, 1, 1, 0, 0, 0, $timezone);
+
+            return [$start->toDateString(), $start->endOfYear()->toDateString()];
+        }
+
+        abort(422, 'Periode opname tidak valid.');
     }
 
     /** @return array<string, mixed>|null */
@@ -439,10 +508,14 @@ class OpnameSessionService
                 'name' => $row->rejector_name,
             ],
             'reject_reason' => $row->reject_reason,
-            'variance_products' => $row->variance_products === null ? null : (int) $row->variance_products,
-            'short_qty' => $row->short_qty,
-            'over_qty' => $row->over_qty,
         ];
+        if (in_array($row->status, ['pending_approval', 'posted'], true)) {
+            $record += [
+                'variance_products' => $row->variance_products === null ? null : (int) $row->variance_products,
+                'short_qty' => $row->short_qty,
+                'over_qty' => $row->over_qty,
+            ];
+        }
         if ($detail) {
             $record += [
                 'notes' => $row->notes,

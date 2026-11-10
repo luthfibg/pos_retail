@@ -226,4 +226,139 @@ class OpnameCountTest extends SeededTestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['exclude_item_ids']);
     }
+
+    public function test_batch_counts_process_in_order_are_idempotent_and_keep_rejections_isolated(): void
+    {
+        $this->actAsAdmin();
+        $firstProduct = $this->product(['barcode' => 'ABC-123']);
+        $secondProduct = $this->product(['barcode' => 'XYZ-456']);
+        $sessionId = $this->startAll();
+        $items = DB::table('stock_opname_items')->where('session_id', $sessionId)->get()->keyBy('product_id');
+        $createdAt = '2026-11-10T01:00:00+00:00';
+        $setId = fake()->uuid();
+        $addId = fake()->uuid();
+        $invalidId = fake()->uuid();
+        $clearId = fake()->uuid();
+        $body = ['operations' => [
+            [
+                'client_request_id' => $setId,
+                'action' => 'count',
+                'item_id' => $items[$firstProduct]->id,
+                'mode' => 'set',
+                'quantity' => 10,
+                'client_created_at' => $createdAt,
+            ],
+            [
+                'client_request_id' => $addId,
+                'action' => 'count',
+                'item_id' => $items[$firstProduct]->id,
+                'mode' => 'add',
+                'quantity' => 3,
+                'client_created_at' => $createdAt,
+            ],
+            [
+                'client_request_id' => $invalidId,
+                'action' => 'count',
+                'item_id' => $items[$firstProduct]->id,
+                'mode' => 'add',
+                'quantity' => -2,
+                'client_created_at' => $createdAt,
+            ],
+            [
+                'client_request_id' => $clearId,
+                'action' => 'clear',
+                'item_id' => $items[$secondProduct]->id,
+                'client_created_at' => $createdAt,
+            ],
+        ]];
+
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts/batch", $body)
+            ->assertOk()
+            ->assertJsonPath('results.0.status', 'ok')
+            ->assertJsonPath('results.0.item.counted_qty', '10.000')
+            ->assertJsonPath('results.1.status', 'ok')
+            ->assertJsonPath('results.1.item.counted_qty', '13.000')
+            ->assertJsonPath('results.2.status', 'rejected')
+            ->assertJsonPath('results.2.error.code', 'validation_failed')
+            ->assertJsonPath('results.3.status', 'ok')
+            ->assertJsonPath('summary.counted_products', 1);
+        $this->assertSame(3, DB::table('stock_opname_count_logs')->where('session_id', $sessionId)->count());
+        $this->assertSame(3, DB::table('stock_opname_count_logs')->where('session_id', $sessionId)->where('via_batch', true)->count());
+        $this->assertNotNull(DB::table('stock_opname_count_logs')->where('client_request_id', $setId)->value('client_created_at'));
+
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts/batch", $body)
+            ->assertOk()
+            ->assertJsonPath('results.0.status', 'duplicate')
+            ->assertJsonPath('results.1.status', 'duplicate')
+            ->assertJsonPath('results.3.status', 'duplicate');
+        $this->assertSame(3, DB::table('stock_opname_count_logs')->where('session_id', $sessionId)->count());
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/lookup?q=abc-123&mode=barcode")
+            ->assertOk()->assertJsonPath('data.0.product_id', $firstProduct);
+    }
+
+    public function test_offline_index_is_paginated_versioned_blind_and_requires_running_session(): void
+    {
+        $this->actAsAdmin();
+        $category = $this->category('Offline');
+        $product = $this->product(['category_id' => $category, 'barcode' => 'Offline-001']);
+        $sessionId = $this->startAll();
+        $itemId = (int) DB::table('stock_opname_items')->where('session_id', $sessionId)->where('product_id', $product)->value('id');
+        $this->setSetting('opname.show_system_qty', true);
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts/batch", ['operations' => [[
+            'client_request_id' => fake()->uuid(),
+            'action' => 'count',
+            'item_id' => $itemId,
+            'mode' => 'set',
+            'quantity' => 8,
+            'client_created_at' => now()->toIso8601String(),
+        ]]])->assertOk();
+
+        $response = $this->getJson("/api/stock-opname-sessions/{$sessionId}/offline-index?per_page=1");
+        $response->assertOk()
+            ->assertJsonPath('items.0.item_id', $itemId)
+            ->assertJsonPath('items.0.counted_qty', 8)
+            ->assertJsonPath('categories.0.name', 'Offline')
+            ->assertJsonMissingPath('items.0.system_qty')
+            ->assertJsonMissingPath('items.0.status')
+            ->assertJsonMissingPath('items.0.variance_count');
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/offline-index?per_page=1")
+            ->assertHeader('ETag', $response->headers->get('ETag'));
+
+        $this->withHeaders(['If-None-Match' => $response->headers->get('ETag')])
+            ->get("/api/stock-opname-sessions/{$sessionId}/offline-index?per_page=1")
+            ->assertStatus(304);
+
+        DB::table('stock_opname_sessions')->where('id', $sessionId)->update(['status' => 'cancelled']);
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/offline-index")
+            ->assertStatus(409);
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts/batch", ['operations' => [[
+            'client_request_id' => fake()->uuid(),
+            'action' => 'count',
+            'item_id' => $itemId,
+            'mode' => 'set',
+            'quantity' => 9,
+        ], [
+            'client_request_id' => fake()->uuid(),
+            'action' => 'clear',
+            'item_id' => $itemId,
+        ]]])->assertOk()
+            ->assertJsonPath('results.0.error.code', 'session_not_in_progress')
+            ->assertJsonPath('results.1.error.code', 'session_not_in_progress');
+    }
+
+    public function test_count_batch_rejects_more_than_one_hundred_operations(): void
+    {
+        $this->actAsAdmin();
+        $this->product();
+        $sessionId = $this->startAll();
+        $operations = array_fill(0, 101, [
+            'client_request_id' => fake()->uuid(),
+            'action' => 'clear',
+            'item_id' => 1,
+        ]);
+
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts/batch", ['operations' => $operations])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['operations']);
+    }
 }

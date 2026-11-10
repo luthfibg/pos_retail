@@ -11,9 +11,11 @@ use App\Http\Requests\CancelOpnameSessionRequest;
 use App\Http\Requests\ClearOpnameCountRequest;
 use App\Http\Requests\RejectOpnameSessionRequest;
 use App\Http\Requests\StartOpnameSessionRequest;
+use App\Http\Requests\StoreOpnameCountBatchRequest;
 use App\Http\Requests\StoreOpnameCountRequest;
 use App\Http\Requests\SubmitOpnameSessionRequest;
 use App\Services\OpnameCountService;
+use App\Services\OpnameHistoryService;
 use App\Services\OpnameProgressService;
 use App\Services\OpnameSessionService;
 use App\Services\OpnameWorkflowService;
@@ -21,6 +23,9 @@ use App\Services\PermissionResolver;
 use App\Services\StoreContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class OpnameSessionController extends Controller
 {
@@ -29,6 +34,7 @@ class OpnameSessionController extends Controller
         private OpnameProgressService $progress,
         private OpnameCountService $counts,
         private OpnameWorkflowService $workflow,
+        private OpnameHistoryService $history,
         private PermissionResolver $permissions,
         private StoreContext $stores,
     ) {}
@@ -42,11 +48,92 @@ class OpnameSessionController extends Controller
             'q' => ['sometimes', 'nullable', 'string', 'max:160'],
             'date_from' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'date_to' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'period' => ['sometimes', 'nullable', 'string', 'regex:/^\d{4}(?:-(?:0[1-9]|1[0-2]|Q[1-4]))?$/'],
+            'result' => ['sometimes', 'nullable', 'in:clean,variance'],
+            'scope_type' => ['sometimes', 'nullable', 'in:all,categories'],
             'sort' => ['sometimes', 'in:newest,oldest'],
         ]);
         $storeId = $this->stores->requireIdFor($request->user());
 
         return response()->json($this->sessions->search($storeId, $filters, (int) ($filters['per_page'] ?? 20)));
+    }
+
+    public function periods(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'group' => ['sometimes', 'in:month,quarter,year'],
+            'date_from' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'date_to' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:60'],
+            'cursor' => ['sometimes', 'nullable', 'string', 'max:12'],
+            'status' => ['sometimes', 'nullable', 'in:in_progress,pending_approval,posted,cancelled'],
+            'result' => ['sometimes', 'nullable', 'in:clean,variance'],
+            'scope_type' => ['sometimes', 'nullable', 'in:all,categories'],
+        ]);
+
+        return response()->json($this->history->periods(
+            $request->user(),
+            $this->stores->requireIdFor($request->user()),
+            $filters,
+        ));
+    }
+
+    public function frequentVariance(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'date_from' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'date_to' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
+            'scope_type' => ['sometimes', 'nullable', 'in:all,categories'],
+            'status' => ['sometimes', 'nullable', 'in:in_progress,pending_approval,posted,cancelled'],
+            'result' => ['sometimes', 'nullable', 'in:clean,variance'],
+        ]);
+
+        return response()->json($this->history->frequentVariance(
+            $request->user(),
+            $this->stores->requireIdFor($request->user()),
+            $filters,
+        ));
+    }
+
+    public function lastStatus(Request $request): JsonResponse
+    {
+        return response()->json($this->history->lastStatus(
+            $request->user(),
+            $this->stores->requireIdFor($request->user()),
+        ));
+    }
+
+    public function export(Request $request, int $session): Response
+    {
+        $filters = $request->validate([
+            'part' => ['required', 'in:summary,detail'],
+            'delimiter' => ['sometimes', 'in:comma,semicolon'],
+        ]);
+
+        return $this->history->exportSession(
+            $request->user(),
+            $this->stores->requireIdFor($request->user()),
+            $session,
+            $filters['part'],
+            $filters['delimiter'] ?? 'comma',
+        );
+    }
+
+    public function exportPeriods(Request $request): Response
+    {
+        $filters = $request->validate([
+            'group' => ['sometimes', 'in:month,quarter,year'],
+            'date_from' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'date_to' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'delimiter' => ['sometimes', 'in:comma,semicolon'],
+        ]);
+
+        return $this->history->exportPeriods(
+            $request->user(),
+            $this->stores->requireIdFor($request->user()),
+            $filters,
+        );
     }
 
     public function show(Request $request, int $session): JsonResponse
@@ -246,6 +333,128 @@ class OpnameSessionController extends Controller
         return response()->json($data);
     }
 
+    public function batchCounts(StoreOpnameCountBatchRequest $request, int $session): JsonResponse
+    {
+        $storeId = $this->stores->requireIdFor($request->user());
+        $results = [];
+        $summary = null;
+
+        foreach ($request->validated('operations') as $operation) {
+            $duplicate = false;
+            try {
+                $action = $operation['action'] ?? null;
+                $itemId = filter_var($operation['item_id'] ?? null, FILTER_VALIDATE_INT);
+                $quantity = filter_var($operation['quantity'] ?? null, FILTER_VALIDATE_INT);
+                $mode = $operation['mode'] ?? null;
+                $clientCreatedAt = $operation['client_created_at'] ?? null;
+                $validTimestamp = $clientCreatedAt === null || strtotime($clientCreatedAt) !== false;
+                $validOperation = in_array($action, ['count', 'clear'], true)
+                    && $itemId !== false
+                    && $itemId > 0
+                    && $validTimestamp
+                    && ($action === 'clear' || (
+                        in_array($mode, ['set', 'add'], true)
+                        && $quantity !== false
+                        && $quantity >= 0
+                        && $quantity <= 1000000
+                        && ($mode !== 'add' || $quantity >= 1)
+                    ));
+                if (! $validOperation) {
+                    $results[] = $this->rejectedBatchResult(
+                        $operation['client_request_id'],
+                        'validation_failed',
+                        'Data operasi hitungan tidak valid.',
+                    );
+
+                    continue;
+                }
+
+                if ($action === 'clear') {
+                    $result = $this->counts->clear(
+                        $request->user(),
+                        $storeId,
+                        $session,
+                        $itemId,
+                        $operation['client_request_id'],
+                        true,
+                        $clientCreatedAt,
+                        $duplicate,
+                    );
+                } else {
+                    $result = $this->counts->store(
+                        $request->user(),
+                        $storeId,
+                        $session,
+                        [
+                            'item_id' => $itemId,
+                            'mode' => $mode,
+                            'quantity' => $quantity,
+                            'client_request_id' => $operation['client_request_id'],
+                        ],
+                        true,
+                        $clientCreatedAt,
+                        $duplicate,
+                    );
+                }
+
+                $summary = $result['summary'];
+                $results[] = [
+                    'client_request_id' => $operation['client_request_id'],
+                    'status' => $duplicate ? 'duplicate' : 'ok',
+                    'item' => $result['item'],
+                ];
+            } catch (OpnameCountConflictException $exception) {
+                $results[] = $this->rejectedBatchResult(
+                    $operation['client_request_id'],
+                    $exception->errorCode === 'opname_session_not_countable' ? 'session_not_in_progress' : $exception->errorCode,
+                    $exception->getMessage(),
+                );
+            } catch (ValidationException $exception) {
+                $results[] = $this->rejectedBatchResult(
+                    $operation['client_request_id'],
+                    'validation_failed',
+                    'Data hitungan tidak valid. Periksa jumlah dan mode hitung.',
+                );
+            } catch (HttpExceptionInterface $exception) {
+                $code = $exception->getStatusCode() === 404 ? 'item_not_in_session' : 'request_rejected';
+                $results[] = $this->rejectedBatchResult(
+                    $operation['client_request_id'],
+                    $code,
+                    $exception->getStatusCode() === 404 ? 'Produk bukan bagian dari sesi opname ini.' : 'Operasi hitungan ditolak.',
+                );
+            }
+        }
+
+        $summary ??= $this->progress->tree($storeId, $session)['summary'] ?? [
+            'total_products' => 0,
+            'counted_products' => 0,
+        ];
+
+        return response()->json(['results' => $results, 'summary' => $summary]);
+    }
+
+    public function offlineIndex(Request $request, int $session): JsonResponse
+    {
+        $filters = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:5000'],
+        ]);
+        $data = $this->progress->offlineIndex(
+            $this->stores->requireIdFor($request->user()),
+            $session,
+            (int) ($filters['page'] ?? 1),
+            (int) ($filters['per_page'] ?? 5000),
+        );
+        abort_if($data === null, 404, 'Sesi opname tidak ditemukan.');
+        $etag = '"'.hash('sha256', $data['version'].'|'.$data['page'].'|'.$data['total_pages']).'"';
+
+        if ($request->header('If-None-Match') === $etag) {
+            return response()->json(null, 304)->header('ETag', $etag);
+        }
+
+        return response()->json($data)->header('ETag', $etag);
+    }
+
     public function lookup(Request $request, int $session): JsonResponse
     {
         $filters = $request->validate([
@@ -277,5 +486,15 @@ class OpnameSessionController extends Controller
             $session,
             (int) ($filters['limit'] ?? 10),
         ));
+    }
+
+    /** @return array{client_request_id: string, status: string, error: array{code: string, message: string}} */
+    private function rejectedBatchResult(string $requestId, string $code, string $message): array
+    {
+        return [
+            'client_request_id' => $requestId,
+            'status' => 'rejected',
+            'error' => ['code' => $code, 'message' => $message],
+        ];
     }
 }

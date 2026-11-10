@@ -20,7 +20,13 @@ import type {
   OpnameCountLog,
   OpnameCountMode,
   OpnameCountResult,
+  OpnameBatchCountResult,
+  OpnameOfflineIndex,
   OpnameLockStatus,
+  OpnameHistoryPeriod,
+  OpnamePeriodGroup,
+  OpnameFrequentVariance,
+  OpnameLastStatus,
 } from './types';
 
 export const authApi = {
@@ -186,12 +192,38 @@ export const opnameApi = {
   list: (filters: {
     q?: string;
     status?: OpnameSessionStatus | '';
+    result?: 'clean' | 'variance';
+    scope_type?: OpnameScopeType;
     date_from?: string;
     date_to?: string;
+    period?: string;
     sort?: 'newest' | 'oldest';
     page?: number;
     per_page?: number;
   } = {}) => api<Paginated<OpnameSessionSummary>>('/stock-opname-sessions', { query: { ...filters } }),
+  periods: (filters: {
+    group: OpnamePeriodGroup;
+    date_from?: string;
+    date_to?: string;
+    status?: OpnameSessionStatus | '';
+    result?: 'clean' | 'variance';
+    scope_type?: OpnameScopeType;
+    limit?: number;
+    cursor?: string;
+  }) => api<{ periods: OpnameHistoryPeriod[]; next_cursor?: string }>('/stock-opname-sessions/periods', { query: { ...filters } }),
+  frequentVariance: (filters: {
+    date_from?: string;
+    date_to?: string;
+    scope_type?: OpnameScopeType;
+    status?: OpnameSessionStatus | '';
+    result?: 'clean' | 'variance';
+    limit?: number;
+  } = {}) => api<{ items: OpnameFrequentVariance[] }>('/stock-opname-sessions/frequent-variance', { query: { ...filters } }),
+  lastStatus: () => api<OpnameLastStatus>('/stock-opname/last-status'),
+  exportSession: (id: number, part: 'summary' | 'detail', delimiter: 'comma' | 'semicolon') =>
+    apiDownload(`/stock-opname-sessions/${id}/export?part=${part}&delimiter=${delimiter}`),
+  exportPeriods: (group: OpnamePeriodGroup, delimiter: 'comma' | 'semicolon', date_from?: string, date_to?: string) =>
+    apiDownload(`/stock-opname-sessions/periods/export?group=${group}&delimiter=${delimiter}${date_from ? `&date_from=${encodeURIComponent(date_from)}` : ''}${date_to ? `&date_to=${encodeURIComponent(date_to)}` : ''}`),
   get: (id: number) =>
     api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}`).then((r) => r.data),
   report: (id: number) =>
@@ -227,6 +259,24 @@ export const opnameApi = {
     api<OpnameCountResult>(`/stock-opname-sessions/${id}/counts/${itemId}/clear`, {
       method: 'POST',
       body: { client_request_id },
+    }),
+  batchCounts: (id: number, operations: Array<{
+    client_request_id: string;
+    action: 'count' | 'clear';
+    item_id: number;
+    mode?: OpnameCountMode;
+    quantity?: number;
+    client_created_at: string;
+  }>) => api<OpnameBatchCountResult>(`/stock-opname-sessions/${id}/counts/batch`, {
+    method: 'POST',
+    body: { operations },
+  }),
+  offlineIndex: (id: number, page = 1, perPage = 5000, etag?: string, onEtag?: (etag: string | null) => void) =>
+    api<OpnameOfflineIndex | null>(`/stock-opname-sessions/${id}/offline-index`, {
+      query: { page, per_page: perPage },
+      headers: etag ? { 'If-None-Match': etag } : undefined,
+      allowNotModified: true,
+      onResponseHeaders: (headers) => onEtag?.(headers.get('ETag')),
     }),
   scopeOptions: () =>
     api<{ data: OpnameCategoryOption[]; total_products: number }>('/stock-opname/scope-options'),

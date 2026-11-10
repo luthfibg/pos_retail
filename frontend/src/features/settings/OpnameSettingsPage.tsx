@@ -14,6 +14,9 @@ export function OpnameSettingsPage({ embedded = false }: { embedded?: boolean } 
   const [perProduct, setPerProduct] = useState('');
   const [perSession, setPerSession] = useState('');
   const [requireFirst, setRequireFirst] = useState(true);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderInterval, setReminderInterval] = useState('30');
+  const [reminderBasis, setReminderBasis] = useState<'all' | 'any'>('all');
   const mutation = useMutation({
     mutationFn: (input: Partial<NonNullable<typeof query.data>>) => opnameSettingsApi.update(input),
     onSuccess: async (setting) => {
@@ -23,6 +26,9 @@ export function OpnameSettingsPage({ embedded = false }: { embedded?: boolean } 
       setPerProduct(String(setting.per_product_threshold ?? ''));
       setPerSession(String(setting.per_session_threshold ?? ''));
       setRequireFirst(setting.require_first_opname ?? true);
+      setReminderEnabled(setting.reminder_enabled);
+      setReminderInterval(String(setting.reminder_interval_days));
+      setReminderBasis(setting.reminder_basis);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['opname', 'tree'] }),
         queryClient.invalidateQueries({ queryKey: ['opname', 'items'] }),
@@ -36,6 +42,9 @@ export function OpnameSettingsPage({ embedded = false }: { embedded?: boolean } 
     setPerProduct(String(query.data.per_product_threshold ?? ''));
     setPerSession(String(query.data.per_session_threshold ?? ''));
     setRequireFirst(query.data.require_first_opname ?? true);
+    setReminderEnabled(query.data.reminder_enabled);
+    setReminderInterval(String(query.data.reminder_interval_days));
+    setReminderBasis(query.data.reminder_basis);
   }, [query.data]);
 
   if (query.isLoading || !query.data) {
@@ -62,6 +71,39 @@ export function OpnameSettingsPage({ embedded = false }: { embedded?: boolean } 
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
         {saved && <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">Pengaturan tersimpan dan berlaku untuk seluruh sesi.</p>}
         {error && <ErrorNotice error={error} />}
+        <div>
+          <h3 className="font-semibold">Pengingat opname</h3>
+          <p className="mt-1 text-sm text-slate-600">Pengingat hanya menampilkan spanduk di tab Opname dan tidak memblokir pekerjaan.</p>
+        </div>
+        <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
+          <input type="checkbox" checked={reminderEnabled} onChange={(event) => setReminderEnabled(event.target.checked)} className="h-5 w-5" />
+          Pengingat opname
+        </label>
+        <label className="block space-y-1 text-sm font-medium">
+          <span>Ingatkan setiap … hari</span>
+          <input inputMode="numeric" type="number" min={1} max={365} value={reminderInterval} onChange={(event) => setReminderInterval(event.target.value)} className="min-h-11 w-full rounded-md border border-slate-300 px-3" />
+        </label>
+        <label className="block space-y-1 text-sm font-medium">
+          <span>Hitung dari</span>
+          <select value={reminderBasis} onChange={(event) => setReminderBasis(event.target.value as 'all' | 'any')} className="min-h-11 w-full rounded-md border border-slate-300 px-3">
+            <option value="all">Opname seluruh toko</option>
+            <option value="any">Opname apa pun</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={mutation.isPending || !Number.isInteger(Number(reminderInterval)) || Number(reminderInterval) < 1 || Number(reminderInterval) > 365}
+          onClick={() => mutation.mutate({
+            reminder_enabled: reminderEnabled,
+            reminder_interval_days: Number(reminderInterval),
+            reminder_basis: reminderBasis,
+          })}
+          className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white disabled:opacity-60"
+        >
+          {mutation.isPending ? 'Menyimpan…' : 'Simpan pengingat'}
+        </button>
+      </section>
+      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
         <label className="flex min-h-12 items-start gap-3">
           <input
             type="checkbox"

@@ -18,9 +18,19 @@ class OpnameCountService
      * @param  array{item_id: int, mode: string, quantity: int, client_request_id: string}  $data
      * @return array{item: array<string, mixed>, summary: array<string, int>, nodes: list<array<string, mixed>>}
      */
-    public function store(User $actor, int $storeId, int $sessionId, array $data): array
+    public function store(
+        User $actor,
+        int $storeId,
+        int $sessionId,
+        array $data,
+        bool $viaBatch = false,
+        ?string $clientCreatedAt = null,
+        ?bool &$duplicate = null,
+    ): array
     {
-        return DB::transaction(function () use ($actor, $storeId, $sessionId, $data) {
+        $duplicate = false;
+
+        return DB::transaction(function () use ($actor, $storeId, $sessionId, $data, $viaBatch, $clientCreatedAt, &$duplicate) {
             $session = DB::table('stock_opname_sessions')
                 ->where('store_id', $storeId)->where('id', $sessionId)->lockForUpdate()->first(['id', 'status']);
             abort_if($session === null, 404, 'Sesi opname tidak ditemukan.');
@@ -39,6 +49,8 @@ class OpnameCountService
                 ) {
                     throw new OpnameCountConflictException('idempotency_key_conflict', 'Kunci permintaan hitungan sudah digunakan untuk permintaan lain.');
                 }
+
+                $duplicate = true;
 
                 return $this->result($storeId, $sessionId, (int) $data['item_id']);
             }
@@ -88,6 +100,8 @@ class OpnameCountService
                 'counted_after' => $after,
                 'client_request_id' => $data['client_request_id'],
                 'created_by' => $actor->id,
+                'client_created_at' => $clientCreatedAt === null ? null : Carbon::parse($clientCreatedAt)->utc()->format('Y-m-d H:i:s.v'),
+                'via_batch' => $viaBatch,
                 'created_at' => $now,
             ]);
 
@@ -96,9 +110,20 @@ class OpnameCountService
     }
 
     /** @return array{item: array<string, mixed>, summary: array<string, int>, nodes: list<array<string, mixed>>} */
-    public function clear(User $actor, int $storeId, int $sessionId, int $itemId, string $requestId): array
+    public function clear(
+        User $actor,
+        int $storeId,
+        int $sessionId,
+        int $itemId,
+        string $requestId,
+        bool $viaBatch = false,
+        ?string $clientCreatedAt = null,
+        ?bool &$duplicate = null,
+    ): array
     {
-        return DB::transaction(function () use ($actor, $storeId, $sessionId, $itemId, $requestId) {
+        $duplicate = false;
+
+        return DB::transaction(function () use ($actor, $storeId, $sessionId, $itemId, $requestId, $viaBatch, $clientCreatedAt, &$duplicate) {
             $session = DB::table('stock_opname_sessions')
                 ->where('store_id', $storeId)->where('id', $sessionId)->lockForUpdate()->first(['id', 'status']);
             abort_if($session === null, 404, 'Sesi opname tidak ditemukan.');
@@ -113,6 +138,8 @@ class OpnameCountService
                 if ((int) $existing->session_id !== $sessionId || (int) $existing->item_id !== $itemId || (int) $existing->created_by !== $actor->id) {
                     throw new OpnameCountConflictException('idempotency_key_conflict', 'Kunci permintaan hitungan sudah digunakan untuk permintaan lain.');
                 }
+
+                $duplicate = true;
 
                 return $this->result($storeId, $sessionId, $itemId);
             }
@@ -141,6 +168,8 @@ class OpnameCountService
                 'counted_after' => null,
                 'client_request_id' => $requestId,
                 'created_by' => $actor->id,
+                'client_created_at' => $clientCreatedAt === null ? null : Carbon::parse($clientCreatedAt)->utc()->format('Y-m-d H:i:s.v'),
+                'via_batch' => $viaBatch,
                 'created_at' => $now,
             ]);
 

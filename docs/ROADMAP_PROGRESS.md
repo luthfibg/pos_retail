@@ -1,6 +1,54 @@
 # Peta Jalan & Progres — POS Retail SMK
 
-**Diperbarui:** 9 November 2026 (Handoff #6: test workflow opname 11/125 assertion, build frontend, dan 242 test Vitest lulus; suite backend penuh 370 lulus, 6 gagal yang sama dengan baseline sebelumnya) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+**Diperbarui:** 10 November 2026 (Handoff #8: `OpnameHistoryTest` 8 test/81 assertions; backend penuh 381/387; frontend 252 test; build lulus; UAT/benchmark skala masih terbuka) · **Berkas ini = pedoman progres proyek.** Untuk kontrak endpoint dan layar yang bisa dibuatkan UI, rujukannya `BACKEND_PROGRESS.md`; daftar command operator ada di `OPERATOR_COMMANDS.md`; untuk progres layar frontend, rujuk `FRONTEND_PROGRESS.md`; untuk aturan kerja dan arsitektur, `HANDOFF_POS_RETAIL_SMK.md`.
+
+## Adjustment & Opname — Ikhtisar
+
+Bagian ini merangkum fondasi adjustment stok dan siklus opname. Catatan per handoff tetap dipertahankan di bawah.
+
+### Fitur, layar, dan alur
+
+- **Adjustment manual:** daftar, detail, dan form adjustment stok tersedia pada tab Adjustment; posting mencatat pergerakan stok.
+- **Stock opname:** buat sesi untuk seluruh toko atau kategori; lihat daftar, cakupan, progres per kategori, dan detail sesi.
+- **Penghitungan:** input manual atau scanner, ubah jumlah secara eksplisit, log hitungan, lookup barcode, dan sinkronisasi antrean offline.
+- **Laporan dan workflow:** setelah semua produk dihitung, laporan dapat ditinjau; sesi dapat diajukan ke Owner, ditolak untuk dihitung ulang, disetujui dan diposting, atau langsung diposting jika persetujuan tidak diperlukan.
+- **Riwayat:** pengelompokan bulan/kuartal/tahun, filter status/hasil/cakupan/tanggal, tren produk berselisih, produk yang sering berselisih, status opname terakhir, dan pengingat opsional.
+- **Ekspor:** CSV ringkasan/detail per sesi dan rekap periode; laporan serta rekap dapat dicetak dari peramban.
+
+Alur normal: Admin menutup transaksi dan membuat sesi → petugas menghitung seluruh produk → Admin meninjau laporan → bila perlu, ajukan dan minta Owner menyetujui/menolak → posting membekukan hasil dan menyesuaikan stok secara atomik → lock dilepas → riwayat/ekspor baca-saja. `posted` dan laporan bekunya tidak dapat diubah.
+
+### Endpoint dan izin
+
+Semua endpoint berada di `/api` dan memerlukan Sanctum kecuali autentikasi tetap mengikuti route middleware.
+
+| Endpoint | Izin |
+|---|---|
+| `GET /stock-opname/lock-status` | Login; endpoint lock status saja tidak memerlukan izin opname |
+| `GET /stock-opname/last-status`, `/stock-opname-sessions`, `/stock-opname-sessions/{id}`, `/report`, `/tree`, `/items`, `/scope-options` | `opname.view` (`report` pratinjau aktif juga memerlukan `opname.review`) |
+| `GET /stock-opname-sessions/periods`, `/frequent-variance`, `/periods/export`, `/{id}/export` | `opname.view`; kunci nilai hanya bagi `opname.view_value` |
+| `GET /stock-opname-sessions/{id}/offline-index`, `GET .../lookup`, `GET .../counts`, `POST .../counts`, `.../counts/batch`, `.../counts/{item}/clear` | `opname.count` |
+| `POST /stock-opname-sessions` | `opname.create` |
+| `POST /stock-opname-sessions/{id}/cancel` | `opname.cancel` |
+| `POST .../{id}/submit` | `opname.post` |
+| `POST .../{id}/approve`, `POST .../{id}/reject` | `opname.approve` (Owner) |
+| `GET/PUT /settings/opname` | `opname.settings.manage`; pengingat oleh Admin/Owner, ambang hanya Owner |
+| Adjustment manual `/inventory/adjustments`, `/inventory/adjustments/meta`, `/inventory/adjustments/{id}` | Login; izin spesifik diperiksa controller dan aturan kewenangan stok |
+
+Role bawaan: Owner dapat meninjau, menghitung, mengubah ambang, menyetujui, dan melihat nilai; Admin dapat mengelola/memulai/menghitung/mengajukan, tetapi tidak menyetujui atau melihat nilai rupiah; Accounting dapat membaca riwayat/laporan dan nilai jika memiliki `opname.view_value`, namun bukan menghitung atau memposting; Kasir tidak mendapat fitur opname kecuali akses `lock-status` yang terautentikasi. Izin efektif tetap diputuskan backend, bukan hanya visibilitas UI.
+
+### Pengaturan, lock, blind count, dan batasan
+
+- Kunci: `opname.show_system_qty` (default `false`); `opname.approval.per_product_threshold` (Rp25.000); `opname.approval.per_session_threshold` (Rp200.000); `opname.approval.require_first_opname` (`true`); `opname.reminder.enabled` (`false`); `opname.reminder.interval_days` (`30`, 1–365); `opname.reminder.basis` (`all` atau `any`, default `all`).
+- Sesi `in_progress` dan `pending_approval` mengunci produk dalam cakupan; `posted` dan `cancelled` melepas lock. Sesi yang saling tumpang tindih ditolak.
+- Pada mode blind, jumlah sistem/status cocok/selisih tidak dikirim pada endpoint penghitungan; `offline-index` tidak pernah berisi angka stok atau selisih. Laporan pratinjau hanya untuk role yang boleh meninjau, dan nilai/ambang hanya untuk `opname.view_value`.
+- Rekap historis hanya menghitung sesi `posted`; sesi lain hanya memengaruhi jumlah sesi total. Batas kalender menggunakan zona waktu toko dan timestamp basis data disimpan UTC.
+- Pengingat mati secara default, berupa banner aplikasi saja, dan tidak membuat sesi otomatis atau memblokir transaksi. Belum ada PWA/service worker; reload ketika offline tidak didukung. UAT scanner/perangkat nyata masih diperlukan.
+- Simulasi lokal: `cd backend; php artisan opname:simulate-counts {sessionId} --percent=30 --variance=10`; command wajib menolak environment selain `local`/`testing`. Di frontend, `window.__simulateScan(...)` hanya untuk dev dan tidak boleh ada di build produksi.
+
+### Utang teknis dan catatan pemeriksaan
+
+- Jangan menghapus `stock_adjustments.source`, `stock_adjustments.opname_session_id`, atau alasan `opname_result` berdasarkan asumsi: pencarian kode menemukan pemakaian aktif `source`/`opname_session_id` pada posting, lock, respons, serta test; alasan `opname_result` dipakai untuk adjustment internal opname. Usulan aman: **pertahankan kolom dan enum saat ini**; bila ingin merapikan, lakukan analisis migrasi terpisah setelah audit data, misalnya migrasi yang menghapus FK/kolom `opname_session_id` hanya bila seluruh consumer serta data legacy sudah dipindahkan. Tidak ada migrasi penghapusan yang dibuat di seri ini.
+- Tidak ada benchmark produksi atau UAT staging/perangkat nyata yang dijalankan oleh sesi ini; angka benchmark lokal dan hasil UAT harus dicatat setelah tersedia.
 
 | Tanda | Arti |
 |---|---|
@@ -336,6 +384,32 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 **Pemeriksaan awal dan perbedaan asumsi:** pemeriksaan menemukan pengecualian lock sebelumnya hanya mengenali `stock_adjustment`; lock sekarang juga mengenali sesi opname aktif tanpa membuka bypass umum. Sumber HPP yang benar adalah `products.unit_cost`. Selisih stok positif tetap memerlukan perhatian untuk produk `track_expiry`, karena data hitungan tidak mencakup tanggal kedaluwarsa lot. Selain itu, mode autentikasi ulang berbasis key belum diselaraskan dengan form UI yang saat ini hanya mengirim `owner_password`; verifikasi ini perlu sebelum mode key dipakai. Performa khusus laporan 5.000 item dan posting 300 selisih belum diukur.
 
 **Validasi:** `OpnameWorkflowTest` lulus 11 test/125 assertions; `php artisan test` menghasilkan 370 lulus dan 6 gagal. Keenam kegagalan (`PlatformStoreManagementTest` dua assertion, `ReportTest`, `StockAuthorityTest`, `SupplierReturnTest`, dan `SupplierTest`) sama dengan baseline sebelum Handoff #6, bukan regresi perubahan ini. `npm run build` dan `npm test` lulus (242 Vitest); build tetap memberi peringatan ukuran chunk utama >500 kB. Perubahan #5 dan #6 tetap di worktree dan belum di-commit.
+
+### Adjustment & Opname — Handoff #7 (10 Nov 2026)
+
+**Status:** implementasi backend/frontend dan validasi otomatis terarah selesai; masih 🟡 karena UAT HP/scanner nyata, pengujian jaringan dua-tab, ukuran sesi maksimum, dan benchmark performa belum dilakukan. Jangan menyatakan kriteria perangkat nyata pada Handoff #7 lulus sebelum UAT.
+
+**Backend dan kontrak:** `POST /api/stock-opname-sessions/{id}/counts/batch` menerima 1–100 operasi hitung/hapus secara berurutan; hasil per operasi berstatus `ok`, `duplicate`, atau `rejected`, sehingga satu operasi yang ditolak tidak menghilangkan hasil operasi lain. `GET /api/stock-opname-sessions/{id}/offline-index?page=...&per_page=...` menyediakan indeks halaman untuk sesi `in_progress`, memakai ETag dan `304 Not Modified`. Indeks hanya berisi identitas produk/kategori serta hitungan petugas, tanpa stok sistem, selisih, atau status cocok/selisih. Log hitungan menyimpan `client_created_at` dan `via_batch`; lookup barcode tidak peka huruf besar-kecil. Test backend menggunakan barcode alfanumerik `ABC-123`.
+
+**Frontend dan perilaku:** `useScannerCapture` mendukung ambang lokal per perangkat, diagnosa burst/akhiran scan, kalibrasi, dan pemulihan fokus; `ScannerTestSheet` menguji scanner dan meminta izin penyimpanan persisten, sedangkan `useScreenWakeLock` menjaga layar tetap aktif saat sesi menghitung. `CountSyncQueue` dan `useOpnameOffline` menyimpan operasi di IndexedDB per pengguna/sesi, mengirim batch FIFO dengan backoff, menerapkan hasil duplikat/penolakan, dan menahan operasi berikutnya di belakang operasi gagal sampai petugas mencoba ulang atau menghapusnya secara eksplisit. Indeks offline dipaginasi dan memakai ETag. Posting mensyaratkan koneksi serta antrean tanpa operasi menunggu/gagal. Navigasi dan penutupan tab memberi peringatan; logout menawarkan sinkronisasi semua antrean pengguna, mempertahankan data bila masih tersisa, dan menghapus indeks lokal hanya jika antrean pengguna kosong.
+
+**Batasan dan hasil pemeriksaan awal:** tidak memakai service worker/PWA; halaman yang dimuat ulang ketika offline tidak didukung. Konflik antarperangkat tetap mengikuti urutan operasi tiba di server. Test menemukan kebutuhan barcode campuran huruf/angka; belum diketahui ukuran sesi terbesar yang realistis. Tidak ada akses HP/scanner nyata dalam sesi ini, sehingga model perangkat dan hasil pairing/scan belum tersedia. Belum ada benchmark indeks/sinkronisasi pada sesi besar atau uji mode pesawat/reload online/dua tab.
+
+**Dokumentasi dan validasi:** panduan operator tersedia di `docs/PANDUAN_SCANNER_BLUETOOTH.md`. `php artisan test --filter=OpnameCountTest` lulus 7 test/128 assertions; `npm test` lulus 252 test pada 38 file; `npm run build` lulus dengan peringatan chunk utama 513.73 kB (>500 kB). Test frontend baru mencakup FIFO/pemblokiran di antrean, deduplikasi, isolasi pengguna, lease, hasil batch, backoff, konfigurasi jeda scanner 10/70 ms, serta burst tanpa akhiran; UAT tetap diperlukan untuk perilaku browser/perangkat.
+
+### Adjustment & Opname — Handoff #8 (10 Nov 2026)
+
+**Status:** implementasi backend/frontend riwayat periode, filter, produk sering berselisih, status terakhir, pengingat, dan CSV tersedia di worktree. Status keseluruhan **🟡**: UAT browser/staging, uji performa skala 60 sesi/5.000 item, dan matriks seluruh endpoint/role belum selesai. Handoff #7 masih berstatus 🟡 untuk UAT perangkat nyata; perubahan tahap sebelumnya belum di-commit/merge atas keputusan pengguna untuk tetap melanjutkan.
+
+**Pemeriksaan awal:** database menyimpan timestamp sebagai UTC; toko menyimpan `timezone` (default `Asia/Jakarta`), dan perhitungan tanggal riwayat memakai zona toko. Tidak ditemukan pustaka CSV yang perlu dipakai; CSV dibuat dengan `fputcsv`, UTF-8 BOM, delimiter pilihan koma/titik koma, dan netralisasi formula. `AuditLogger` tersedia dan mencatat ekspor/perubahan pengingat. Endpoint lama/izin opname dicatat dalam Ikhtisar. Pemeriksaan referensi menemukan `stock_adjustments.source`, `opname_session_id`, serta alasan `opname_result` masih dipakai oleh service, lock, respons, migrasi, atau test; tidak ada kolom yang dihapus.
+
+**Backend:** ditambah `GET /api/stock-opname-sessions/periods`, perluasan filter daftar (`period`, `result`, `scope_type`, rentang tanggal), `GET .../frequent-variance`, `GET /api/stock-opname/last-status`, ekspor sesi/periode CSV, serta pengaturan `opname.reminder.enabled` (default mati), `opname.reminder.interval_days` (default 30), dan `opname.reminder.basis` (default `all`). Periode menggunakan posted_at bagi sesi `posted` dan started_at bagi status lain; agregat hanya memasukkan `posted`. Nilai dan kolom Nilai CSV dihilangkan server kecuali role punya `opname.view_value`. Ekspor diaudit dan sesi selain `posted`/`pending_approval` memperoleh 409.
+
+**Frontend:** tab Opname memiliki pilihan Bulan/Kuartal/Tahun/Semua yang disimpan lokal, tren batang aksesibel, filter, sesi periode yang dimuat saat dibuka, produk sering berselisih, indikator opname terakhir, banner pengingat, dan unduh rekap. Laporan memiliki unduh CSV ringkasan/detail dan pilihan pemisah lokal; cetak peramban yang sudah ada dipertahankan. Pengaturan pengingat ditambahkan pada halaman Pengaturan Opname.
+
+**Validasi:** `php artisan test tests/Feature/OpnameHistoryTest.php` lulus 8 test/81 assertions; `OpnameCountTest` lulus 7 test/128 assertions. Test baru meliputi batas WIB Oktober/November, sesi non-posted, ranking/snapshot produk, nilai berdasarkan izin, CSV BOM/delimiter/formula injection termasuk kategori bersih, 409 sesi berjalan, pengingat/audit, blind metadata/offline-index, guard simulasi produksi, serta akses login/izin pada endpoint riwayat/ekspor. Pint lulus; `npm run typecheck`, `npm test` (252 test/38 file), dan `npm run build` lulus. Production build tidak memuat `window.__simulateScan`; simulator menolak `APP_ENV=production`. Full `php artisan test`: 381/387 test lulus (3.795 assertions); enam kegagalan sama dengan baseline sebelum Handoff #8: dua assertion di `PlatformStoreManagementTest`, fixture kedaluwarsa `ReportTest`, aturan penerimaan kedua di `StockAuthorityTest`, assertion lama `SupplierReturnTest`, dan izin Kasir di `SupplierTest`. Tidak ada kegagalan test opname. Build masih memperingatkan chunk utama 514.20 kB (>500 kB). Benchmark riwayat/ekspor pada fixture 60 sesi/5.000 item, siklus end-to-end lintas fitur, migrasi DB bersih dan berisi data, serta browser UAT 375/768/1280 px belum dijalankan; jangan menandai seri selesai/produksi sebelum verifikasi tersebut.
+
+**Batasan dan tindak lanjut:** Handoff #7 full-suite benchmark yang turut berjalan pada validasi ini mencatat start 1.683 s, tree 0.050 s, items/100 0.140 s, lookup 0.053 s, count 0.096 s, hitungan terbaru/2 0.096 s, rekomendasi/2 0.125 s, dan guard 20 produk 0.005 s; metrik ini bukan benchmark endpoint Handoff #8. UAT staging dua perangkat/scanner belum dilakukan. Rekomendasi 5.8: pertahankan kolom/reason yang masih dipakai; bila ingin dihapus, lakukan audit consumer+data dan migrasi terpisah setelah persetujuan pengguna. Panduan operator ditambahkan di `docs/PANDUAN_OPNAME.md`.
 
 **Terbaru (28 Okt 2026): backend suite lulus 238 test; UI Dashboard dan Tagihan HRD telah dikonfirmasi pengguna, Manajemen Pengguna dan Transfer Stok siap diuji.** UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan juga sudah diuji pengguna. `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway belum dibuat, sementara unggah/unduh lampiran tersedia dan menunggu uji klik. Penerimaan, UI PR/PO dan Adjustment/Opname menunggu uji klik. Akses Finance receive-only pada antrean setoran lulus test backend; UAT UI Finance masih belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
 

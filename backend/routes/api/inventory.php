@@ -39,8 +39,14 @@ Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('stock-opname/lock-status', [OpnameLockStatusController::class, 'show']);
+    Route::get('stock-opname/last-status', [OpnameSessionController::class, 'lastStatus'])->middleware('can:opname.view');
     Route::get('settings/opname', [OpnameDisplaySettingController::class, 'show'])->middleware('can:opname.settings.manage');
     Route::put('settings/opname', [OpnameDisplaySettingController::class, 'update'])->middleware('can:opname.settings.manage');
+    Route::get('stock-opname-sessions/periods/export', [OpnameSessionController::class, 'exportPeriods'])->middleware('can:opname.view');
+    Route::get('stock-opname-sessions/periods', [OpnameSessionController::class, 'periods'])->middleware('can:opname.view');
+    Route::get('stock-opname-sessions/frequent-variance', [OpnameSessionController::class, 'frequentVariance'])->middleware('can:opname.view');
+    Route::get('stock-opname-sessions/{session}/export', [OpnameSessionController::class, 'export'])
+        ->whereNumber('session')->middleware('can:opname.view');
     Route::get('stock-opname-sessions', [OpnameSessionController::class, 'index'])->middleware('can:opname.view');
     Route::get('stock-opname-sessions/{session}', [OpnameSessionController::class, 'show'])
         ->whereNumber('session')->middleware('can:opname.view');
@@ -56,6 +62,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('session')->middleware('can:opname.view');
     Route::get('stock-opname-sessions/{session}/items', [OpnameSessionController::class, 'items'])
         ->whereNumber('session')->middleware('can:opname.view');
+    Route::get('stock-opname-sessions/{session}/offline-index', [OpnameSessionController::class, 'offlineIndex'])
+        ->whereNumber('session')->middleware('can:opname.count');
+    Route::post('stock-opname-sessions/{session}/counts/batch', [OpnameSessionController::class, 'batchCounts'])
+        ->whereNumber('session')->middleware('can:opname.count');
     Route::post('stock-opname-sessions/{session}/counts', [OpnameSessionController::class, 'storeCount'])
         ->whereNumber('session')->middleware('can:opname.count');
     Route::post('stock-opname-sessions/{session}/counts/{item}/clear', [OpnameSessionController::class, 'clearCount'])

@@ -9,6 +9,7 @@ import { formatQty } from '@/lib/format';
 import { useOpnameCountMutation, type OpnameCountMutationInput } from './useOpnameCountMutation';
 import { useOpnameWorkspace } from './OpnameWorkspaceContext';
 import { useScannerCapture } from './useScannerCapture';
+import { findOfflineItems, getPendingOfflineItems } from './useOpnameOffline';
 
 interface Props {
   sessionId: number;
@@ -58,6 +59,12 @@ export function CountEntryForm({
     setSelectedItem: setPickedItem,
     setHighlightedItemId,
     loadItem,
+    isOnline,
+    markOffline,
+    offlineIndex,
+    offlineIndexReady,
+    setLastScanAt,
+    pendingOperations,
   } = useOpnameWorkspace();
   const mutation = useOpnameCountMutation(sessionId);
   useEffect(() => {
@@ -85,11 +92,25 @@ export function CountEntryForm({
     requestId.current = window.crypto.randomUUID();
   }, [pickedItem, setPickedItem]);
 
-  const searchAdapter = async (query: string, mode: 'auto' | 'search') => opnameApi.lookup(sessionId, query, mode);
+  const searchAdapter = async (query: string, mode: 'auto' | 'search') => {
+    if (!isOnline) {
+      if (!offlineIndexReady) throw new Error('Indeks offline belum tersedia. Sambungkan jaringan untuk mencari produk.');
+      return findOfflineItems(offlineIndex, query, mode, pendingOperations);
+    }
+    try {
+      return await opnameApi.lookup(sessionId, query, mode);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 0) {
+        markOffline();
+        if (offlineIndexReady) return findOfflineItems(offlineIndex, query, mode, pendingOperations);
+      }
+      throw error;
+    }
+  };
 
   function chooseResult(result: ProductPickerResult) {
     if (!isOpnameItem(result)) return;
-    loadItem(result);
+    loadItem(getPendingOfflineItems(offlineIndex, pendingOperations).find((item) => item.id === result.id) ?? result);
     quantityValue.current = '';
     setQuantity('');
     setFieldError('');
@@ -121,15 +142,18 @@ export function CountEntryForm({
   }
 
   function handleScan(code: string) {
+    setLastScanAt(Date.now());
     if (pickedItem && (quantityValue.current !== '' || retryInput !== null)) {
       setScanConflict(pickedItem.name);
       onScanError();
       return;
     }
     setScanConflict('');
-    void opnameApi.lookup(sessionId, code, 'auto').then((items) => {
+    void searchAdapter(code, 'auto').then((items) => {
       if (!items[0]) {
-        setMessage('Barcode tidak dikenal.');
+        setMessage(!isOnline
+          ? 'Barcode tidak ada di indeks sesi offline.'
+          : 'Barcode tidak dikenal.');
         onScanError();
         return;
       }
@@ -200,6 +224,7 @@ export function CountEntryForm({
       mode,
       quantity: Number(inputQuantity),
       client_request_id: requestId.current,
+      item: pickedItem,
     }, {
       onSuccess: (result) => {
         setAnnouncement(`Hitungan ${itemLabel(result.item)} tersimpan.`);
@@ -264,6 +289,7 @@ export function CountEntryForm({
       action: 'clear',
       item_id: pickedItem.id,
       client_request_id: window.crypto.randomUUID(),
+      item: pickedItem,
     };
     mutation.mutate(request, {
       onSuccess: (result) => {
@@ -291,6 +317,14 @@ export function CountEntryForm({
 
   return (
     <div className="space-y-3">
+      <input
+        data-opname-scanner-capture
+        aria-hidden="true"
+        tabIndex={-1}
+        inputMode="none"
+        autoComplete="off"
+        className="fixed -left-[10000px] top-0 h-px w-px opacity-0"
+      />
       {!active ? (
         <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Sesi ini dalam mode baca.</p>
       ) : !canCount ? (
@@ -334,7 +368,10 @@ export function CountEntryForm({
                 <button type="button" disabled={disabled} onClick={clearSelection} className="min-h-11 shrink-0 px-2 text-xs underline">Batal</button>
               </div>
               {counted && <p className="mt-2 font-medium">Sudah dihitung: {pickedItem.counted_qty}</p>}
-              {revealsSystemQty && pickedItem.system_qty !== undefined && (
+              {pendingOperations.some((operation) => operation.item.item_id === pickedItem.id) && (
+                <span className="mt-1 inline-flex min-h-7 items-center rounded-full bg-amber-100 px-2 text-xs font-medium text-amber-900">belum tersinkron</span>
+              )}
+              {isOnline && revealsSystemQty && pickedItem.system_qty !== undefined && (
                 <div className="mt-2 border-t border-slate-200 pt-2 text-xs">
                   <p>Stok sistem: {formatQty(pickedItem.system_qty)}</p>
                   {previewVariance !== null && <p>Pratinjau selisih: {previewVariance > 0 ? '+' : ''}{previewVariance}</p>}
@@ -426,7 +463,7 @@ function QuantityKeypad({
   onClear: () => void;
 }) {
   return (
-    <div aria-label="Keypad jumlah" className="grid grid-cols-3 gap-2">
+    <div aria-label="Keypad jumlah" className="opname-keypad grid grid-cols-3 gap-2">
       {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'].map((key) => (
         <button
           key={key}

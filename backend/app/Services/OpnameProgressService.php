@@ -237,7 +237,7 @@ class OpnameProgressService
 
         $exact = DB::table('stock_opname_items')
             ->where('session_id', $sessionId)
-            ->where('barcode_snapshot', $query)
+            ->whereRaw('LOWER(barcode_snapshot) = LOWER(?)', [$query])
             ->first();
         if ($exact !== null) {
             return $this->presentItemRows($storeId, $sessionId, collect([$exact]));
@@ -246,7 +246,7 @@ class OpnameProgressService
         if ($mode !== 'search') {
             $product = DB::table('products')
                 ->where('store_id', $storeId)
-                ->where('barcode', $query)
+                ->whereRaw('LOWER(barcode) = LOWER(?)', [$query])
                 ->first(['name']);
             if ($product !== null) {
                 throw new OpnameLookupException(
@@ -274,6 +274,58 @@ class OpnameProgressService
             ->get();
 
         return $this->presentItemRows($storeId, $sessionId, $items);
+    }
+
+    /** @return array<string, mixed>|null */
+    public function offlineIndex(int $storeId, int $sessionId, int $page, int $perPage): ?array
+    {
+        $session = $this->session($storeId, $sessionId);
+        if ($session === null) {
+            return null;
+        }
+        abort_if($session->status !== 'in_progress', 409, 'Sesi opname tidak sedang berjalan.');
+
+        $total = DB::table('stock_opname_items')->where('session_id', $sessionId)->count();
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        abort_if($page > $totalPages, 404, 'Halaman indeks opname tidak ditemukan.');
+        $rows = DB::table('stock_opname_items')
+            ->where('session_id', $sessionId)
+            ->orderBy('id')
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
+            ->get(['id', 'product_id', 'product_name_snapshot', 'barcode_snapshot', 'category_id', 'counted_qty']);
+        $latestItemUpdate = DB::table('stock_opname_items')->where('session_id', $sessionId)->max('updated_at');
+        $latestLogId = DB::table('stock_opname_count_logs')->where('session_id', $sessionId)->max('id') ?? 0;
+        $version = hash('sha256', implode('|', [
+            $sessionId,
+            $total,
+            $latestItemUpdate ?? '',
+            $latestLogId,
+        ]));
+        $categories = DB::table('categories')->where('store_id', $storeId)->orderBy('id')
+            ->get(['id', 'name', 'parent_id'])
+            ->map(fn (object $category) => [
+                'id' => (int) $category->id,
+                'name' => $category->name,
+                'parent_id' => $category->parent_id === null ? null : (int) $category->parent_id,
+            ])->all();
+
+        return [
+            'session' => ['id' => (int) $session->id, 'number' => $session->number, 'status' => $session->status],
+            'version' => $version,
+            'categories' => $categories,
+            'items' => $rows->map(fn (object $item) => [
+                'item_id' => (int) $item->id,
+                'product_id' => (int) $item->product_id,
+                'name' => $item->product_name_snapshot,
+                'barcode' => $item->barcode_snapshot,
+                'category_id' => $item->category_id === null ? null : (int) $item->category_id,
+                'counted_qty' => $item->counted_qty === null ? null : (int) $item->counted_qty,
+            ])->all(),
+            'page' => $page,
+            'total_pages' => $totalPages,
+            'total' => $total,
+        ];
     }
 
     /** @param Collection<int, object> $items

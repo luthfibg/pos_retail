@@ -418,6 +418,49 @@ export interface OpnameSession extends OpnameSessionSummary {
   cancel_reason: string | null;
 }
 
+export type OpnamePeriodGroup = 'month' | 'quarter' | 'year';
+
+export interface OpnameHistoryPeriod {
+  period_key: string;
+  label: string;
+  sessions_total: number;
+  sessions_posted: number;
+  sessions_clean: number;
+  variance_products: number;
+  short_qty: Decimal;
+  over_qty: Decimal;
+  abs_value?: Decimal;
+  last_posted_at: string | null;
+}
+
+export interface OpnameFrequentVariance {
+  product_id: number;
+  name: string;
+  barcode: string;
+  sessions_with_variance: number;
+  short_qty: Decimal;
+  over_qty: Decimal;
+  value?: Decimal;
+}
+
+export interface OpnameLastStatus {
+  last_posted: {
+    id: number;
+    number: string;
+    posted_at: string;
+    scope_type: OpnameScopeType;
+    clean: boolean;
+    variance_products: number;
+  } | null;
+  days_since: number | null;
+  reminder: {
+    enabled: boolean;
+    interval_days: number;
+    basis: 'all' | 'any';
+    due: boolean;
+  };
+}
+
 export interface OpnameReportLine {
   item_id: number;
   product_id: number;
@@ -519,6 +562,33 @@ export interface OpnameCountResult {
   }>;
 }
 
+export interface OpnameOfflineIndex {
+  session: { id: number; number: string; status: 'in_progress' };
+  version: string;
+  categories: Array<{ id: number; name: string; parent_id: number | null }>;
+  items: Array<{
+    item_id: number;
+    product_id: number;
+    name: string;
+    barcode: string;
+    category_id: number | null;
+    counted_qty: number | null;
+  }>;
+  page: number;
+  total_pages: number;
+  total: number;
+}
+
+export interface OpnameBatchCountResult {
+  results: Array<{
+    client_request_id: string;
+    status: 'ok' | 'duplicate' | 'rejected';
+    error?: { code: string; message: string };
+    item?: OpnameItem;
+  }>;
+  summary: { total_products: number; counted_products: number };
+}
+
 export interface OpnameCountLog {
   log_id: number;
   item: { id: number; name: string; barcode: string };
@@ -545,6 +615,9 @@ export interface OpnameDisplaySetting {
   per_product_threshold?: number;
   per_session_threshold?: number;
   require_first_opname?: boolean;
+  reminder_enabled: boolean;
+  reminder_interval_days: number;
+  reminder_basis: 'all' | 'any';
 }
 
 export interface OpnameCategoryOption {

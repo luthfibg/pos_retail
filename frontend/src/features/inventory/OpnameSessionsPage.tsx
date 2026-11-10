@@ -1,19 +1,66 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { ApiError } from '@/lib/api/client';
 import { opnameApi } from '@/lib/api/endpoints';
-import type { OpnameItem, OpnameProgressNode, OpnameProgressTree, OpnameReport, OpnameReportNode, OpnameSession, OpnameSessionStatus, OpnameSessionSummary } from '@/lib/api/types';
+import type { OpnameHistoryPeriod, OpnameItem, OpnamePeriodGroup, OpnameProgressNode, OpnameProgressTree, OpnameReport, OpnameReportNode, OpnameSession, OpnameSessionStatus, OpnameSessionSummary } from '@/lib/api/types';
 import { parseApiTime } from '@/lib/format';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { StartOpnameForm } from './StartOpnameForm';
 import { OpnameWorkspaceProvider, useOpnameWorkspace } from './OpnameWorkspaceContext';
 import { findNode as findProgressNode, resolveWorkingNode } from './opnameWorkingNode';
 import { CountingStack } from './CountingStack';
+import { ScannerTestSheet } from './ScannerTestSheet';
+import { PendingBadge, SyncFailedSheet, SyncStatusChip } from './SyncStatus';
+import { buildOfflineProgressTree, findOfflineItems, getPendingOfflineItems, toOfflineOpnameItem, useCountSync, useOfflineSessionIndex } from './useOpnameOffline';
+import { useScreenWakeLock } from './useScreenWakeLock';
 
 const PER_PAGE = 20;
+type HistoryGroup = OpnamePeriodGroup | 'all';
+type CsvDelimiter = 'comma' | 'semicolon';
+
+function storedChoice<T extends string>(key: string, values: readonly T[], fallback: T): T {
+  try {
+    const stored = window.localStorage.getItem(key);
+    return values.includes(stored as T) ? stored as T : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveCsv(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function sixPeriodRange(group: OpnamePeriodGroup, timezone: string): { date_from: string; date_to: string } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(new Date());
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  const day = Number(parts.find((part) => part.type === 'day')?.value);
+  const today = new Date(Date.UTC(year, month - 1, day));
+  const periodsBack = group === 'year' ? 5 : group === 'quarter' ? 15 : 5;
+  const startMonth = group === 'year' ? 0 : group === 'quarter' ? Math.floor((month - 1) / 3) * 3 : month - 1;
+  const start = group === 'year'
+    ? new Date(Date.UTC(year - 5, 0, 1))
+    : new Date(Date.UTC(year, startMonth - periodsBack, 1));
+  const format = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+
+  return { date_from: format(start), date_to: format(today) };
+}
 const STATUS_FILTERS: Array<{ value: OpnameSessionStatus | ''; label: string }> = [
   { value: '', label: 'Semua' },
   { value: 'in_progress', label: 'Berjalan' },
@@ -62,6 +109,7 @@ function SessionLink({ session, children }: { session: OpnameSessionSummary; chi
 
 export function OpnameSessionsPage() {
   const { can, me } = useAuth();
+  const timezone = me?.store?.timezone || 'Asia/Jakarta';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<OpnameSessionStatus | ''>('');
@@ -70,11 +118,74 @@ export function OpnameSessionsPage() {
   const [page, setPage] = useState(1);
   const [mobileItems, setMobileItems] = useState<OpnameSessionSummary[]>([]);
   const [startOpen, setStartOpen] = useState(false);
+  const [group, setGroup] = useState<HistoryGroup>(() => storedChoice('pos.opname.history-group', ['month', 'quarter', 'year', 'all'], 'month'));
+  const [result, setResult] = useState<'clean' | 'variance' | ''>('');
+  const [scopeType, setScopeType] = useState<'' | 'all' | 'categories'>('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [delimiter, setDelimiter] = useState<CsvDelimiter>(() => storedChoice('pos.opname.csv-delimiter', ['comma', 'semicolon'], 'comma'));
+  const [reminderDismissed, setReminderDismissed] = useState(false);
+  const [exportingPeriods, setExportingPeriods] = useState(false);
+  const [exportError, setExportError] = useState<Error | null>(null);
   const appendNextPage = useRef(false);
+  const recentRange = sixPeriodRange(group === 'all' ? 'month' : group, timezone);
   const list = useQuery({
-    queryKey: ['opname', 'sessions', { status, search, page }],
-    queryFn: () => opnameApi.list({ status, q: search, page, per_page: PER_PAGE, sort: 'newest' }),
+    queryKey: ['opname', 'sessions', { status, search, page, result, scopeType, dateFrom, dateTo }],
+    queryFn: () => opnameApi.list({
+      status, q: search, page, per_page: PER_PAGE, sort: 'newest',
+      result: result || undefined, scope_type: scopeType || undefined,
+      date_from: dateFrom || undefined, date_to: dateTo || undefined,
+    }),
+    enabled: group === 'all',
   });
+  const periods = useInfiniteQuery({
+    queryKey: ['opname', 'periods', { group, status, result, scopeType, dateFrom, dateTo }],
+    initialPageParam: '',
+    queryFn: ({ pageParam }) => opnameApi.periods({
+      group: group === 'all' ? 'month' : group,
+      status: status || undefined,
+      result: result || undefined,
+      scope_type: scopeType || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      limit: 12,
+      cursor: pageParam || undefined,
+    }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor,
+    enabled: group !== 'all',
+  });
+  const frequent = useQuery({
+    queryKey: ['opname', 'frequent-variance', { dateFrom, dateTo, scopeType, status, result, group }],
+    queryFn: () => opnameApi.frequentVariance({
+      date_from: dateFrom || recentRange.date_from,
+      date_to: dateTo || recentRange.date_to,
+      scope_type: scopeType || undefined,
+      status: status || undefined,
+      result: result || undefined,
+      limit: 10,
+    }),
+    enabled: group !== 'all',
+  });
+  const lastStatus = useQuery({
+    queryKey: ['opname', 'last-status'],
+    queryFn: opnameApi.lastStatus,
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('pos.opname.history-group', group);
+    } catch {
+      return;
+    }
+  }, [group]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('pos.opname.csv-delimiter', delimiter);
+    } catch {
+      return;
+    }
+  }, [delimiter]);
 
   useEffect(() => {
     if (!list.data) return;
@@ -105,6 +216,19 @@ export function OpnameSessionsPage() {
     setPage(list.data.current_page + 1);
   }
 
+  async function exportPeriodSummary() {
+    setExportError(null);
+    setExportingPeriods(true);
+    try {
+      const blob = await opnameApi.exportPeriods(group === 'all' ? 'month' : group, delimiter, dateFrom || undefined, dateTo || undefined);
+      saveCsv(blob, `opname-rekap-${group}.csv`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error : new Error('Gagal mengunduh rekap periode.'));
+    } finally {
+      setExportingPeriods(false);
+    }
+  }
+
   async function handleStarted(session: OpnameSessionSummary) {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['opname', 'sessions'] }),
@@ -115,11 +239,11 @@ export function OpnameSessionsPage() {
   }
 
   const hasCreate = can('opname.create');
-  const timezone = me?.store?.timezone || 'Asia/Jakarta';
   const listData = list.data?.data ?? [];
+  const periodRows = periods.data?.pages.flatMap((pageData) => pageData.periods) ?? [];
 
   return (
-    <div className="min-w-0 space-y-4 pb-20 md:pb-0">
+    <div className="opname-history-page min-w-0 space-y-4 pb-20 md:pb-0">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Sesi opname</h2>
@@ -132,7 +256,51 @@ export function OpnameSessionsPage() {
         )}
       </header>
 
+      <section aria-label="Opname terakhir" className="rounded-lg border border-slate-200 bg-white p-3">
+        {lastStatus.isLoading ? <p role="status" className="text-sm text-slate-600">Memuat status opname terakhir…</p> : lastStatus.error ? (
+          <div className="flex flex-wrap items-center justify-between gap-2"><ErrorNotice error={lastStatus.error} /><button type="button" onClick={() => void lastStatus.refetch()} className="min-h-11 rounded-md border border-slate-300 px-3 text-sm">Coba lagi</button></div>
+        ) : lastStatus.data?.last_posted ? (
+          <Link to={`/inventory/adjustments/opname/${lastStatus.data.last_posted.id}`} className="block min-h-11 text-sm font-medium underline-offset-2 hover:underline">
+            Opname terakhir: {lastStatus.data.last_posted.number} · {lastStatus.data.days_since} hari lalu · {lastStatus.data.last_posted.clean ? '✓ Bersih' : `${lastStatus.data.last_posted.variance_products} selisih`}
+          </Link>
+        ) : <p className="min-h-11 content-center text-sm text-slate-700">Belum pernah opname</p>}
+      </section>
+
+      {lastStatus.data?.reminder.due && !reminderDismissed && (
+        <aside className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <span>Sudah {lastStatus.data.days_since} hari sejak opname terakhir.</span>
+          <div className="flex gap-2">
+            {hasCreate && <button type="button" onClick={() => setStartOpen(true)} className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white">Mulai Opname</button>}
+            <button type="button" onClick={() => setReminderDismissed(true)} aria-label="Tutup pengingat" className="min-h-11 rounded-md border border-amber-400 px-3">Tutup</button>
+          </div>
+        </aside>
+      )}
+
       <section className="space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block min-w-40 flex-1 space-y-1 text-sm font-medium">
+            <span>Kelompokkan</span>
+            <select value={group} onChange={(event) => setGroup(event.target.value as HistoryGroup)} className="min-h-11 w-full rounded-md border border-slate-300 px-3">
+              <option value="month">Bulan</option>
+              <option value="quarter">Kuartal</option>
+              <option value="year">Tahun</option>
+              <option value="all">Semua</option>
+            </select>
+          </label>
+          <label className="block space-y-1 text-sm font-medium">
+            <span>Format CSV</span>
+            <select value={delimiter} onChange={(event) => setDelimiter(event.target.value as CsvDelimiter)} className="min-h-11 rounded-md border border-slate-300 px-3">
+              <option value="comma">Koma</option>
+              <option value="semicolon">Excel Indonesia (titik koma)</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => void exportPeriodSummary()} disabled={exportingPeriods} className="min-h-11 rounded-md border border-slate-300 px-4 text-sm font-medium disabled:opacity-50">
+            {exportingPeriods ? 'Menyiapkan CSV…' : 'Unduh rekap periode'}
+          </button>
+          {group !== 'all' && <button type="button" onClick={() => window.print()} className="min-h-11 rounded-md border border-slate-300 px-4 text-sm font-medium print:hidden">Cetak rekap</button>}
+        </div>
+        {exportError && <ErrorNotice error={exportError} />}
+
         <form onSubmit={applySearch} className="flex gap-2">
           <label className="sr-only" htmlFor="opname-search">Cari nomor atau nama sesi</label>
           <input
@@ -158,21 +326,58 @@ export function OpnameSessionsPage() {
             </button>
           ))}
         </div>
+        <details className="opname-history-filter rounded-lg border border-slate-200 bg-white p-3">
+          <summary className="min-h-8 cursor-pointer font-medium">Filter hasil, cakupan, dan tanggal</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="space-y-1 text-sm"><span className="block">Hasil</span><select value={result} onChange={(event) => setResult(event.target.value as '' | 'clean' | 'variance')} className="min-h-11 w-full rounded-md border border-slate-300 px-3"><option value="">Semua hasil</option><option value="clean">Bersih</option><option value="variance">Berselisih</option></select></label>
+            <label className="space-y-1 text-sm"><span className="block">Cakupan</span><select value={scopeType} onChange={(event) => setScopeType(event.target.value as '' | 'all' | 'categories')} className="min-h-11 w-full rounded-md border border-slate-300 px-3"><option value="">Semua cakupan</option><option value="all">Seluruh toko</option><option value="categories">Kategori</option></select></label>
+            <label className="space-y-1 text-sm"><span className="block">Dari tanggal</span><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="min-h-11 w-full rounded-md border border-slate-300 px-3" /></label>
+            <label className="space-y-1 text-sm"><span className="block">Sampai tanggal</span><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="min-h-11 w-full rounded-md border border-slate-300 px-3" /></label>
+          </div>
+          {(status || result || scopeType || dateFrom || dateTo) && <button type="button" onClick={() => { setStatus(''); setResult(''); setScopeType(''); setDateFrom(''); setDateTo(''); }} className="mt-3 min-h-11 rounded-md border border-slate-300 px-3 text-sm">Hapus semua filter</button>}
+        </details>
 
-        {list.error && (
+        {group !== 'all' && (
+          <>
+            {periods.error && <div className="space-y-2"><ErrorNotice error={periods.error} /><button type="button" onClick={() => void periods.refetch()} className="min-h-11 rounded-md border border-slate-300 px-4 text-sm">Coba lagi</button></div>}
+            {periods.isLoading && <p role="status" className="text-sm text-slate-600">Memuat riwayat opname…</p>}
+            {!periods.isLoading && !periods.error && periods.data && (
+              <>
+                <div className="opname-history-printable">
+                  <h2 className="hidden pb-4 text-xl font-bold print:block">Rekap riwayat opname</h2>
+                  <PeriodTrend periods={periodRows.slice(0, 12)} />
+                  {periodRows.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-600">Tidak ada sesi pada filter ini.</p> : (
+                    <div className="space-y-2">
+                      {periodRows.map((period) => <PeriodSection
+                        key={period.period_key}
+                        period={period}
+                        timezone={timezone}
+                        filters={{ status, result, scopeType, dateFrom, dateTo, search }}
+                      />)}
+                    </div>
+                  )}
+                </div>
+                {periods.hasNextPage && <button type="button" disabled={periods.isFetchingNextPage} onClick={() => void periods.fetchNextPage()} className="min-h-11 rounded-md border border-slate-300 px-4 text-sm disabled:opacity-50">{periods.isFetchingNextPage ? 'Memuat…' : 'Muat periode sebelumnya'}</button>}
+              </>
+            )}
+            <div className="print:hidden"><FrequentVarianceCard items={frequent.data?.items ?? []} loading={frequent.isLoading} error={frequent.error} /></div>
+          </>
+        )}
+
+        {group === 'all' && list.error && (
           <div className="space-y-2">
             <ErrorNotice error={list.error} />
             <button type="button" onClick={() => void list.refetch()} className="min-h-11 rounded-md border border-slate-300 px-4 text-sm font-medium">Coba lagi</button>
           </div>
         )}
 
-        {list.isLoading && (
+        {group === 'all' && list.isLoading && (
           <div role="status" aria-label="Memuat sesi opname" className="space-y-3">
             {[1, 2, 3].map((item) => <div key={item} className="h-28 animate-pulse rounded-lg border border-slate-200 bg-slate-100" />)}
           </div>
         )}
 
-        {!list.isLoading && !list.error && listData.length === 0 && (
+        {group === 'all' && !list.isLoading && !list.error && listData.length === 0 && (
           <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-10 text-center">
             <h3 className="font-semibold">Belum ada sesi opname</h3>
             <p className="mt-1 text-sm text-slate-600">Mulai sesi untuk mencatat penghitungan produk.</p>
@@ -180,7 +385,7 @@ export function OpnameSessionsPage() {
           </div>
         )}
 
-        {listData.length > 0 && (
+        {group === 'all' && listData.length > 0 && (
           <>
             <div className="space-y-3 md:hidden">
               {mobileItems.map((session) => <SessionCard key={session.id} session={session} timezone={timezone} />)}
@@ -263,6 +468,139 @@ export function OpnameSessionsPage() {
   );
 }
 
+function PeriodTrend({ periods }: { periods: OpnameHistoryPeriod[] }) {
+  const maximum = Math.max(1, ...periods.map((period) => period.variance_products));
+
+  return (
+    <section aria-label="Tren produk berselisih per periode" className="rounded-lg border border-slate-200 bg-white p-3">
+      <h3 className="mb-3 text-sm font-semibold">Tren produk berselisih</h3>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {periods.map((period) => (
+          <button
+            type="button"
+            key={period.period_key}
+            onClick={() => document.getElementById(`opname-period-${period.period_key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            aria-label={`${period.label}: ${period.variance_products} produk berselisih`}
+            className="flex min-w-20 flex-col items-center gap-1 text-xs"
+          >
+            <span className="font-semibold">{period.variance_products}</span>
+            <span className="flex h-20 w-8 items-end overflow-hidden rounded bg-slate-100">
+              <span className="w-full rounded bg-indigo-600" style={{ height: `${Math.max(4, period.variance_products / maximum * 100)}%` }} />
+            </span>
+            <span className="max-w-24 text-center">{period.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PeriodSection({
+  period,
+  timezone,
+  filters,
+}: {
+  period: OpnameHistoryPeriod;
+  timezone: string;
+  filters: {
+    status: OpnameSessionStatus | '';
+    result: 'clean' | 'variance' | '';
+    scopeType: '' | 'all' | 'categories';
+    dateFrom: string;
+    dateTo: string;
+    search: string;
+  };
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <section id={`opname-period-${period.period_key}`} className="scroll-mt-24 overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="flex min-h-16 w-full flex-wrap items-center justify-between gap-2 p-3 text-left sm:p-4">
+        <span>
+          <span className="block font-semibold">{period.label}</span>
+          <span className="mt-1 block text-xs text-slate-600">{period.sessions_total} sesi · {period.sessions_clean} bersih · {period.variance_products} produk berselisih</span>
+        </span>
+        <span className="text-right text-xs text-slate-600">
+          Kurang {period.short_qty} · Lebih {period.over_qty}
+          {period.abs_value !== undefined && <span className="mt-1 block">Nilai mutlak {period.abs_value}</span>}
+        </span>
+      </button>
+      {open && <PeriodSessions period={period} timezone={timezone} filters={filters} />}
+    </section>
+  );
+}
+
+function PeriodSessions({
+  period,
+  timezone,
+  filters,
+}: {
+  period: OpnameHistoryPeriod;
+  timezone: string;
+  filters: {
+    status: OpnameSessionStatus | '';
+    result: 'clean' | 'variance' | '';
+    scopeType: '' | 'all' | 'categories';
+    dateFrom: string;
+    dateTo: string;
+    search: string;
+  };
+}) {
+  const query = useQuery({
+    queryKey: ['opname', 'period-sessions', period.period_key, filters],
+    queryFn: () => opnameApi.list({
+      period: period.period_key,
+      status: filters.status || undefined,
+      result: filters.result || undefined,
+      scope_type: filters.scopeType || undefined,
+      date_from: filters.dateFrom || undefined,
+      date_to: filters.dateTo || undefined,
+      q: filters.search || undefined,
+      per_page: 100,
+      sort: 'newest',
+    }),
+  });
+
+  if (query.isLoading) return <p role="status" className="p-4 text-sm text-slate-600">Memuat sesi periode…</p>;
+  if (query.error) return <div className="p-4"><ErrorNotice error={query.error} /></div>;
+  if (!query.data || query.data.data.length === 0) return <p className="p-4 text-sm text-slate-600">Tidak ada sesi yang cocok dengan filter.</p>;
+
+  return (
+    <div className="space-y-2 border-t border-slate-100 p-3">
+      {query.data.data.map((session) => <SessionCard key={session.id} session={session} timezone={timezone} />)}
+      {query.data.last_page > 1 && <p className="text-xs text-slate-500">Tampilkan lebih banyak sesi dengan pengelompokan Semua.</p>}
+    </div>
+  );
+}
+
+function FrequentVarianceCard({
+  items,
+  loading,
+  error,
+}: {
+  items: Array<{ product_id: number; name: string; barcode: string; sessions_with_variance: number; short_qty: string; over_qty: string; value?: string }>;
+  loading: boolean;
+  error: Error | null;
+}) {
+  return (
+    <details className="rounded-lg border border-slate-200 bg-white p-3">
+      <summary className="min-h-8 cursor-pointer font-semibold">Produk sering berselisih</summary>
+      {loading && <p role="status" className="mt-3 text-sm text-slate-600">Memuat produk…</p>}
+      {error && <div className="mt-3"><ErrorNotice error={error} /></div>}
+      {!loading && !error && items.length === 0 && <p className="mt-3 text-sm text-slate-600">Belum ada produk berselisih pada rentang ini.</p>}
+      <ol className="mt-3 divide-y divide-slate-100">
+        {items.map((item, index) => (
+          <li key={item.product_id} className="grid gap-1 py-3 text-sm sm:grid-cols-[2rem_1fr_auto]">
+            <span className="font-semibold">{index + 1}.</span>
+            <span className="min-w-0 break-words"><strong>{item.name}</strong><span className="ml-2 text-xs text-slate-500">{item.barcode}</span><span className="mt-1 block text-xs text-slate-600">{item.sessions_with_variance} sesi berselisih · Kurang {item.short_qty} · Lebih {item.over_qty}</span></span>
+            {item.value !== undefined && <span className="text-xs text-slate-600">Nilai {item.value}</span>}
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
 function SessionCard({ session, timezone }: { session: OpnameSessionSummary; timezone: string }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-4">
@@ -296,6 +634,9 @@ export function OpnameSessionDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState('');
+  const [csvDelimiter, setCsvDelimiter] = useState<CsvDelimiter>(() => storedChoice('pos.opname.csv-delimiter', ['comma', 'semicolon'], 'comma'));
+  const [csvPending, setCsvPending] = useState<'summary' | 'detail' | null>(null);
+  const [csvError, setCsvError] = useState<Error | null>(null);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [openNodeIds, setOpenNodeIds] = useState<Set<string>>(() => new Set());
   const [selectedItem, setSelectedItem] = useState<OpnameItem | null>(null);
@@ -305,6 +646,11 @@ export function OpnameSessionDetailPage() {
   const [onlyUncounted, setOnlyUncounted] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [workflowDialog, setWorkflowDialog] = useState<'submit' | 'approve' | 'reject' | null>(null);
+  const [scannerTestOpen, setScannerTestOpen] = useState(false);
+  const [syncSheetOpen, setSyncSheetOpen] = useState(false);
+  const [showScannerTip, setShowScannerTip] = useState(() => localStorage.getItem('pos.opname.scanner-tip-dismissed') !== 'true');
+  const [lastScanAt, setLastScanAt] = useState<number | null>(null);
+  const [clock, setClock] = useState(Date.now());
   const [ownerPassword, setOwnerPassword] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const workflowRequestId = useRef(window.crypto.randomUUID());
@@ -324,20 +670,31 @@ export function OpnameSessionDetailPage() {
     queryFn: () => opnameApi.get(id),
     enabled: Number.isInteger(id) && id > 0,
   });
+  const countSync = useCountSync(me?.user.id, id, Boolean(detail.data));
+  const offlineIndex = useOfflineSessionIndex(
+    me?.user.id,
+    id,
+    Boolean(detail.data?.status === 'in_progress' && can('opname.count')),
+  );
+  const offlineTree = useMemo(
+    () => buildOfflineProgressTree(offlineIndex.index, countSync.pending),
+    [countSync.pending, offlineIndex.index],
+  );
+  useScreenWakeLock(detail.data?.status === 'in_progress');
   const sessionIsComplete = detail.data
     ? detail.data.counted_products === detail.data.total_products
     : false;
   const reportQuery = useQuery({
     queryKey: ['opname', 'report', id],
     queryFn: () => opnameApi.report(id),
-    enabled: Boolean(detail.data && detail.data.status !== 'cancelled'
+    enabled: Boolean(countSync.isOnline && detail.data && detail.data.status !== 'cancelled'
       && (detail.data.status !== 'in_progress' || (can('opname.review') && sessionIsComplete))),
   });
   const treeQuery = useQuery({
     queryKey: ['opname', 'tree', id],
     queryFn: () => opnameApi.tree(id),
     enabled: Number.isInteger(id) && id > 0,
-    refetchInterval: () => document.visibilityState === 'visible' ? 15_000 : false,
+    refetchInterval: () => countSync.isOnline && document.visibilityState === 'visible' ? 15_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -351,11 +708,49 @@ export function OpnameSessionDetailPage() {
       per_page: 100,
     }),
     getNextPageParam: (lastPage) => lastPage.current_page < lastPage.last_page ? lastPage.current_page + 1 : undefined,
-    enabled: search.trim().length >= 2,
-    refetchInterval: () => document.visibilityState === 'visible' ? 15_000 : false,
+    enabled: search.trim().length >= 2 && countSync.isOnline,
+    refetchInterval: () => countSync.isOnline && document.visibilityState === 'visible' ? 15_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
+  useEffect(() => {
+    const pendingCount = countSync.pending.length + countSync.failed.length;
+    if (pendingCount === 0) return;
+    const warnBeforeClose = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const warnBeforeNavigation = (event: MouseEvent) => {
+      if (!(event.target instanceof Element) || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target.closest<HTMLAnchorElement>('a[href]');
+      if (!link || link.target || link.origin !== window.location.origin) return;
+      if (link.pathname === window.location.pathname && link.search === window.location.search) return;
+      if (!window.confirm(`${pendingCount} operasi opname belum tersinkron. Tetap pindah halaman? Antrean tersimpan di perangkat ini.`)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('beforeunload', warnBeforeClose);
+    document.addEventListener('click', warnBeforeNavigation, true);
+    return () => {
+      window.removeEventListener('beforeunload', warnBeforeClose);
+      document.removeEventListener('click', warnBeforeNavigation, true);
+    };
+  }, [countSync.failed.length, countSync.pending.length]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 10_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (
+      detail.data?.status === 'in_progress'
+      && countSync.isOnline
+      && countSync.pending.length === 0
+      && countSync.failed.length === 0
+    ) void offlineIndex.refresh();
+  }, [countSync.failed.length, countSync.isOnline, countSync.pending.length, detail.data?.status, offlineIndex.refresh]);
   const cancel = useMutation({
     mutationFn: () => opnameApi.cancel(id, reason.trim()),
     onSuccess: async (session) => {
@@ -376,6 +771,25 @@ export function OpnameSessionDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['opname', 'tree', id] }),
     queryClient.invalidateQueries({ queryKey: ['opname', 'lock-status'] }),
   ]);
+  async function downloadSessionCsv(part: 'summary' | 'detail') {
+    setCsvError(null);
+    setCsvPending(part);
+    try {
+      const blob = await opnameApi.exportSession(id, part, csvDelimiter);
+      saveCsv(blob, `opname-${detail.data?.number ?? id}-${part}.csv`);
+    } catch (error) {
+      setCsvError(error instanceof Error ? error : new Error('Gagal mengunduh CSV.'));
+    } finally {
+      setCsvPending(null);
+    }
+  }
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('pos.opname.csv-delimiter', csvDelimiter);
+    } catch {
+      return;
+    }
+  }, [csvDelimiter]);
   const submitWorkflow = useMutation({
     mutationFn: () => opnameApi.submit(id, {
       client_request_id: workflowRequestId.current,
@@ -420,7 +834,7 @@ export function OpnameSessionDetailPage() {
   const session = detail.data;
   if (!session) return null;
   const timezone = me?.store?.timezone || 'Asia/Jakarta';
-  const tree = treeQuery.data;
+  const tree = countSync.isOnline ? treeQuery.data : offlineTree ?? treeQuery.data;
   const view = workspaceView(searchParams.get('view'));
   const mobile = useMobileViewport();
   const activeNode = tree ? findNode(tree.nodes, activeNodeId) : null;
@@ -460,6 +874,7 @@ export function OpnameSessionDetailPage() {
   }
 
   async function refreshWorkspace() {
+    if (!countSync.isOnline) return;
     await Promise.all([
       detail.refetch(),
       treeQuery.refetch(),
@@ -483,15 +898,23 @@ export function OpnameSessionDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={session.status} />
-          <button type="button" onClick={() => void refreshWorkspace()} disabled={treeQuery.isFetching} className="min-h-11 rounded-md border border-slate-300 px-3 text-sm font-medium disabled:opacity-50" aria-label="Muat ulang progres">
+          <SyncStatusChip
+            isOnline={countSync.isOnline}
+            pendingCount={countSync.pending.length}
+            failedCount={countSync.failed.length}
+            syncing={countSync.syncing}
+            onClick={() => setSyncSheetOpen(true)}
+          />
+          <button type="button" onClick={() => void refreshWorkspace()} disabled={treeQuery.isFetching || !countSync.isOnline} className="min-h-11 rounded-md border border-slate-300 px-3 text-sm font-medium disabled:opacity-50" aria-label="Muat ulang progres">
             {treeQuery.isFetching ? '…' : 'Muat ulang'}
           </button>
           <button type="button" onClick={() => setSummaryOpen(true)} className="hidden min-h-11 rounded-md border border-slate-300 px-3 text-sm font-medium md:inline-flex md:items-center">Ringkasan</button>
-          {session.status === 'in_progress' && can('opname.cancel') && (
+          {session.status === 'in_progress' && (
             <details className="relative">
               <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-md border border-slate-300 px-3 text-lg font-medium" aria-label="Menu lainnya">⋯</summary>
               <div className="absolute right-0 z-30 mt-1 min-w-44 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
-                <button type="button" onClick={() => setCancelOpen(true)} className="min-h-11 w-full rounded px-3 text-left text-sm text-rose-800 hover:bg-rose-50">Batalkan sesi</button>
+                <button type="button" onClick={() => setScannerTestOpen(true)} className="min-h-11 w-full rounded px-3 text-left text-sm hover:bg-slate-50">Uji scanner</button>
+                {can('opname.cancel') && <button type="button" onClick={() => setCancelOpen(true)} className="min-h-11 w-full rounded px-3 text-left text-sm text-rose-800 hover:bg-rose-50">Batalkan sesi</button>}
               </div>
             </details>
           )}
@@ -507,22 +930,47 @@ export function OpnameSessionDetailPage() {
               : `Progres total ${tree?.summary.counted_products ?? session.counted_products}/${tree?.summary.total_products ?? session.total_products}`}
           </p>
         </div>
+        {lastScanAt === null ? (
+          <p className="text-xs text-slate-500">Belum ada scan</p>
+        ) : (
+          <p className={`text-xs ${clock - lastScanAt > 180_000 ? 'text-slate-400' : 'text-slate-600'}`}>
+            Scan terakhir: {Math.max(0, Math.floor((clock - lastScanAt) / 1000))} dtk lalu
+          </p>
+        )}
+        {countSync.queueError && <p role="status" className="text-xs text-amber-900">{countSync.queueError}</p>}
       </header>
+      {session.status === 'in_progress' && showScannerTip && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+          <span>Uji scanner dulu agar akurat.</span>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setScannerTestOpen(true)} className="min-h-10 rounded-md border border-blue-300 px-3 font-medium">Uji scanner</button>
+            <button type="button" onClick={() => { localStorage.setItem('pos.opname.scanner-tip-dismissed', 'true'); setShowScannerTip(false); }} className="min-h-10 px-2 underline">Tutup</button>
+          </div>
+        </div>
+      )}
 
       {session.status !== 'cancelled' && (
         <OpnameWorkflowPanel
           session={session}
-          report={reportQuery.data}
-          reportLoading={reportQuery.isLoading}
-          reportError={reportQuery.error}
+          report={countSync.isOnline ? reportQuery.data : undefined}
+          reportLoading={countSync.isOnline && reportQuery.isLoading}
+          reportError={countSync.isOnline ? reportQuery.error : null}
+          csvDelimiter={csvDelimiter}
+          csvPending={csvPending}
+          csvError={csvError}
+          onCsvDelimiterChange={setCsvDelimiter}
+          onDownloadCsv={downloadSessionCsv}
           canPost={can('opname.post')}
+          postingAllowed={countSync.isOnline && countSync.pending.length === 0 && countSync.failed.length === 0}
+          postBlockedReason={!countSync.isOnline || countSync.pending.length > 0 || countSync.failed.length > 0 ? 'Sinkronkan semua hitungan dulu.' : ''}
+          isOnline={countSync.isOnline}
           canApprove={can('opname.approve')}
           canReview={can('opname.review')}
           isOwner={me?.roles.includes('Owner') ?? false}
           onSubmit={() => { setWorkflowDialog('submit'); setOwnerPassword(''); }}
           onApprove={() => { setWorkflowDialog('approve'); setOwnerPassword(''); }}
           onReject={() => { setWorkflowDialog('reject'); setOwnerPassword(''); setRejectReason(''); }}
-          onRetry={() => void reportQuery.refetch()}
+          onRetry={() => { if (countSync.isOnline) void reportQuery.refetch(); }}
         />
       )}
 
@@ -534,6 +982,21 @@ export function OpnameSessionDetailPage() {
         setSelectedItem,
         highlightedItemId,
         setHighlightedItemId,
+        pendingOperations: countSync.pending,
+        failedOperations: countSync.failed,
+        isOnline: countSync.isOnline,
+        markOffline: countSync.markOffline,
+        isSyncing: countSync.syncing,
+        queueError: countSync.queueError,
+        syncNow: countSync.syncNow,
+        retryFailed: countSync.retryFailed,
+        removeFailed: countSync.removeFailed,
+        offlineIndex: offlineIndex.index,
+        offlineIndexReady: offlineIndex.ready,
+        offlineIndexRefreshing: offlineIndex.refreshing,
+        offlineIndexError: offlineIndex.error,
+        lastScanAt,
+        setLastScanAt,
         loadItem,
         selectItem: loadItem,
         startNode,
@@ -554,18 +1017,20 @@ export function OpnameSessionDetailPage() {
         <WorkspacePanels
           id={id}
           tree={tree ?? EMPTY_TREE}
-          treeLoading={treeQuery.isLoading}
-          treeError={treeQuery.error}
-          retryTree={() => void treeQuery.refetch()}
+          treeLoading={treeQuery.isLoading && !offlineTree}
+          treeError={countSync.isOnline ? treeQuery.error : null}
+          retryTree={() => { if (countSync.isOnline) void treeQuery.refetch(); }}
           search={search}
           searchDraft={searchDraft}
           updateSearch={updateSearch}
-          searchResults={productSearch.data?.pages.flatMap((page) => page.data) ?? []}
-          searchLoading={productSearch.isFetching}
+          searchResults={!countSync.isOnline && search.trim().length >= 2
+            ? findOfflineItems(offlineIndex.index, search, 'search', countSync.pending)
+            : productSearch.data?.pages.flatMap((page) => page.data) ?? []}
+          searchLoading={countSync.isOnline && productSearch.isFetching}
           productSearchHasNext={productSearch.hasNextPage}
           loadMoreSearch={() => void productSearch.fetchNextPage()}
-          searchError={productSearch.error}
-          retrySearch={() => void productSearch.refetch()}
+          searchError={countSync.isOnline ? productSearch.error : null}
+          retrySearch={() => { if (countSync.isOnline) void productSearch.refetch(); }}
           onlyUncounted={onlyUncounted}
           setOnlyUncounted={setOnlyUncounted}
           openNodeIds={openNodeIds}
@@ -573,8 +1038,9 @@ export function OpnameSessionDetailPage() {
           view={view}
           onViewChange={changeView}
           active={session.status === 'in_progress'}
+          scannerTestOpen={scannerTestOpen}
           canCount={can('opname.count')}
-          revealsSystemQty={tree?.display.reveals_system_qty ?? false}
+          revealsSystemQty={countSync.isOnline && (tree?.display.reveals_system_qty ?? false)}
           workingNode={workingNode}
         />
       </OpnameWorkspaceProvider>
@@ -587,6 +1053,19 @@ export function OpnameSessionDetailPage() {
           onReasonChange={setReason}
           onCancel={() => { setCancelOpen(false); setReason(''); cancel.reset(); }}
           onSubmit={() => cancel.mutate()}
+        />
+      )}
+      {scannerTestOpen && <ScannerTestSheet onClose={() => setScannerTestOpen(false)} onScan={() => setLastScanAt(Date.now())} />}
+      {syncSheetOpen && (
+        <SyncFailedSheet
+          pending={countSync.pending}
+          failed={countSync.failed}
+          syncing={countSync.syncing}
+          queueError={countSync.queueError}
+          onClose={() => setSyncSheetOpen(false)}
+          onSync={() => void countSync.syncNow()}
+          onRetry={(operation) => { void countSync.retryFailed(operation); }}
+          onRemove={(operation) => { void countSync.removeFailed(operation); }}
         />
       )}
       {workflowDialog && (
@@ -765,7 +1244,15 @@ function OpnameWorkflowPanel({
   report,
   reportLoading,
   reportError,
+  csvDelimiter,
+  csvPending,
+  csvError,
+  onCsvDelimiterChange,
+  onDownloadCsv,
   canPost,
+  postingAllowed,
+  postBlockedReason,
+  isOnline,
   canApprove,
   canReview,
   isOwner,
@@ -778,7 +1265,15 @@ function OpnameWorkflowPanel({
   report?: OpnameReport;
   reportLoading: boolean;
   reportError: Error | null;
+  csvDelimiter: CsvDelimiter;
+  csvPending: 'summary' | 'detail' | null;
+  csvError: Error | null;
+  onCsvDelimiterChange: (delimiter: CsvDelimiter) => void;
+  onDownloadCsv: (part: 'summary' | 'detail') => Promise<void>;
   canPost: boolean;
+  postingAllowed: boolean;
+  postBlockedReason: string;
+  isOnline: boolean;
   canApprove: boolean;
   canReview: boolean;
   isOwner: boolean;
@@ -791,6 +1286,9 @@ function OpnameWorkflowPanel({
   const totals = report?.totals;
   return (
     <section aria-label="Laporan dan posting opname" className="opname-report space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+      {session.status === 'in_progress' && !isOnline && (
+        <p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Laporan dan posting hanya tersedia online. Tampilan hitungan offline selalu buta.</p>
+      )}
       {session.status === 'in_progress' && !complete && (
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
           Laporan selisih dan posting tersedia setelah seluruh produk dihitung ({session.counted_products}/{session.total_products}).
@@ -806,6 +1304,12 @@ function OpnameWorkflowPanel({
       )}
       {reportLoading && <p role="status" className="text-sm text-slate-500">Memuat laporan opname…</p>}
       {reportError && <div className="space-y-2"><ErrorNotice error={reportError} /><button type="button" onClick={onRetry} className="min-h-10 rounded-md border border-slate-300 px-3 text-sm">Coba lagi</button></div>}
+      {session.status === 'in_progress' && canPost && complete && !report?.complete && (
+        <div className="space-y-2">
+          <button type="button" disabled className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white opacity-50 print:hidden">Posting Opname</button>
+          <p className="text-sm text-amber-900">{!isOnline ? 'Posting hanya dapat dilakukan saat online.' : postBlockedReason || 'Laporan belum tersedia.'}</p>
+        </div>
+      )}
       {report?.complete && totals && (
         <>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -814,8 +1318,26 @@ function OpnameWorkflowPanel({
               <p className="text-sm text-slate-600">{session.number} · {statusLabel(session.status)}</p>
               {report.provisional && <p className="text-xs text-slate-500">Pratinjau sementara — nilai akan dibekukan saat diajukan atau diposting.</p>}
             </div>
-            <button type="button" onClick={() => window.print()} className="min-h-10 rounded-md border border-slate-300 px-3 text-sm print:hidden">Cetak</button>
+            <div className="flex flex-wrap gap-2 print:hidden">
+              <button type="button" onClick={() => window.print()} className="min-h-10 rounded-md border border-slate-300 px-3 text-sm">Cetak</button>
+              <label className="sr-only" htmlFor="opname-csv-delimiter">Pemisah kolom CSV</label>
+              <select id="opname-csv-delimiter" value={csvDelimiter} onChange={(event) => onCsvDelimiterChange(event.target.value as CsvDelimiter)} className="min-h-10 rounded-md border border-slate-300 px-2 text-sm">
+                <option value="comma">Koma</option>
+                <option value="semicolon">Excel Indonesia (titik koma)</option>
+              </select>
+              {(session.status === 'posted' || session.status === 'pending_approval') && (
+                <>
+                  <button type="button" onClick={() => void onDownloadCsv('summary')} disabled={csvPending !== null} className="min-h-10 rounded-md border border-slate-300 px-3 text-sm disabled:opacity-50">
+                    {csvPending === 'summary' ? 'Menyiapkan…' : 'Unduh ringkasan CSV'}
+                  </button>
+                  <button type="button" onClick={() => void onDownloadCsv('detail')} disabled={csvPending !== null} className="min-h-10 rounded-md border border-slate-300 px-3 text-sm disabled:opacity-50">
+                    {csvPending === 'detail' ? 'Menyiapkan…' : 'Unduh detail CSV'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
+          {csvError && <ErrorNotice error={csvError} />}
           {report.clean && <div role="status" className="rounded-md bg-emerald-50 p-3 font-medium text-emerald-900">✓ Tidak ada selisih</div>}
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <Info label="Produk dihitung">{totals.products_counted}/{totals.products_total}</Info>
@@ -843,9 +1365,12 @@ function OpnameWorkflowPanel({
             </div>
           )}
           {session.status === 'in_progress' && canPost && complete && (
-            <button type="button" onClick={onSubmit} className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white print:hidden">
-              {isOwner ? 'Posting Opname' : report.approval?.required ? 'Ajukan ke Owner' : 'Posting Opname'}
-            </button>
+            <>
+              <button type="button" disabled={!postingAllowed} onClick={onSubmit} className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white print:hidden disabled:opacity-50">
+                {isOwner ? 'Posting Opname' : report.approval?.required ? 'Ajukan ke Owner' : 'Posting Opname'}
+              </button>
+              {!postingAllowed && <p className="text-sm text-amber-900">{postBlockedReason}</p>}
+            </>
           )}
           {session.status === 'posted' && (
             <p className="text-sm text-emerald-800">Opname diposting pada {session.posted_at ? formatSessionTime(session.posted_at, 'Asia/Jakarta') : '—'}.</p>
@@ -892,6 +1417,7 @@ function OpnameWorkflowDialog({
         <p className="text-sm text-slate-600">
           {action === 'reject' ? 'Alasan penolakan wajib diisi. Sesi akan kembali ke tahap penghitungan.' : 'Perubahan stok akan diproses dalam satu transaksi dan tidak dapat diulang.'}
         </p>
+        {action !== 'reject' && <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-950">Pastikan semua perangkat yang ikut menghitung sudah tersinkron.</p>}
         {action === 'reject' && (
           <label className="block space-y-1 text-sm font-medium">
             <span>Alasan penolakan</span>
@@ -943,6 +1469,7 @@ function WorkspacePanels({
   view,
   onViewChange,
   active,
+  scannerTestOpen,
   canCount,
   revealsSystemQty,
   workingNode,
@@ -968,17 +1495,26 @@ function WorkspacePanels({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
   active: boolean;
+  scannerTestOpen: boolean;
   canCount: boolean;
   revealsSystemQty: boolean;
   workingNode: OpnameProgressNode | null;
 }) {
-  const { activeNodeId, setActiveNodeId, loadItem, highlightedItemId, selectedItem, startNode } = useOpnameWorkspace();
+  const {
+    activeNodeId, setActiveNodeId, loadItem, highlightedItemId, selectedItem, startNode,
+    isOnline, offlineIndex, offlineIndexReady, pendingOperations,
+  } = useOpnameWorkspace();
   const [listCollapsed, setListCollapsed] = useState(false);
   const searching = search.trim().length >= 2;
   const mobile = useMobileViewport();
   const showList = (!mobile || view === 'daftar') && !listCollapsed;
   const showInput = !mobile || view === 'input';
   const visibleNodes = tree?.nodes ?? [];
+  const pendingItems = useMemo(() => getPendingOfflineItems(offlineIndex, pendingOperations), [offlineIndex, pendingOperations]);
+  const pendingMap = new Map(pendingItems.map((item) => [item.id, item]));
+  const offlineItems = useMemo(() => offlineIndex
+    ? offlineIndex.items.map((item) => pendingMap.get(item.item_id) ?? toOfflineOpnameItem(offlineIndex, item))
+    : [], [offlineIndex, pendingItems]);
   return (
     <>
       <nav aria-label="Tampilan sesi opname" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
@@ -1058,6 +1594,10 @@ function WorkspacePanels({
                     revealsSystemQty={revealsSystemQty}
                     highlightedItemId={highlightedItemId}
                     selectedItemId={selectedItem?.id ?? null}
+                    isOnline={isOnline}
+                    offlineIndexReady={offlineIndexReady}
+                    offlineItems={offlineItems}
+                    pendingItemIds={new Set(pendingOperations.map((operation) => operation.item.item_id))}
                   />
                 ))}
                 {visibleNodes.length === 0 && <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Belum ada produk dalam cakupan sesi.</p>}
@@ -1070,7 +1610,7 @@ function WorkspacePanels({
         <section aria-label="Panel input" className={`${showInput ? '' : 'hidden'} min-w-0 max-h-[calc(100dvh-8rem)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 pb-16 md:max-h-[calc(100dvh-14rem)]`}>
           <CountingStack
             sessionId={id}
-            active={active}
+            active={active && !scannerTestOpen}
             canCount={canCount}
             revealsSystemQty={revealsSystemQty}
             tree={tree}
@@ -1103,6 +1643,10 @@ function CategoryNode({
   revealsSystemQty,
   highlightedItemId,
   selectedItemId,
+  isOnline,
+  offlineIndexReady,
+  offlineItems,
+  pendingItemIds,
 }: {
   sessionId: number;
   node: OpnameProgressNode;
@@ -1119,6 +1663,10 @@ function CategoryNode({
   revealsSystemQty: boolean;
   highlightedItemId: number | null;
   selectedItemId: number | null;
+  isOnline: boolean;
+  offlineIndexReady: boolean;
+  offlineItems: OpnameItem[];
+  pendingItemIds: Set<number>;
 }) {
   const nodeId = String(node.id);
   const opened = openNodeIds.has(nodeId);
@@ -1137,12 +1685,21 @@ function CategoryNode({
       per_page: 100,
     }),
     getNextPageParam: (lastPage) => lastPage.current_page < lastPage.last_page ? lastPage.current_page + 1 : undefined,
-    enabled: opened && directProductCount > 0,
+    enabled: isOnline && opened && directProductCount > 0,
     refetchInterval: () => document.visibilityState === 'visible' ? 15_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
-  const items = directItems.data?.pages.flatMap((page) => page.data) ?? [];
+  const offlineRows = offlineItems.filter((item) => {
+    const categoryMatches = node.id === 'other'
+      ? item.category_id === null || item.category_path.length === 0
+      : item.category_id === Number(node.id);
+    const countMatches = !onlyUncounted || item.counted_qty === null;
+    const queryMatches = !query.trim()
+      || `${item.name} ${item.barcode}`.toLocaleLowerCase('id-ID').includes(query.trim().toLocaleLowerCase('id-ID'));
+    return categoryMatches && countMatches && queryMatches;
+  }).slice(0, 100);
+  const items = isOnline ? directItems.data?.pages.flatMap((page) => page.data) ?? [] : offlineRows;
 
   function toggle() {
     setActiveNodeId(nodeId);
@@ -1204,11 +1761,15 @@ function CategoryNode({
               revealsSystemQty={revealsSystemQty}
               highlightedItemId={highlightedItemId}
               selectedItemId={selectedItemId}
+              isOnline={isOnline}
+              offlineIndexReady={offlineIndexReady}
+              offlineItems={offlineItems}
+              pendingItemIds={pendingItemIds}
             />
           ))}
           {directProductCount > 0 && <p className="pl-10 pt-2 text-xs font-medium text-slate-500">Tanpa sub-kategori ({directProductCount})</p>}
           {opened && directProductCount > 0 && directItems.isLoading && <div role="status" className="space-y-2 px-4 py-2">{[1, 2].map((n) => <div key={n} className="h-14 animate-pulse rounded bg-slate-100" />)}</div>}
-          {directItems.error && <div className="px-4 py-2"><ErrorNotice error={directItems.error} /><button type="button" onClick={() => void directItems.refetch()} className="mt-2 min-h-11 rounded-md border px-3 text-sm">Coba lagi</button></div>}
+          {isOnline && directItems.error && <div className="px-4 py-2"><ErrorNotice error={directItems.error} /><button type="button" onClick={() => void directItems.refetch()} className="mt-2 min-h-11 rounded-md border px-3 text-sm">Coba lagi</button></div>}
           {items.map((item) => (
             <ProductRow
               key={item.id}
@@ -1216,11 +1777,13 @@ function CategoryNode({
               selected={selectedItemId === item.id}
               highlighted={highlightedItemId === item.id}
               revealsSystemQty={revealsSystemQty}
+              pending={pendingItemIds.has(item.id)}
               onSelect={() => loadItem(item)}
             />
           ))}
-          {directItems.data && directProductCount > 0 && !directItems.isLoading && !directItems.error && items.length === 0 && <p className="py-2 pl-10 text-sm text-slate-500">Tidak ada produk pada kategori ini untuk filter yang dipilih.</p>}
-          {directItems.hasNextPage && (
+          {!isOnline && !offlineIndexReady && directProductCount > 0 && <p className="py-2 pl-10 text-sm text-amber-900">Indeks offline belum tersedia. Sambungkan jaringan sebelum mencari produk.</p>}
+          {(isOnline ? directItems.data !== undefined && !directItems.error : offlineIndexReady) && directProductCount > 0 && !directItems.isLoading && !directItems.error && items.length === 0 && <p className="py-2 pl-10 text-sm text-slate-500">Tidak ada produk pada kategori ini untuk filter yang dipilih.</p>}
+          {isOnline && directItems.hasNextPage && (
             <button type="button" disabled={directItems.isFetchingNextPage} onClick={loadMore} className="ml-10 min-h-11 rounded-md border border-slate-300 px-3 text-sm disabled:opacity-50">{directItems.isFetchingNextPage ? 'Memuat…' : 'Muat lagi'}</button>
           )}
           {node.direct_product_count === 0 && childNodes.length === 0 && <p className="py-2 pl-10 text-sm text-slate-500">Tidak ada produk pada kategori ini.</p>}
@@ -1235,12 +1798,14 @@ function ProductRow({
   selected,
   highlighted,
   revealsSystemQty,
+  pending = false,
   onSelect,
 }: {
   item: OpnameItem;
   selected: boolean;
   highlighted: boolean;
   revealsSystemQty: boolean;
+  pending?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -1255,6 +1820,7 @@ function ProductRow({
         {item.counted_qty !== null && <p className="text-xs text-slate-600">Hitungan: {item.counted_qty}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
+        {pending && <PendingBadge />}
         {revealsSystemQty && <ItemStatus status={item.status} />}
         {revealsSystemQty && item.system_qty !== undefined && <span className="text-xs text-slate-500">Stok: {item.system_qty}</span>}
       </div>
