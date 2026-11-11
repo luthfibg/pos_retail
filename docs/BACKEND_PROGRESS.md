@@ -11,6 +11,7 @@ Input hitungan, log, lookup, dan penguncian stok Handoff #4: lihat `docs/ROADMAP
 Perluasan daftar item untuk rangkaian scan Handoff #5 (`only_counted`, urutan `-counted_at`, `exclude_item_ids[]`, dan `counted_at`): lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #5”.
 Laporan beku, persetujuan Owner, posting melalui inventory movements, dan pengaturan ambang Handoff #6: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #6” (UAT browser dan validasi performa laporan/posting masih terbuka).
 Batch hitungan, indeks offline, antrean sinkronisasi dan scanner Bluetooth Handoff #7: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #7” (UAT perangkat nyata masih terbuka).
+Laporan Piutang Tahunan: `GET /api/annual-receivable-reports[/{year}]` dan `GET/PUT /api/settings/annual-receivable-report`; laporan live untuk tahun berjalan, tagihan mengikuti periode billing, pembayaran mengikuti batas laporan (31 Desember untuk tahun terdahulu), dan cetak diaktifkan sesuai pengaturan tanggal. Validasi terarah: 3 test tahunan dan seluruh `BillingTest` (17 test) lulus; Pint lulus. UAT browser masih terbuka.
 
 > **Untuk layar kasir (POS):** baca bagian 4 (Shift) dan 5 (Penjualan) dulu. Urutan alur kasir: `GET /api/shifts/current` → (bila `data` null) `POST /api/shifts/open` → cari produk (`GET /api/products/by-barcode/...`) → `POST /api/sales`.
 

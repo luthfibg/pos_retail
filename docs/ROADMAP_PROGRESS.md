@@ -6,6 +6,14 @@
 
 Bagian ini merangkum fondasi adjustment stok dan siklus opname. Catatan per handoff tetap dipertahankan di bawah.
 
+### Laporan Piutang Tahunan
+
+- Tab ketiga **Tutup Tahun** merangkum tagihan kredit, pembayaran, dan sisa piutang per karyawan berdasarkan tahun `billing_periods.period_month`.
+- Laporan tahun berjalan dihitung langsung dari transaksi terkini. Tagihan mengikuti periode billing; pembayaran tahun berjalan dibatasi waktu saat laporan diminta, sedangkan tahun sebelumnya memakai batas akhir 31 Desember. Pembayaran invoice gabungan dialokasikan proporsional ke karyawan menurut nilai tagihan.
+- Tanggal cetak dapat diatur di **Pengaturan → Piutang → Laporan piutang tahunan**. Tombol cetak tahun berjalan aktif pada tanggal tersebut; laporan tahun sebelumnya selalu dapat dicetak.
+- Laporan tidak menutup periode bulanan atau membuat invoice tahunan. Akses laporan mengikuti `invoice.generate`; pengaturan tanggal mengikuti `settings.manage`.
+- Endpoint: `GET /api/annual-receivable-reports`, `GET /api/annual-receivable-reports/{year}`, `GET/PUT /api/settings/annual-receivable-report`.
+
 ### Fitur, layar, dan alur
 
 - **Adjustment manual:** daftar, detail, dan form adjustment stok tersedia pada tab Adjustment; posting mencatat pergerakan stok.
@@ -308,7 +316,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 - `POST /api/stock-opname-sessions`: body `scope_type`, `category_ids?`, `name?`, `notes?`, `client_request_id`; baru `201`, idempoten `200`, irisan `422` dengan `conflicting_sessions: [{id, number}]`.
 - `POST /api/stock-opname-sessions/{id}/cancel`: body `{reason}` wajib; hanya status `in_progress` dapat dibatalkan.
 - `GET /api/stock-opname/scope-options`: `{data: pohon kategori, total_products}`; node berisi `id`, `parent_id`, `name`, `product_count` aktif termasuk turunan, `locked_by`, dan `children`.
-- Izin: `opname.view` untuk Admin, Owner, Accounting; `opname.create` dan `opname.cancel` untuk Admin, Owner. Kasir tidak mendapat izin Opname. Untuk mempertahankan akses Adjustment dari Handoff #1, Kasir tetap melihat menu Adjustment langsung (tanpa tab/akses Opname).
+- Izin: `opname.view` untuk Admin, Owner, Accounting; `opname.count`, `opname.create`, dan `opname.cancel` untuk Admin dan Owner. Accounting hanya dapat melihat; Kasir tidak mendapat izin Opname. Untuk mempertahankan akses Adjustment dari Handoff #1, Kasir tetap melihat menu Adjustment langsung (tanpa tab/akses Opname). Pada database yang telah ada sebelum permission opname ditambahkan, jalankan `php artisan db:seed --class="Database\\Seeders\\PermissionSeeder"` dari folder `backend` agar grant Admin/Owner tersinkron.
 
 **UI selesai:** daftar sesi responsif dengan pencarian/filter status, skeleton/kosong/error, pagination desktop dan “Muat lagi” mobile; modal Mulai Opname layar penuh di HP dengan pohon kategori, kunci sesi, jumlah produk, UUID idempoten dan tautan sesi konflik; detail deep-link dengan ringkasan dan pembatalan beralasan. Rute `/inventory/adjustments/opname/:sessionId` disiapkan sebagai slot Handoff #3. Accounting dapat membuka Opname saja; Kasir tetap hanya Adjustment.
 

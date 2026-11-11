@@ -5,6 +5,11 @@ use Illuminate\Support\Facades\Route;
 
 // Dimuat dari routes/api.php (prefix /api sudah terpasang). Seluruhnya Admin: Kasir tidak memegang permission ini.
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('annual-receivable-reports', [BillingController::class, 'annualReportYears'])->middleware('can:invoice.generate');
+    Route::get('annual-receivable-reports/{year}', [BillingController::class, 'annualReport'])->whereNumber('year')->middleware('can:invoice.generate');
+    Route::get('settings/annual-receivable-report', [BillingController::class, 'annualReportSetting'])->middleware('can:settings.manage');
+    Route::put('settings/annual-receivable-report', [BillingController::class, 'updateAnnualReportSetting'])->middleware('can:settings.manage');
+
     Route::get('billing-periods', [BillingController::class, 'periods'])->middleware('can:billing_period.manage');
     Route::get('billing-periods/current', [BillingController::class, 'currentPeriod'])->middleware('can:billing_period.manage');
     Route::post('billing-periods', [BillingController::class, 'openPeriod'])->middleware('can:billing_period.manage');

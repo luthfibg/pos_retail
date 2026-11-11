@@ -629,6 +629,7 @@ function SessionCard({ session, timezone }: { session: OpnameSessionSummary; tim
 export function OpnameSessionDetailPage() {
   const { sessionId } = useParams();
   const id = Number(sessionId);
+  const mobile = useMobileViewport();
   const { can, me } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -836,7 +837,6 @@ export function OpnameSessionDetailPage() {
   const timezone = me?.store?.timezone || 'Asia/Jakarta';
   const tree = countSync.isOnline ? treeQuery.data : offlineTree ?? treeQuery.data;
   const view = workspaceView(searchParams.get('view'));
-  const mobile = useMobileViewport();
   const activeNode = tree ? findNode(tree.nodes, activeNodeId) : null;
   const activeParent = tree && activeNode ? findNodeById(tree.nodes, activeNode.parent_id) : null;
   const workingNode = tree ? resolveWorkingNode(tree, activeNodeId) : null;
@@ -893,8 +893,7 @@ export function OpnameSessionDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link to="/inventory/adjustments/opname" className="inline-flex min-h-9 items-center text-xs font-medium underline">← Daftar sesi</Link>
-          <p className="break-words text-xs text-slate-600">{session.number}</p>
-          <h2 className="break-words text-lg font-semibold">{session.name || 'Sesi opname'}</h2>
+
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={session.status} />
@@ -1289,11 +1288,7 @@ function OpnameWorkflowPanel({
       {session.status === 'in_progress' && !isOnline && (
         <p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Laporan dan posting hanya tersedia online. Tampilan hitungan offline selalu buta.</p>
       )}
-      {session.status === 'in_progress' && !complete && (
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-          Laporan selisih dan posting tersedia setelah seluruh produk dihitung ({session.counted_products}/{session.total_products}).
-        </div>
-      )}
+
       {session.status === 'in_progress' && !canReview && complete && (
         <p className="text-sm text-slate-600">Laporan selisih belum tersedia untuk akun ini.</p>
       )}

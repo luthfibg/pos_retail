@@ -302,6 +302,49 @@ export interface Invoice extends InvoiceSummary {
   payments: InvoicePayment[];
 }
 
+export interface AnnualReceivableReportYear {
+  year: number;
+  is_current: boolean;
+  print_enabled: boolean;
+}
+
+export interface AnnualReceivableReportYears {
+  current_year: number;
+  years: AnnualReceivableReportYear[];
+}
+
+export interface AnnualReceivableReportCustomer {
+  customer_id: number;
+  customer_no: string;
+  name: string;
+  department: string | null;
+  sales_count: number;
+  billed: Decimal;
+  paid: Decimal;
+  outstanding: Decimal;
+}
+
+export interface AnnualReceivableReport {
+  year: number;
+  start_date: string;
+  end_date: string;
+  as_of: string;
+  is_current: boolean;
+  print_enabled: boolean;
+  totals: {
+    billed: Decimal;
+    paid: Decimal;
+    outstanding: Decimal;
+    customers: number;
+    sales_count: number;
+  };
+  customers: AnnualReceivableReportCustomer[];
+}
+
+export interface AnnualReceivableReportSetting {
+  print_on: string;
+}
+
 export type ProductStatus = 'pending_price' | 'active' | 'inactive';
 export type StockStatus = 'habis' | 'kritis' | 'hampir_habis' | 'aman';
 

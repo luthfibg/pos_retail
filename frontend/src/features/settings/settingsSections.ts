@@ -2,8 +2,8 @@
  * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
  * Izin hanya untuk tampilan; backend tetap penentu akhir.
  */
-export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'inventory-menus' | 'bank-accounts' | 'stock-authority' | 'opname' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth';
-export type GroupId = 'store' | 'inventory' | 'sales' | 'cash' | 'accounts';
+export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'inventory-menus' | 'bank-accounts' | 'stock-authority' | 'opname' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth' | 'annual-receivable';
+export type GroupId = 'store' | 'inventory' | 'sales' | 'cash' | 'accounts' | 'billing';
 
 export interface SettingsSection {
   id: SectionId;
@@ -22,6 +22,7 @@ export const GROUPS: ReadonlyArray<{ id: GroupId; label: string }> = [
   { id: 'sales', label: 'Penjualan & harga' },
   { id: 'cash', label: 'Kas' },
   { id: 'accounts', label: 'Akun' },
+  { id: 'billing', label: 'Piutang' },
 ];
 
 export const SECTIONS: ReadonlyArray<SettingsSection> = [
@@ -96,6 +97,11 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     defaultOpen: true,
     description: 'Atur metode autentikasi ulang dan kunci pribadi untuk pemegang izin persetujuan.',
     keywords: ['owner', 'admin', 'kunci', 'kode', 'passphrase', 'password', 'approval'],
+  },
+  {
+    id: 'annual-receivable', group: 'billing', title: 'Laporan piutang tahunan', permission: 'settings.manage', defaultOpen: false,
+    description: '',
+    keywords: ['piutang', 'tutup tahun', 'cetak', 'tanggal'],
   },
 ];
 

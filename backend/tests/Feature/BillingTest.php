@@ -91,6 +91,134 @@ class BillingTest extends SeededTestCase
         $this->getJson('/api/billing-periods/99999')->assertNotFound();
     }
 
+    public function test_annual_receivable_report_allocates_payments_and_keeps_closed_year_values_at_year_end(): void
+    {
+        $currentYear = Carbon::now('Asia/Jakarta')->year;
+        $closedYear = $currentYear - 1;
+        $currentDate = Carbon::create($currentYear, 1, 1, 10, 0, 0, 'Asia/Jakarta');
+        Carbon::setTestNow(Carbon::create($closedYear, 12, 20, 10, 0, 0, 'Asia/Jakarta'));
+
+        try {
+            $budi = $this->employee('NIK-ANNUAL-1', 'Budi Annual');
+            $sari = $this->employee('NIK-ANNUAL-2', 'Sari Annual');
+            $period = $this->openPeriod();
+            $this->sale($budi, '100.00');
+            $this->sale($sari, '50.00');
+            $this->postJson("/api/billing-periods/{$period}/close")->assertOk();
+            $invoice = $this->postJson("/api/billing-periods/{$period}/invoice")->assertCreated()->json('data');
+            DB::table('receivable_invoices')->where('id', $invoice['id'])->update([
+                'tax_amount' => '15.00',
+                'total' => '165.00',
+                'created_at' => Carbon::create($closedYear, 12, 21, 10, 0, 0, 'Asia/Jakarta')->utc()->format('Y-m-d H:i:s.v'),
+            ]);
+
+            DB::table('invoice_payments')->insert([
+                [
+                    'invoice_id' => $invoice['id'], 'amount' => '75.00',
+                    'received_at' => Carbon::create($closedYear, 12, 25, 12, 0, 0, 'Asia/Jakarta')->utc()->format('Y-m-d H:i:s.v'),
+                    'recorded_by' => $this->admin->id,
+                ],
+                [
+                    'invoice_id' => $invoice['id'], 'amount' => '25.00',
+                    'received_at' => Carbon::create($currentYear, 1, 2, 12, 0, 0, 'Asia/Jakarta')->utc()->format('Y-m-d H:i:s.v'),
+                    'recorded_by' => $this->admin->id,
+                ],
+            ]);
+
+            Carbon::setTestNow($currentDate);
+            $this->getJson('/api/annual-receivable-reports')
+                ->assertOk()
+                ->assertJsonPath('data.current_year', $currentYear)
+                ->assertJsonPath('data.years.0.year', $currentYear)
+                ->assertJsonPath('data.years.0.print_enabled', false)
+                ->assertJsonPath('data.years.1.year', $closedYear)
+                ->assertJsonPath('data.years.1.print_enabled', true);
+
+            $this->getJson("/api/annual-receivable-reports/{$closedYear}")
+                ->assertOk()
+                ->assertJsonPath('data.totals.billed', '165.00')
+                ->assertJsonPath('data.totals.paid', '75.00')
+                ->assertJsonPath('data.totals.outstanding', '90.00')
+                ->assertJsonPath('data.customers.0.customer_id', $budi)
+                ->assertJsonPath('data.customers.0.billed', '110.00')
+                ->assertJsonPath('data.customers.0.paid', '50.00')
+                ->assertJsonPath('data.customers.0.outstanding', '60.00')
+                ->assertJsonPath('data.customers.1.customer_id', $sari)
+                ->assertJsonPath('data.customers.1.billed', '55.00')
+                ->assertJsonPath('data.customers.1.paid', '25.00')
+                ->assertJsonPath('data.customers.1.outstanding', '30.00');
+
+            $this->getJson('/api/annual-receivable-reports/'.($currentYear + 1))->assertNotFound();
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_annual_receivable_print_setting_defaults_validates_and_audits_changes(): void
+    {
+        $this->getJson('/api/settings/annual-receivable-report')->assertOk()
+            ->assertJsonPath('data.print_on', '12-31');
+
+        $this->putJson('/api/settings/annual-receivable-report', ['print_on' => '02-30'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['print_on']);
+        $this->putJson('/api/settings/annual-receivable-report', ['print_on' => '04-15'])
+            ->assertOk()->assertJsonPath('data.print_on', '04-15');
+
+        $this->assertDatabaseHas('settings', [
+            'store_id' => $this->storeId(),
+            'setting_key' => 'receivable_annual_report_print_on',
+            'updated_by' => $this->admin->id,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'settings.annual_receivable_report',
+            'actor_id' => $this->admin->id,
+        ]);
+
+        $year = Carbon::now('Asia/Jakarta')->year;
+        Carbon::setTestNow(Carbon::create($year, 4, 14, 12, 0, 0, 'Asia/Jakarta'));
+        try {
+            $this->getJson('/api/annual-receivable-reports')
+                ->assertJsonPath('data.years.0.print_enabled', false);
+            Carbon::setTestNow(Carbon::create($year, 4, 15, 12, 0, 0, 'Asia/Jakarta'));
+            $this->getJson('/api/annual-receivable-reports')
+                ->assertJsonPath('data.years.0.print_enabled', true);
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        Sanctum::actingAs($this->cashier, ['*']);
+        $this->getJson('/api/annual-receivable-reports')->assertForbidden();
+        $this->getJson('/api/settings/annual-receivable-report')->assertForbidden();
+    }
+
+    public function test_annual_report_proportional_payment_rounding_does_not_overpay_a_customer(): void
+    {
+        $customers = [
+            $this->employee('NIK-ANNUAL-A', 'Annual A'),
+            $this->employee('NIK-ANNUAL-B', 'Annual B'),
+            $this->employee('NIK-ANNUAL-C', 'Annual C'),
+        ];
+        $period = $this->openPeriod();
+        foreach ($customers as $customerId) {
+            $this->sale($customerId, '1.00');
+        }
+        $this->postJson("/api/billing-periods/{$period}/close")->assertOk();
+        $invoice = $this->postJson("/api/billing-periods/{$period}/invoice")->assertCreated()->json('data');
+        DB::table('invoice_payments')->insert([
+            'invoice_id' => $invoice['id'],
+            'amount' => '0.02',
+            'received_at' => now('UTC')->format('Y-m-d H:i:s.v'),
+            'recorded_by' => $this->admin->id,
+        ]);
+        $report = $this->getJson('/api/annual-receivable-reports/'.Carbon::now('Asia/Jakarta')->year)
+            ->assertOk()
+            ->assertJsonPath('data.totals.paid', '0.02')
+            ->json('data');
+
+        $this->assertSame(['0.01', '0.01', '0.00'], array_column($report['customers'], 'paid'));
+        $this->assertSame(['0.99', '0.99', '1.00'], array_column($report['customers'], 'outstanding'));
+    }
+
     public function test_default_period_label_uses_month_and_automatically_advances_to_next_month(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-10-15 09:00:00', 'Asia/Jakarta'));

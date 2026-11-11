@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AnnualReceivableReportSettingRequest;
 use App\Http\Requests\BillingPeriodRequest;
 use App\Http\Requests\GenerateInvoiceRequest;
 use App\Http\Requests\RecordInvoicePaymentRequest;
@@ -97,5 +98,31 @@ class BillingController extends Controller
     public function recordPayment(RecordInvoicePaymentRequest $request, int $invoice): JsonResponse
     {
         return response()->json(['data' => $this->billing->recordPayment($request->user(), $this->store($request), $invoice, $request->validated())], 201);
+    }
+
+    public function annualReportYears(Request $request): JsonResponse
+    {
+        return response()->json(['data' => $this->billing->annualReportYears($this->store($request))]);
+    }
+
+    public function annualReport(Request $request, int $year): JsonResponse
+    {
+        return response()->json(['data' => $this->billing->annualReport($this->store($request), $year)]);
+    }
+
+    public function annualReportSetting(Request $request): JsonResponse
+    {
+        return response()->json(['data' => $this->billing->annualReportSetting($this->store($request))]);
+    }
+
+    public function updateAnnualReportSetting(AnnualReceivableReportSettingRequest $request): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->billing->updateAnnualReportSetting(
+                $request->user(),
+                $this->store($request),
+                $request->validated(),
+            ),
+        ]);
     }
 }

@@ -23,6 +23,8 @@ class BillingService
 {
     private const PAYABLE = ['issued', 'handed_to_hr', 'partially_paid'];
 
+    private const ANNUAL_REPORT_SETTING = 'receivable_annual_report_print_on';
+
     public function __construct(private AuditLogger $audit, private NumberSequence $sequences) {}
 
     // ------------------------------------------------------------------ periode
@@ -372,6 +374,243 @@ class BillingService
         return $this->findInvoice($storeId, $id);
     }
 
+    /** @return array{current_year: int, years: list<array{year: int, is_current: bool, print_enabled: bool}>} */
+    public function annualReportYears(int $storeId): array
+    {
+        $timezone = $this->storeTimezone($storeId);
+        $currentYear = Carbon::now($timezone)->year;
+        $years = DB::table('sales as s')
+            ->join('billing_periods as p', 'p.id', '=', 's.billing_period_id')
+            ->where('s.store_id', $storeId)
+            ->where('s.payment_mode', 'payroll_credit')
+            ->where('s.status', 'posted')
+            ->whereYear('p.period_month', '>=', 2000)
+            ->whereYear('p.period_month', '<=', $currentYear)
+            ->distinct()
+            ->selectRaw('YEAR(p.period_month) as year')
+            ->orderByDesc('year')
+            ->pluck('year')
+            ->map(fn ($year) => (int) $year)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (! in_array($currentYear, $years, true)) {
+            $years[] = $currentYear;
+        }
+
+        rsort($years);
+        $printOn = $this->annualReportSetting($storeId)['print_on'];
+
+        return [
+            'current_year' => $currentYear,
+            'years' => array_map(fn (int $year) => [
+                'year' => $year,
+                'is_current' => $year === $currentYear,
+                'print_enabled' => $this->annualReportPrintEnabled($year, $currentYear, $printOn, $timezone),
+            ], $years),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function annualReport(int $storeId, int $year): array
+    {
+        $timezone = $this->storeTimezone($storeId);
+        $currentYear = Carbon::now($timezone)->year;
+        abort_if($year < 2000 || $year > $currentYear, 404, 'Laporan tahunan tidak ditemukan.');
+
+        $asOf = $year === $currentYear
+            ? Carbon::now($timezone)
+            : Carbon::create($year, 12, 31, 0, 0, 0, $timezone)->endOfDay();
+        $cutoff = $asOf->copy()->utc()->format('Y-m-d H:i:s.v');
+        $periodEnd = $year === $currentYear
+            ? min($asOf->toDateString(), $year.'-12-31')
+            : $year.'-12-31';
+
+        $customers = [];
+        $sales = DB::table('sales as s')
+            ->join('billing_periods as p', 'p.id', '=', 's.billing_period_id')
+            ->join('customers as c', 'c.id', '=', 's.customer_id')
+            ->where('s.store_id', $storeId)
+            ->where('s.payment_mode', 'payroll_credit')
+            ->where('s.status', 'posted')
+            ->whereBetween('p.period_month', [$year.'-01-01', $periodEnd])
+            ->groupBy('c.id', 'c.customer_no', 'c.name', 'c.department')
+            ->orderBy('c.name')
+            ->selectRaw('c.id, c.customer_no, c.name, c.department, count(*) as sales_count, sum(s.total) as billed')
+            ->get();
+
+        foreach ($sales as $sale) {
+            $customerId = (int) $sale->id;
+            $customers[$customerId] = [
+                'customer_id' => $customerId,
+                'customer_no' => $sale->customer_no,
+                'name' => $sale->name,
+                'department' => $sale->department,
+                'sales_count' => (int) $sale->sales_count,
+                'billed_units' => Decimal::money((string) $sale->billed),
+                'paid_units' => 0,
+            ];
+        }
+
+        $invoices = DB::table('receivable_invoices as i')
+            ->join('billing_periods as p', 'p.id', '=', 'i.billing_period_id')
+            ->where('i.store_id', $storeId)
+            ->whereBetween('p.period_month', [$year.'-01-01', $periodEnd])
+            ->where('i.status', '<>', 'cancelled')
+            ->get(['i.id', 'i.subtotal', 'i.total']);
+        $invoiceIds = $invoices->pluck('id')->all();
+        $linesByInvoice = [];
+
+        if ($invoiceIds !== []) {
+            $lines = DB::table('receivable_invoice_lines as l')
+                ->join('customers as c', 'c.id', '=', 'l.customer_id')
+                ->whereIn('l.invoice_id', $invoiceIds)
+                ->orderBy('c.name')
+                ->get(['l.invoice_id', 'l.customer_id', 'l.amount', 'c.customer_no', 'c.name', 'c.department']);
+
+            foreach ($lines as $line) {
+                $customerId = (int) $line->customer_id;
+                if (! isset($customers[$customerId])) {
+                    $customers[$customerId] = [
+                        'customer_id' => $customerId,
+                        'customer_no' => $line->customer_no,
+                        'name' => $line->name,
+                        'department' => $line->department,
+                        'sales_count' => 0,
+                        'billed_units' => 0,
+                        'paid_units' => 0,
+                    ];
+                }
+                $linesByInvoice[$line->invoice_id][$customerId] =
+                    ($linesByInvoice[$line->invoice_id][$customerId] ?? 0) + Decimal::money((string) $line->amount);
+            }
+        }
+
+        $paymentsByInvoice = [];
+        if ($invoiceIds !== []) {
+            $paymentsByInvoice = DB::table('invoice_payments')
+                ->whereIn('invoice_id', $invoiceIds)
+                ->where('received_at', '<=', $cutoff)
+                ->groupBy('invoice_id')
+                ->selectRaw('invoice_id, sum(amount) as paid')
+                ->pluck('paid', 'invoice_id')
+                ->all();
+        }
+
+        foreach ($invoices as $invoice) {
+            $weights = $linesByInvoice[$invoice->id] ?? [];
+            if ($weights === []) {
+                continue;
+            }
+
+            $taxUnits = Decimal::money((string) $invoice->total) - Decimal::money((string) $invoice->subtotal);
+            $taxAllocation = $this->allocateProportionally($taxUnits, $weights);
+            foreach ($taxAllocation as $customerId => $allocated) {
+                $customers[$customerId]['billed_units'] += $allocated;
+            }
+
+            $grossWeights = [];
+            foreach ($weights as $customerId => $principal) {
+                $grossWeights[$customerId] = $principal + ($taxAllocation[$customerId] ?? 0);
+            }
+            $paidAllocation = $this->allocateProportionally(
+                min(
+                    Decimal::money((string) ($paymentsByInvoice[$invoice->id] ?? '0.00')),
+                    array_sum($grossWeights),
+                ),
+                $grossWeights,
+            );
+            foreach ($paidAllocation as $customerId => $allocated) {
+                $customers[$customerId]['paid_units'] += $allocated;
+            }
+        }
+
+        $customerRows = array_map(static function (array $customer): array {
+            return [
+                'customer_id' => $customer['customer_id'],
+                'customer_no' => $customer['customer_no'],
+                'name' => $customer['name'],
+                'department' => $customer['department'],
+                'sales_count' => $customer['sales_count'],
+                'billed' => Decimal::moneyString($customer['billed_units']),
+                'paid' => Decimal::moneyString($customer['paid_units']),
+                'outstanding' => Decimal::moneyString($customer['billed_units'] - $customer['paid_units']),
+            ];
+        }, array_values($customers));
+        usort($customerRows, static fn (array $a, array $b) => strcasecmp($a['name'], $b['name']));
+
+        $billedTotal = array_sum(array_column($customers, 'billed_units'));
+        $paidTotal = array_sum(array_column($customers, 'paid_units'));
+        $printOn = $this->annualReportSetting($storeId)['print_on'];
+
+        return [
+            'year' => $year,
+            'start_date' => $year.'-01-01',
+            'end_date' => $periodEnd,
+            'as_of' => $asOf->format('Y-m-d H:i:s'),
+            'is_current' => $year === $currentYear,
+            'print_enabled' => $this->annualReportPrintEnabled($year, $currentYear, $printOn, $timezone),
+            'totals' => [
+                'billed' => Decimal::moneyString($billedTotal),
+                'paid' => Decimal::moneyString($paidTotal),
+                'outstanding' => Decimal::moneyString($billedTotal - $paidTotal),
+                'customers' => count($customerRows),
+                'sales_count' => array_sum(array_column($customerRows, 'sales_count')),
+            ],
+            'customers' => $customerRows,
+        ];
+    }
+
+    /** @return array{print_on: string} */
+    public function annualReportSetting(int $storeId): array
+    {
+        $value = DB::table('settings')
+            ->where('store_id', $storeId)
+            ->where('setting_key', self::ANNUAL_REPORT_SETTING)
+            ->value('setting_value');
+
+        return ['print_on' => $value === null ? '12-31' : (string) json_decode((string) $value, true)];
+    }
+
+    /** @param array{print_on: string} $data
+     * @return array{print_on: string}
+     */
+    public function updateAnnualReportSetting(User $actor, int $storeId, array $data): array
+    {
+        return DB::transaction(function () use ($actor, $storeId, $data) {
+            $before = $this->annualReportSetting($storeId);
+            $after = ['print_on' => $data['print_on']];
+
+            if ($before === $after) {
+                return $after;
+            }
+
+            DB::table('settings')->upsert(
+                [[
+                    'store_id' => $storeId,
+                    'setting_key' => self::ANNUAL_REPORT_SETTING,
+                    'setting_value' => json_encode($after['print_on']),
+                    'updated_by' => $actor->id,
+                ]],
+                ['store_id', 'setting_key'],
+                ['setting_value', 'updated_by'],
+            );
+
+            $this->audit->log(
+                'settings.annual_receivable_report',
+                'setting',
+                null,
+                before: $before,
+                after: $after,
+                storeId: $storeId,
+                actorId: $actor->id,
+            );
+
+            return $after;
+        });
+    }
+
     public function invoices(int $storeId, ?string $status, int $perPage): LengthAwarePaginator
     {
         return DB::table('receivable_invoices as i')
@@ -427,6 +666,90 @@ class BillingService
     }
 
     // ------------------------------------------------------------------ internal
+
+    /** @param array<int, int> $weights
+     * @return array<int, int>
+     */
+    private function allocateProportionally(int $amount, array $weights): array
+    {
+        $weightTotal = array_sum($weights);
+        if ($weightTotal <= 0 || $weights === []) {
+            return [];
+        }
+
+        $allocation = [];
+        $remainders = [];
+        $allocatedTotal = 0;
+        foreach ($weights as $key => $weight) {
+            [$allocated, $remainder] = $this->multiplyDivideRemainder($amount, $weight, $weightTotal);
+            $allocation[$key] = $allocated;
+            $allocatedTotal += $allocated;
+            $remainders[] = ['key' => $key, 'remainder' => $remainder];
+        }
+
+        usort($remainders, static fn (array $a, array $b) => $b['remainder'] <=> $a['remainder'] ?: $a['key'] <=> $b['key']);
+        $remaining = $amount - $allocatedTotal;
+        for ($index = 0; $index < $remaining; $index++) {
+            $allocation[$remainders[$index]['key']]++;
+        }
+
+        return $allocation;
+    }
+
+    /** @return array{int, int} Quotient and remainder without overflowing the intermediate product. */
+    private function multiplyDivideRemainder(int $amount, int $weight, int $weightTotal): array
+    {
+        $bits = [];
+        for ($remaining = $weight; $remaining > 0; $remaining = intdiv($remaining, 2)) {
+            $bits[] = $remaining % 2;
+        }
+
+        $quotient = 0;
+        $remainder = 0;
+        foreach (array_reverse($bits) as $bit) {
+            if ($remainder >= $weightTotal - $remainder) {
+                $remainder -= $weightTotal - $remainder;
+                $quotient = $quotient * 2 + 1;
+            } else {
+                $remainder *= 2;
+                $quotient *= 2;
+            }
+
+            if ($bit === 1) {
+                $quotient += intdiv($amount, $weightTotal);
+                $addRemainder = $amount % $weightTotal;
+                if ($remainder >= $weightTotal - $addRemainder) {
+                    $remainder -= $weightTotal - $addRemainder;
+                    $quotient++;
+                } else {
+                    $remainder += $addRemainder;
+                }
+            }
+        }
+
+        return [$quotient, $remainder];
+    }
+
+    private function annualReportPrintEnabled(int $year, int $currentYear, string $printOn, string $timezone): bool
+    {
+        if ($year < $currentYear) {
+            return true;
+        }
+        if ($year > $currentYear) {
+            return false;
+        }
+
+        [$month, $day] = array_map('intval', explode('-', $printOn));
+        $printDate = Carbon::create($year, $month, 1, 0, 0, 0, $timezone);
+        $printDate->day = min($day, $printDate->daysInMonth);
+
+        return Carbon::now($timezone)->startOfDay()->greaterThanOrEqualTo($printDate);
+    }
+
+    private function storeTimezone(int $storeId): string
+    {
+        return (string) (DB::table('stores')->where('id', $storeId)->value('timezone') ?: 'Asia/Jakarta');
+    }
 
     /** @param list<string> $from */
     private function transition(User $actor, int $storeId, int $id, array $from, string $to, string $action, string $timeColumn): array

@@ -159,11 +159,13 @@ class OpnameCountTest extends SeededTestCase
     public function test_count_requires_opname_count_permission_but_lock_status_is_available_to_cashier(): void
     {
         $this->actAsAdmin();
+        $this->getJson('/api/auth/me')->assertOk()->assertJsonFragment(['opname.count']);
         $productId = $this->product();
         $sessionId = $this->startAll();
         $itemId = (int) DB::table('stock_opname_items')->where('session_id', $sessionId)->where('product_id', $productId)->value('id');
         $this->signIn('Kasir', 'cashier-count-denied');
 
+        $this->getJson('/api/auth/me')->assertOk()->assertJsonMissing(['opname.count']);
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $itemId,
             'mode' => 'set',

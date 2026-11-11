@@ -8,6 +8,7 @@ import type {
   PurchaseOrderRequisitionItem, PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, ProfitReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
+  AnnualReceivableReport, AnnualReceivableReportYears, AnnualReceivableReportSetting,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
   WarehouseSetting, InventoryMenuSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting, StockMonitoringSetting,
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
@@ -96,6 +97,17 @@ export const reportApi = {
 };
 
 export const billingApi = {
+  annualReportYears: () =>
+    api<{ data: AnnualReceivableReportYears }>('/annual-receivable-reports').then((r) => r.data),
+  annualReport: (year: number) =>
+    api<{ data: AnnualReceivableReport }>(`/annual-receivable-reports/${year}`).then((r) => r.data),
+  annualReportSetting: () =>
+    api<{ data: AnnualReceivableReportSetting }>('/settings/annual-receivable-report').then((r) => r.data),
+  updateAnnualReportSetting: (print_on: string) =>
+    api<{ data: AnnualReceivableReportSetting }>('/settings/annual-receivable-report', {
+      method: 'PUT',
+      body: { print_on },
+    }).then((r) => r.data),
   periods: (page = 1, perPage = 25) =>
     api<Paginated<BillingPeriod>>('/billing-periods', { query: { page, per_page: perPage } }),
   currentPeriod: () => api<{ data: BillingPeriod | null }>('/billing-periods/current').then((r) => r.data),

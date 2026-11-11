@@ -8,6 +8,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { billingApi } from '@/lib/api/endpoints';
 import type { BillingPeriod, Invoice, InvoiceStatus } from '@/lib/api/types';
 import { formatDate, formatDateTime, formatMonthYear, formatRupiah } from '@/lib/format';
+import { AnnualReceivableReports } from './AnnualReceivableReports';
 import { buildPaymentInput, validatePayment, type PaymentValues } from './billingForm';
 
 const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
@@ -30,7 +31,7 @@ export function BillingPage() {
   const canIssueInvoice = can('invoice.issue');
   const canRecordPayment = can('invoice.record_payment');
   const canViewPeriods = canManagePeriod || canClosePeriod;
-  const [activeTab, setActiveTab] = useState<'periods' | 'invoices'>('periods');
+  const [activeTab, setActiveTab] = useState<'periods' | 'invoices' | 'annual'>('periods');
   const [periodPage, setPeriodPage] = useState(1);
   const [invoicePage, setInvoicePage] = useState(1);
   const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus | ''>('');
@@ -75,6 +76,8 @@ export function BillingPage() {
     void qc.invalidateQueries({ queryKey: ['billing-period'] });
     void qc.invalidateQueries({ queryKey: ['invoices'] });
     void qc.invalidateQueries({ queryKey: ['invoice'] });
+    void qc.invalidateQueries({ queryKey: ['annual-receivable-report'] });
+    void qc.invalidateQueries({ queryKey: ['annual-receivable-report-years'] });
   };
   const openPeriod = useMutation({
     mutationFn: () => billingApi.openPeriod({
@@ -166,6 +169,11 @@ export function BillingPage() {
             {canGenerateInvoice && (
               <button type="button" role="tab" aria-selected={visibleTab === 'invoices'} onClick={() => setActiveTab('invoices')} className={`flex-1 border-b-2 px-4 py-3 text-sm ${visibleTab === 'invoices' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}>
                 Rekap Data Piutang
+              </button>
+            )}
+            {canGenerateInvoice && (
+              <button type="button" role="tab" aria-selected={visibleTab === 'annual'} onClick={() => setActiveTab('annual')} className={`flex-1 border-b-2 px-4 py-3 text-sm ${visibleTab === 'annual' ? 'border-slate-900 bg-slate-50 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}>
+                Tutup Tahun
               </button>
             )}
           </div>
@@ -325,6 +333,11 @@ export function BillingPage() {
               </>
             ) : <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada invoice untuk ditampilkan.</p>}
             </section>
+          </div>
+        )}
+        {canGenerateInvoice && visibleTab === 'annual' && (
+          <div role="tabpanel">
+            <AnnualReceivableReports />
           </div>
         )}
       </div>
