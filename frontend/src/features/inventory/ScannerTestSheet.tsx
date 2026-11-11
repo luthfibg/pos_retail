@@ -5,10 +5,9 @@ import scannerGuide from '../../../../docs/PANDUAN_SCANNER_BLUETOOTH.md?raw';
 
 interface Props {
   onClose: () => void;
-  onScan: () => void;
 }
 
-export function ScannerTestSheet({ onClose, onScan }: Props) {
+export function ScannerTestSheet({ onClose }: Props) {
   const [settings, setSettings] = useState<ScannerSettings>(readScannerSettings);
   const [diagnostics, setDiagnostics] = useState<ScannerDiagnostic[]>([]);
   const [calibrationScans, setCalibrationScans] = useState<ScannerDiagnostic[]>([]);
@@ -43,7 +42,7 @@ export function ScannerTestSheet({ onClose, onScan }: Props) {
 
   useScannerCapture({
     active: true,
-    onScan: () => onScan(),
+    onScan: () => undefined,
     onDiagnostic: (diagnostic) => {
       setDiagnostics((current) => [diagnostic, ...current].slice(0, 5));
       if (diagnostic.accepted && diagnostic.suffix === 'Enter' && diagnostic.raw) {

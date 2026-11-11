@@ -10,7 +10,7 @@ import { CountEntryForm } from './CountEntryForm';
 import { nextIncompleteNode } from './opnameWorkingNode';
 import { useScanFeedback } from './useScanFeedback';
 import { getPendingOfflineItems, toOfflineOpnameItem } from './useOpnameOffline';
-import { PendingBadge } from './SyncStatus';
+import { PendingBadge, SyncStatusChip } from './SyncStatus';
 
 interface Props {
   sessionId: number;
@@ -69,7 +69,7 @@ function ItemCard({
 export function CountingStack({ sessionId, active, canCount, revealsSystemQty, tree, workingNode }: Props) {
   const {
     selectedItem, activeNodeId, selectItem, startNode, pendingOperations, failedOperations,
-    isOnline, offlineIndex, isSyncing,
+    isOnline, offlineIndex, isSyncing, openSyncStatus,
   } = useOpnameWorkspace();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySelectionError, setHistorySelectionError] = useState('');
@@ -125,15 +125,24 @@ export function CountingStack({ sessionId, active, canCount, revealsSystemQty, t
     <div className="opname-count-stack space-y-2" aria-label="Rangkaian hitung">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Sudah dihitung</h3>
-        {active && canCount && (
-          <div className="flex items-center gap-2">
-            <label className="flex min-h-11 items-center gap-2 text-xs">
-              <input type="checkbox" checked={feedback.enabled} onChange={(event) => feedback.setEnabled(event.target.checked)} />
-              Suara dan getar
-            </label>
-            <button type="button" onClick={() => setHistoryOpen(true)} className="min-h-11 px-2 text-sm underline">Riwayat</button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <SyncStatusChip
+            isOnline={isOnline}
+            pendingCount={pendingOperations.length}
+            failedCount={failedOperations.length}
+            syncing={isSyncing}
+            onClick={openSyncStatus}
+          />
+          {active && canCount && (
+            <>
+              <label className="flex min-h-11 items-center gap-2 text-xs">
+                <input type="checkbox" checked={feedback.enabled} onChange={(event) => feedback.setEnabled(event.target.checked)} />
+                Suara dan getar
+              </label>
+              <button type="button" onClick={() => setHistoryOpen(true)} className="min-h-11 px-2 text-sm underline">Riwayat</button>
+            </>
+          )}
+        </div>
       </div>
       <ErrorNotice error={isOnline ? recentCounts.error ?? recommendations.error : null} />
       {recentItems.length ? (

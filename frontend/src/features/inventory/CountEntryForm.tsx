@@ -63,7 +63,6 @@ export function CountEntryForm({
     markOffline,
     offlineIndex,
     offlineIndexReady,
-    setLastScanAt,
     pendingOperations,
   } = useOpnameWorkspace();
   const mutation = useOpnameCountMutation(sessionId);
@@ -142,7 +141,6 @@ export function CountEntryForm({
   }
 
   function handleScan(code: string) {
-    setLastScanAt(Date.now());
     if (pickedItem && (quantityValue.current !== '' || retryInput !== null)) {
       setScanConflict(pickedItem.name);
       onScanError();

@@ -23,8 +23,7 @@ interface OpnameWorkspaceValue {
   offlineIndexReady: boolean;
   offlineIndexRefreshing: boolean;
   offlineIndexError: string | null;
-  lastScanAt: number | null;
-  setLastScanAt: Dispatch<SetStateAction<number | null>>;
+  openSyncStatus: () => void;
   loadItem: (item: OpnameItem) => void;
   selectItem: (item: OpnameItem) => void;
   startNode: (nodeId: string) => void;

@@ -13,7 +13,7 @@ import { OpnameWorkspaceProvider, useOpnameWorkspace } from './OpnameWorkspaceCo
 import { findNode as findProgressNode, resolveWorkingNode } from './opnameWorkingNode';
 import { CountingStack } from './CountingStack';
 import { ScannerTestSheet } from './ScannerTestSheet';
-import { PendingBadge, SyncFailedSheet, SyncStatusChip } from './SyncStatus';
+import { PendingBadge, SyncFailedSheet } from './SyncStatus';
 import { buildOfflineProgressTree, findOfflineItems, getPendingOfflineItems, toOfflineOpnameItem, useCountSync, useOfflineSessionIndex } from './useOpnameOffline';
 import { useScreenWakeLock } from './useScreenWakeLock';
 
@@ -645,13 +645,10 @@ export function OpnameSessionDetailPage() {
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [onlyUncounted, setOnlyUncounted] = useState(false);
-  const [summaryOpen, setSummaryOpen] = useState(false);
   const [workflowDialog, setWorkflowDialog] = useState<'submit' | 'approve' | 'reject' | null>(null);
   const [scannerTestOpen, setScannerTestOpen] = useState(false);
   const [syncSheetOpen, setSyncSheetOpen] = useState(false);
   const [showScannerTip, setShowScannerTip] = useState(() => localStorage.getItem('pos.opname.scanner-tip-dismissed') !== 'true');
-  const [lastScanAt, setLastScanAt] = useState<number | null>(null);
-  const [clock, setClock] = useState(Date.now());
   const [ownerPassword, setOwnerPassword] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const workflowRequestId = useRef(window.crypto.randomUUID());
@@ -738,11 +735,6 @@ export function OpnameSessionDetailPage() {
       document.removeEventListener('click', warnBeforeNavigation, true);
     };
   }, [countSync.failed.length, countSync.pending.length]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), 10_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (
@@ -837,8 +829,6 @@ export function OpnameSessionDetailPage() {
   const timezone = me?.store?.timezone || 'Asia/Jakarta';
   const tree = countSync.isOnline ? treeQuery.data : offlineTree ?? treeQuery.data;
   const view = workspaceView(searchParams.get('view'));
-  const activeNode = tree ? findNode(tree.nodes, activeNodeId) : null;
-  const activeParent = tree && activeNode ? findNodeById(tree.nodes, activeNode.parent_id) : null;
   const workingNode = tree ? resolveWorkingNode(tree, activeNodeId) : null;
 
   function changeView(next: WorkspaceView) {
@@ -873,15 +863,6 @@ export function OpnameSessionDetailPage() {
     searchTimer.current = window.setTimeout(() => setSearch(value.trim()), 250);
   }
 
-  async function refreshWorkspace() {
-    if (!countSync.isOnline) return;
-    await Promise.all([
-      detail.refetch(),
-      treeQuery.refetch(),
-      queryClient.invalidateQueries({ queryKey: ['opname', 'items', id] }),
-    ]);
-  }
-
   return (
     <div className="opname-workspace-page min-w-0 space-y-4 pb-20 md:pb-0">
       {session.status !== 'in_progress' && (
@@ -889,54 +870,6 @@ export function OpnameSessionDetailPage() {
           Sesi ini berstatus <strong>{statusLabel(session.status)}</strong>. Tampilan hanya baca.
         </div>
       )}
-      <header className="sticky top-0 z-20 space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link to="/inventory/adjustments/opname" className="inline-flex min-h-9 items-center text-xs font-medium underline">← Daftar sesi</Link>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={session.status} />
-          <SyncStatusChip
-            isOnline={countSync.isOnline}
-            pendingCount={countSync.pending.length}
-            failedCount={countSync.failed.length}
-            syncing={countSync.syncing}
-            onClick={() => setSyncSheetOpen(true)}
-          />
-          <button type="button" onClick={() => void refreshWorkspace()} disabled={treeQuery.isFetching || !countSync.isOnline} className="min-h-11 rounded-md border border-slate-300 px-3 text-sm font-medium disabled:opacity-50" aria-label="Muat ulang progres">
-            {treeQuery.isFetching ? '…' : 'Muat ulang'}
-          </button>
-          <button type="button" onClick={() => setSummaryOpen(true)} className="hidden min-h-11 rounded-md border border-slate-300 px-3 text-sm font-medium md:inline-flex md:items-center">Ringkasan</button>
-          {session.status === 'in_progress' && (
-            <details className="relative">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-md border border-slate-300 px-3 text-lg font-medium" aria-label="Menu lainnya">⋯</summary>
-              <div className="absolute right-0 z-30 mt-1 min-w-44 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
-                <button type="button" onClick={() => setScannerTestOpen(true)} className="min-h-11 w-full rounded px-3 text-left text-sm hover:bg-slate-50">Uji scanner</button>
-                {can('opname.cancel') && <button type="button" onClick={() => setCancelOpen(true)} className="min-h-11 w-full rounded px-3 text-left text-sm text-rose-800 hover:bg-rose-50">Batalkan sesi</button>}
-              </div>
-            </details>
-          )}
-        </div>
-        </div>
-        <div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Progres penghitungan" aria-valuemin={0} aria-valuemax={tree?.summary.total_products ?? session.total_products} aria-valuenow={tree?.summary.counted_products ?? session.counted_products}>
-            <div className="h-full rounded-full bg-emerald-600 transition-[width]" style={{ width: progressWidth(tree?.summary.counted_products ?? session.counted_products, tree?.summary.total_products ?? session.total_products) }} />
-          </div>
-          <p className="mt-1 text-xs text-slate-600">
-            {activeNode
-              ? `${activeNode.name} ${activeNode.counted_count}/${activeNode.product_count}${activeParent ? ` · ${activeParent.name} ${activeParent.counted_count}/${activeParent.product_count}` : ''}`
-              : `Progres total ${tree?.summary.counted_products ?? session.counted_products}/${tree?.summary.total_products ?? session.total_products}`}
-          </p>
-        </div>
-        {lastScanAt === null ? (
-          <p className="text-xs text-slate-500">Belum ada scan</p>
-        ) : (
-          <p className={`text-xs ${clock - lastScanAt > 180_000 ? 'text-slate-400' : 'text-slate-600'}`}>
-            Scan terakhir: {Math.max(0, Math.floor((clock - lastScanAt) / 1000))} dtk lalu
-          </p>
-        )}
-        {countSync.queueError && <p role="status" className="text-xs text-amber-900">{countSync.queueError}</p>}
-      </header>
       {session.status === 'in_progress' && showScannerTip && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
           <span>Uji scanner dulu agar akurat.</span>
@@ -993,25 +926,13 @@ export function OpnameSessionDetailPage() {
         offlineIndexReady: offlineIndex.ready,
         offlineIndexRefreshing: offlineIndex.refreshing,
         offlineIndexError: offlineIndex.error,
-        lastScanAt,
-        setLastScanAt,
+        openSyncStatus: () => setSyncSheetOpen(true),
         loadItem,
         selectItem: loadItem,
         startNode,
         workingNodeId: workingNode ? String(workingNode.id) : null,
       }}>
         {view === 'ringkasan' && mobile && <WorkspaceSummary session={session} tree={tree} timezone={timezone} />}
-        {summaryOpen && (
-          <div className="fixed inset-0 z-40 flex items-stretch justify-center overflow-y-auto bg-slate-900/50 md:items-center md:p-4">
-            <div role="dialog" aria-modal="true" aria-labelledby="opname-summary-title" className="my-auto w-full bg-white p-4 md:max-w-4xl md:rounded-xl md:shadow-xl">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h3 id="opname-summary-title" className="text-lg font-semibold">Ringkasan sesi</h3>
-                <button type="button" autoFocus onClick={() => setSummaryOpen(false)} className="min-h-11 rounded-md border border-slate-300 px-4">Tutup</button>
-              </div>
-              <WorkspaceSummary session={session} tree={tree} timezone={timezone} />
-            </div>
-          </div>
-        )}
         <WorkspacePanels
           id={id}
           tree={tree ?? EMPTY_TREE}
@@ -1036,6 +957,8 @@ export function OpnameSessionDetailPage() {
           view={view}
           onViewChange={changeView}
           active={session.status === 'in_progress'}
+          canCancel={session.status === 'in_progress' && can('opname.cancel')}
+          onCancel={() => setCancelOpen(true)}
           scannerTestOpen={scannerTestOpen}
           canCount={can('opname.count')}
           revealsSystemQty={countSync.isOnline && (tree?.display.reveals_system_qty ?? false)}
@@ -1053,7 +976,7 @@ export function OpnameSessionDetailPage() {
           onSubmit={() => cancel.mutate()}
         />
       )}
-      {scannerTestOpen && <ScannerTestSheet onClose={() => setScannerTestOpen(false)} onScan={() => setLastScanAt(Date.now())} />}
+      {scannerTestOpen && <ScannerTestSheet onClose={() => setScannerTestOpen(false)} />}
       {syncSheetOpen && (
         <SyncFailedSheet
           pending={countSync.pending}
@@ -1114,20 +1037,6 @@ function useMobileViewport(): boolean {
     return () => media.removeEventListener('change', update);
   }, []);
   return isMobile;
-}
-
-function findNode(nodes: OpnameProgressNode[], nodeId: string | null): OpnameProgressNode | null {
-  if (nodeId === null) return null;
-  for (const node of nodes) {
-    if (String(node.id) === nodeId) return node;
-    const child = findNode(node.children, nodeId);
-    if (child) return child;
-  }
-  return null;
-}
-
-function findNodeById(nodes: OpnameProgressNode[], nodeId: number | null): OpnameProgressNode | null {
-  return nodeId === null ? null : findNode(nodes, String(nodeId));
 }
 
 function flattenNodes(nodes: OpnameProgressNode[]): OpnameProgressNode[] {
@@ -1282,6 +1191,15 @@ function OpnameWorkflowPanel({
 }) {
   const complete = session.counted_products === session.total_products;
   const totals = report?.totals;
+  const hasContent = (session.status === 'in_progress' && !isOnline)
+    || (session.status === 'in_progress' && !canReview && complete)
+    || (session.status === 'in_progress' && Boolean(session.reject_reason))
+    || reportLoading
+    || reportError !== null
+    || (session.status === 'in_progress' && canPost && complete && !report?.complete)
+    || Boolean(report?.complete && totals);
+  if (!hasContent) return null;
+
   return (
     <section aria-label="Laporan dan posting opname" className="opname-report space-y-3 rounded-lg border border-slate-200 bg-white p-4">
       {session.status === 'in_progress' && !isOnline && (
@@ -1462,6 +1380,8 @@ function WorkspacePanels({
   view,
   onViewChange,
   active,
+  canCancel,
+  onCancel,
   scannerTestOpen,
   canCount,
   revealsSystemQty,
@@ -1488,6 +1408,8 @@ function WorkspacePanels({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
   active: boolean;
+  canCancel: boolean;
+  onCancel: () => void;
   scannerTestOpen: boolean;
   canCount: boolean;
   revealsSystemQty: boolean;
@@ -1526,9 +1448,12 @@ function WorkspacePanels({
         <section aria-label="Peta progres opname" className={`${showList ? '' : 'hidden'} max-h-[calc(100dvh-14rem)] min-w-0 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 sm:p-4`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold">Daftar produk</h3>
-            <button type="button" onClick={() => setListCollapsed((value) => !value)} className="hidden min-h-11 rounded-md border border-slate-300 px-3 text-sm md:inline-flex md:items-center lg:hidden">
-              Lipat daftar
-            </button>
+            <div className="flex items-center gap-2">
+              {canCancel && <button type="button" onClick={onCancel} className="min-h-11 rounded-md border border-rose-300 px-3 text-sm text-rose-800">Batalkan sesi</button>}
+              <button type="button" onClick={() => setListCollapsed((value) => !value)} className="hidden min-h-11 rounded-md border border-slate-300 px-3 text-sm md:inline-flex md:items-center lg:hidden">
+                Lipat daftar
+              </button>
+            </div>
           </div>
           <label className="mt-3 block">
             <span className="sr-only">Cari kategori, produk, atau barcode</span>
