@@ -48,6 +48,7 @@ export function addProduct(lines: CartLine[], product: CartProduct, qty = '1'): 
   const existing = lines.find((l) => l.product.id === product.id);
   if (existing) {
     const current = qtyToMilli(normalizeDecimal(existing.qty)) ?? 0n;
+    if (current + add > MAX_QTY_MILLI) return lines;
     return lines.map((l) => (l.key === existing.key ? { ...l, qty: compactQty(current + add) } : l));
   }
   if (lines.length >= MAX_LINES) return lines;

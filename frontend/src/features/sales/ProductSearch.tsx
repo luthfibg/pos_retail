@@ -14,14 +14,13 @@ const toCartProduct = (p: Product): CartProduct => ({
 });
 
 interface Props {
-  onPick: (p: CartProduct, source: 'scan' | 'search') => void;
+  onPick: (p: CartProduct, source: 'scan' | 'search') => 'added' | 'incremented' | 'limit';
   inputRef: RefObject<HTMLInputElement | null>;
   disabled?: boolean;
 }
 
 /**
- * Kolom scan/cari kasir. Enter = coba barcode persis dulu (scanner USB mengetik lalu Enter),
- * bila tidak ada pakai hasil pencarian pertama yang bisa dijual. Klik hasil juga menambah ke keranjang.
+ * Kolom scan/cari kasir. Enter hanya menambahkan hasil barcode persis; hasil pencarian nama/SKU dipilih manual.
  */
 export function ProductSearch({ onPick, inputRef, disabled }: Props) {
   const [text, setText] = useState('');
@@ -39,18 +38,24 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
 
   function accept(p: Product, source: 'scan' | 'search' = 'search') {
     if (!isSellable(p)) {
-      setMessage({ type: 'error', text: `“${p.name}” belum dapat dijual (menunggu harga atau nonaktif).` });
+      const reason = p.status === 'inactive' ? 'produk nonaktif' : 'produk masih menunggu harga';
+      setMessage({ type: 'error', text: `“${p.name}” tidak dapat dijual karena ${reason}. Keranjang tidak berubah.` });
       return;
     }
-    onPick(toCartProduct(p), source);
+    const result = onPick(toCartProduct(p), source);
+    if (result === 'limit') {
+      setMessage({
+        type: 'error',
+        text: source === 'scan'
+          ? 'Scan tidak ditambahkan: batas Qty atau jumlah baris keranjang tercapai.'
+          : 'Produk tidak ditambahkan: batas Qty atau jumlah baris keranjang tercapai.',
+      });
+      return;
+    }
     setText('');
     setOpen(false);
-    setMessage({
-      type: 'success',
-      text: source === 'scan'
-        ? `“${p.name}” ditemukan. Masukkan jumlah di kolom Qty, lalu tekan Enter untuk scan berikutnya.`
-        : `“${p.name}” ditambahkan ke keranjang. Siap untuk scan berikutnya.`,
-    });
+    const action = result === 'incremented' ? 'Qty ditambah 1' : 'ditambahkan ke keranjang';
+    setMessage({ type: 'success', text: `“${p.name}” ${action}.${source === 'scan' && result === 'added' ? ' Masukkan jumlah di kolom Qty, lalu tekan Enter untuk scan berikutnya.' : ' Siap untuk scan berikutnya.'}` });
     inputRef.current?.focus();
   }
 
@@ -63,14 +68,8 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
       accept(await productApi.byBarcode(code), 'scan');
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
-        try {
-          const res = await productApi.list({ q: code, per_page: 8 });
-          const found = res.data.find((p) => p.status !== 'inactive' && isSellable(p)) ?? res.data[0];
-          if (found) accept(found);
-          else setMessage({ type: 'error', text: `Produk “${code}” tidak ditemukan.` });
-        } catch (e2) {
-          setMessage({ type: 'error', text: e2 instanceof ApiError ? e2.firstError() : 'Gagal mencari produk.' });
-        }
+        setOpen(true);
+        setMessage({ type: 'error', text: `Tidak ada produk dengan barcode/kode persis “${code}”. Jika mencari nama atau SKU, pilih produk dari daftar.` });
       } else {
         setMessage({ type: 'error', text: e instanceof ApiError ? e.firstError() : 'Gagal mencari produk.' });
       }

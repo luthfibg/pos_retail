@@ -16,6 +16,11 @@ describe('keranjang', () => {
     expect(l).toHaveLength(1);
     expect(l[0]?.qty).toBe('1.6');
   });
+  it('menolak scan yang membuat qty melebihi batas tanpa mengubah keranjang', () => {
+    const l = addProduct([], air, '99999');
+    expect(addProduct(l, air)).toBe(l);
+    expect(l[0]?.qty).toBe('99999');
+  });
   it('setelah satu scan, qty bisa diubah sebelum dikirim untuk pratinjau harga', () => {
     const scanned = addProduct([], air);
     const line = scanned[0];

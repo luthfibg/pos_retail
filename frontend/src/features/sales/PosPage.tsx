@@ -187,11 +187,15 @@ export function PosPage() {
   }, [lines, scanQuantityProductId]);
 
   function pick(p: CartProduct, source: 'scan' | 'search' = 'search') {
-    setLines((ls) => addProduct(ls, p));
-    if (source === 'scan') setScanQuantityProductId(p.id);
+    const existing = lines.some((line) => line.product.id === p.id);
+    const nextLines = addProduct(lines, p);
+    if (nextLines === lines) return 'limit';
+    setLines(nextLines);
+    if (source === 'scan' && !existing) setScanQuantityProductId(p.id);
     setErrors(NO_ERRORS);
     setTopError(null);
     searchRef.current?.focus();
+    return existing ? 'incremented' : 'added';
   }
 
   function changeMode(m: PaymentMode) {
