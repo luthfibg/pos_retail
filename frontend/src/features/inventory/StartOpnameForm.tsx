@@ -306,7 +306,7 @@ function CategoryRow({
             onChange={() => onToggle(fullCategory)}
             className="h-4 w-4 shrink-0"
           />
-          <span className="min-w-0 flex-1 break-words">{category.name} ({new Intl.NumberFormat('id-ID').format(category.product_count)})</span>
+          <span className="min-w-0 flex-1 wrap-break-word">{category.name} ({new Intl.NumberFormat('id-ID').format(category.product_count)})</span>
         </label>
         {locked && <span className="max-w-36 text-right text-xs text-amber-800">Dipakai {locked.number}</span>}
       </div>

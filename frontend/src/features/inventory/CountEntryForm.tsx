@@ -331,8 +331,9 @@ export function CountEntryForm({
         <>
           {!pickedItem && !manualSearch && (
             <div className="rounded-lg bg-slate-50 p-3 text-center">
-              <p className="text-lg font-semibold">Scan barcode produk</p>
-              <p className="mt-1 text-xs text-slate-600">Arahkan scanner ke barcode. Scanner harus mengirim Enter atau Tab setelah kode.</p>
+              <p className="text-lg font-semibold">Scan barcode</p>
+              <p className="mt-1 text-xs text-slate-600">Arahkan scanner ke barcode.</p>
+              {/* Scanner harus mengirim Enter atau Tab setelah kode. */}
               <button type="button" onClick={() => setManualSearch(true)} className="mt-2 min-h-11 px-3 text-sm underline">Cari manual</button>
             </div>
           )}

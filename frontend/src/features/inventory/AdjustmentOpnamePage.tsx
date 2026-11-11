@@ -43,7 +43,6 @@ export function AdjustmentOpnamePage() {
     <div className="min-w-0 pb-24 md:pb-6">
       <header className="px-4 pt-5 md:px-6 md:pt-6">
         <h1 className="text-xl font-semibold">Adjustment &amp; Opname</h1>
-        <p className="mt-1 text-sm text-slate-600">Kelola penyesuaian stok dan stock opname toko.</p>
       </header>
       <div className="sticky top-0 z-20 mt-4 border-y border-slate-200 bg-white/95 px-4 backdrop-blur md:px-6">
         <nav role="tablist" aria-label="Adjustment dan opname" onKeyDown={moveTab} className="flex w-full">
