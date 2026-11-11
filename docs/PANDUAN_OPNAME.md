@@ -21,13 +21,14 @@ Panduan singkat untuk Admin dan Owner POS Retail SMK.
 
 1. Setelah hitungan lengkap, buka laporan dan tinjau total, kategori, serta produk berselisih.
 2. Bila perlu koreksi, buka produk dan hitung ulang; riwayat hitungan mencatat revisi. Setelah koreksi, periksa kembali laporan.
-3. Admin dapat memposting langsung bila tidak diperlukan persetujuan. Jika ambang atau aturan opname pertama mengharuskan persetujuan, ajukan sesi kepada Owner.
-4. Owner memeriksa laporan dan memilih **Setujui dan posting** atau **Tolak**. Sesi yang ditolak kembali untuk dihitung ulang; setelah koreksi, ajukan lagi.
-5. Posting memperbarui stok dari hasil beku dan melepas lock. Pastikan layar menunjukkan status selesai sebelum toko kembali bertransaksi.
+3. Jika ambang atau aturan opname pertama mengharuskan persetujuan, ajukan sesi. Sesi berstatus **Menunggu persetujuan** dan stok tetap terkunci.
+4. Buka kembali detail sesi dari daftar Opname. Tombol **Setujui dan posting** dan **Tolak** tersedia di panel laporan pada halaman detail untuk Admin (model sederhana) atau Owner (model standar). Pemberi persetujuan mengonfirmasi dengan password akunnya sendiri.
+5. Sesi yang ditolak kembali untuk dihitung ulang; setelah koreksi, tinjau laporan dan ajukan lagi. Jika tidak ada persetujuan yang diperlukan, Admin atau Owner dapat memposting langsung.
+6. Posting memperbarui stok dari hasil beku dan melepas lock. Pastikan layar menunjukkan status selesai sebelum toko kembali bertransaksi.
 
 ## Laporan, riwayat, dan ekspor
 
-- Laporan menampilkan jumlah produk, kurang/lebih, dan nilai hanya bagi role yang berhak. Admin tidak melihat nilai rupiah atau ambang; Owner dan Accounting hanya melihat nilai jika memiliki izin `opname.view_value`.
+- Laporan menampilkan jumlah produk, kurang/lebih, dan nilai hanya bagi role yang berhak. Admin pada model sederhana memiliki kewenangan persetujuan serta dapat melihat/mengatur ambang; pada model standar kewenangan itu dipegang Owner. Accounting hanya melihat nilai jika memiliki izin `opname.view_value`.
 - Di riwayat, pilih pengelompokan bulan, kuartal, tahun, atau semua. Gunakan filter status, hasil, cakupan, dan tanggal untuk mempersempit daftar.
 - Produk sering berselisih dan tren membantu menemukan pola, tetapi bukan pengganti pemeriksaan fisik.
 - Pada laporan, **Cetak** membuka dialog cetak peramban (pilih printer atau simpan sebagai PDF). Unduh CSV ringkasan untuk rekap kategori/subkategori atau CSV detail untuk baris selisih. Pilih koma atau titik koma untuk Excel Indonesia.
@@ -39,4 +40,3 @@ Panduan singkat untuk Admin dan Owner POS Retail SMK.
 2. Buka status sinkronisasi untuk melihat operasi tertunda/gagal. Coba ulang kegagalan setelah koneksi pulih; jangan menghapus antrean yang belum dipahami.
 3. Posting tidak tersedia sampai perangkat online dan seluruh antrean kosong. Setelah tersinkron, segarkan progres dan pastikan jumlah produk dihitung sesuai.
 4. Jika sesi tidak dapat dilanjutkan, pastikan tidak ada antrean tertunda, catat nomor sesi dan pesan yang tampil, lalu minta bantuan administrator. Batalkan sesi hanya bila yakin sesi tersebut tidak akan dilanjutkan; pembatalan melepas lock dan tidak dapat dipakai untuk posting.
-

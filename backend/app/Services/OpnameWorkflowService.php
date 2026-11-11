@@ -60,7 +60,7 @@ class OpnameWorkflowService
             $items = $this->completeItems($sessionId);
             $owner = $this->settings->isOwner($actor, $storeId);
             if ($owner) {
-                $this->confirmOwner($actor, $storeId, (string) ($data['owner_password'] ?? ''), 'opname.post');
+                $this->confirmApprover($actor, $storeId, (string) ($data['owner_password'] ?? ''), 'opname.post');
             }
 
             $snapshot = $this->makeSnapshot($storeId, $sessionId, $items);
@@ -97,7 +97,7 @@ class OpnameWorkflowService
                     $storeId,
                     'opname.approve',
                     'stock_opname_approval_required',
-                    "Stock opname {$session->number} menunggu persetujuan Owner.",
+                    "Stock opname {$session->number} menunggu persetujuan Admin atau Owner.",
                     'stock_opname_session',
                     $sessionId,
                     $actor->id,
@@ -156,7 +156,7 @@ class OpnameWorkflowService
             if ($session->status !== 'pending_approval') {
                 throw $this->invalidStatus($session->status, 'Hanya sesi yang menunggu persetujuan yang dapat disetujui.');
             }
-            $approver = $this->confirmOwner($actor, $storeId, (string) $data['owner_password'], 'opname.approve');
+            $approver = $this->confirmApprover($actor, $storeId, (string) $data['owner_password'], 'opname.approve');
             $items = $this->completeItems($sessionId);
             $snapshot = $this->frozenSnapshot($sessionId, $session, $items);
             $this->assertStockUnchanged($storeId, $this->itemsWithDifferences($items, $snapshot));
@@ -214,7 +214,7 @@ class OpnameWorkflowService
             if ($session->status !== 'pending_approval') {
                 throw $this->invalidStatus($session->status, 'Hanya sesi yang menunggu persetujuan yang dapat ditolak.');
             }
-            $approver = $this->confirmOwner($actor, $storeId, (string) $data['owner_password'], 'opname.approve');
+            $approver = $this->confirmApprover($actor, $storeId, (string) $data['owner_password'], 'opname.approve');
             $reason = trim((string) $data['reason']);
             $now = $this->now();
             DB::table('stock_opname_items')->where('session_id', $sessionId)->update([
@@ -268,19 +268,19 @@ class OpnameWorkflowService
     private function assertOwnerApprover(User $actor, int $storeId): void
     {
         abort_unless(
-            $this->settings->isOwner($actor, $storeId) && app(PermissionResolver::class)->allows($actor, 'opname.approve', $storeId),
+            $this->settings->isApprovalAuthority($actor, $storeId) && app(PermissionResolver::class)->allows($actor, 'opname.approve', $storeId),
             403,
-            'Persetujuan stock opname hanya dapat dilakukan Owner.',
+            'Persetujuan stock opname hanya dapat dilakukan Admin pada model sederhana atau Owner.',
         );
     }
 
-    private function confirmOwner(User $actor, int $storeId, string $password, string $permission): User
+    private function confirmApprover(User $actor, int $storeId, string $password, string $permission): User
     {
-        if (! $this->settings->isOwner($actor, $storeId)) {
-            abort(403, 'Aksi ini hanya dapat dilakukan Owner.');
+        if (! $this->settings->isApprovalAuthority($actor, $storeId)) {
+            abort(403, 'Aksi ini hanya dapat dilakukan Admin pada model sederhana atau Owner.');
         }
         if ($password === '') {
-            throw ValidationException::withMessages(['owner_password' => ['Password Owner wajib dikonfirmasi.']]);
+            throw ValidationException::withMessages(['owner_password' => ['Password Admin atau Owner wajib dikonfirmasi.']]);
         }
 
         try {
@@ -438,8 +438,8 @@ class OpnameWorkflowService
     {
         $lines = [];
         foreach ($items as $item) {
-            $value = $snapshot['item_values'][(int) $item->id];
-            if (Decimal::qty($value['diff_qty']) === 0) {
+            $value = $snapshot['item_values'][(int) $item->id] ?? null;
+            if ($value === null || Decimal::qty($value['diff_qty']) === 0) {
                 continue;
             }
             $lines[] = [

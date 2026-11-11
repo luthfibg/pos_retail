@@ -34,7 +34,7 @@ export function useConnectionStatus(): { isOnline: boolean; markOffline: () => v
     };
   }, [markOffline, markOnline]);
   return useMemo(() => ({
-    isOnline: reachable && navigator.onLine,
+    isOnline: reachable,
     markOffline,
     markOnline,
   }), [markOffline, markOnline, reachable]);
@@ -210,21 +210,24 @@ export function useCountSync(userId: number | undefined, sessionId: number, acti
       setPending(operations.filter((operation) => operation.status === 'pending'));
       setFailed(operations.filter((operation) => operation.status === 'failed'));
       setQueueScope(scope);
-      setQueueError(null);
     } catch (caught) {
       setQueueError(caught instanceof Error ? caught.message : 'Antrean lokal tidak dapat dibaca.');
     }
   }, [scope, sessionId, userId]);
 
   const syncNow = useCallback(async () => {
-    if (!active || !userId || !navigator.onLine || running.current) return;
+    if (!active || !userId || running.current) return;
     running.current = true;
+    setQueueError(null);
+    let leaseError: string | null = null;
     const acquired = await countSyncQueue.acquireLease(userId, sessionId, owner.current).catch((caught: unknown) => {
-      setQueueError(caught instanceof Error ? caught.message : 'Tidak dapat mengunci antrean lokal.');
+      leaseError = caught instanceof Error ? caught.message : 'Tidak dapat mengunci antrean lokal.';
+      setQueueError(leaseError);
       return false;
     });
     if (!acquired) {
       running.current = false;
+      if (!leaseError) setQueueError('Antrean sedang diproses di tab lain. Tunggu sebentar lalu coba lagi.');
       return;
     }
     setSyncing(true);
@@ -234,7 +237,7 @@ export function useCountSync(userId: number | undefined, sessionId: number, acti
       });
     }, 10_000);
     try {
-      while (navigator.onLine) {
+      while (true) {
         const operations = await countSyncQueue.pending(userId, sessionId);
         if (operations.length === 0) break;
         const batch = operations.slice(0, SYNC_BATCH_SIZE);
@@ -253,9 +256,10 @@ export function useCountSync(userId: number | undefined, sessionId: number, acti
         await queryClient.invalidateQueries({ queryKey: ['opname', 'session', sessionId] });
         retryIndex.current = 0;
         connection.markOnline();
+        setQueueError(null);
       }
     } catch (caught) {
-      if (caught instanceof ApiError && caught.status > 0 && caught.status < 500) {
+      if (caught instanceof ApiError && caught.status > 0 && caught.status < 500 && caught.status !== 429) {
         const batch = await countSyncQueue.pending(userId, sessionId);
         for (const operation of batch) {
           await countSyncQueue.markFailed(operation, {
@@ -263,7 +267,16 @@ export function useCountSync(userId: number | undefined, sessionId: number, acti
             message: caught.message || 'Operasi ditolak oleh server.',
           });
         }
+        connection.markOnline();
+        setQueueError(caught.message || 'Server menolak hitungan. Periksa alasan pada daftar gagal tersinkron.');
+      } else if (caught instanceof ApiError && caught.status > 0) {
+        connection.markOnline();
+        setQueueError(caught.message || 'Server belum dapat memproses antrean. Hitungan tetap tersimpan dan akan dicoba lagi.');
+      } else if (caught instanceof ApiError) {
+        connection.markOffline();
+        setQueueError(caught.message || 'Tidak dapat terhubung ke server. Hitungan tetap tersimpan di antrean lokal.');
       } else {
+        setQueueError(caught instanceof Error ? caught.message : 'Sinkronisasi gagal. Hitungan tetap tersimpan di antrean lokal.');
         connection.markOffline();
       }
       const delay = getCountSyncRetryDelay(retryIndex.current);
@@ -296,7 +309,10 @@ export function useCountSync(userId: number | undefined, sessionId: number, acti
       void opnameLockApi.status().then(() => {
         connection.markOnline();
         void syncNow();
-      }).catch(() => connection.markOffline());
+      }).catch((caught: unknown) => {
+        if (caught instanceof ApiError && caught.status === 0) connection.markOffline();
+        else connection.markOnline();
+      });
     }, 15_000);
     window.addEventListener('online', online);
     return () => {

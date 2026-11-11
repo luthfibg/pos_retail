@@ -1104,12 +1104,12 @@ function formatReportMoney(value: string | number): string {
 
 function approvalReasonLabel(reason: { type: string; product_name?: string }): string {
   const labels: Record<string, string> = {
-    per_product_threshold: 'Nilai selisih produk memerlukan persetujuan Owner',
-    per_session_threshold: 'Total nilai selisih memerlukan persetujuan Owner',
+    per_product_threshold: 'Nilai selisih produk memerlukan persetujuan Admin atau Owner',
+    per_session_threshold: 'Total nilai selisih memerlukan persetujuan Admin atau Owner',
     first_opname: 'Opname pertama di toko',
     cost_missing: 'Harga pokok produk tidak tersedia',
   };
-  const label = labels[reason.type] ?? 'Memerlukan persetujuan Owner';
+  const label = labels[reason.type] ?? 'Memerlukan persetujuan Admin atau Owner';
   return reason.product_name ? `${label}: ${reason.product_name}` : label;
 }
 
@@ -1259,7 +1259,7 @@ function OpnameWorkflowPanel({
           </div>
           {report.approval?.required && (
             <div role="status" className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-              <strong>Memerlukan persetujuan Owner</strong>
+              <strong>Memerlukan persetujuan Admin atau Owner</strong>
               {report.approval.reasons.map((reason, index) => <p key={`${reason.type}-${reason.product_id ?? index}`}>• {approvalReasonLabel(reason)}</p>)}
               {report.approval.thresholds && (
                 <p className="pt-1 text-xs">Ambang per produk {formatReportMoney(report.approval.thresholds.per_product)} · per sesi {formatReportMoney(report.approval.thresholds.per_session)}</p>
@@ -1267,7 +1267,7 @@ function OpnameWorkflowPanel({
             </div>
           )}
           {session.status === 'pending_approval' && !canApprove && (
-            <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">Sesi menunggu persetujuan Owner. Stok masih terkunci.</p>
+            <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">Sesi menunggu persetujuan Admin atau Owner. Stok masih terkunci.</p>
           )}
           {session.status === 'pending_approval' && canApprove && (
             <div className="flex flex-wrap gap-2 print:hidden">
@@ -1278,7 +1278,7 @@ function OpnameWorkflowPanel({
           {session.status === 'in_progress' && canPost && complete && (
             <>
               <button type="button" disabled={!postingAllowed} onClick={onSubmit} className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white print:hidden disabled:opacity-50">
-                {isOwner ? 'Posting Opname' : report.approval?.required ? 'Ajukan ke Owner' : 'Posting Opname'}
+                {isOwner ? 'Posting Opname' : report.approval?.required ? 'Ajukan untuk persetujuan' : 'Posting Opname'}
               </button>
               {!postingAllowed && <p className="text-sm text-amber-900">{postBlockedReason}</p>}
             </>
@@ -1337,7 +1337,7 @@ function OpnameWorkflowDialog({
         )}
         {ownerRequired && (
           <label className="block space-y-1 text-sm font-medium">
-            <span>Password Owner</span>
+            <span>Password Admin atau Owner</span>
             <input type="password" autoComplete="current-password" value={ownerPassword} onChange={(event) => onPasswordChange(event.target.value)} className="min-h-11 w-full rounded-md border border-slate-300 px-3" />
           </label>
         )}

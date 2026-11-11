@@ -153,8 +153,8 @@ export function OpnameSettingsPage({ embedded = false }: { embedded?: boolean } 
       </section>
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
         <div>
-          <h3 className="font-semibold">Persetujuan Owner</h3>
-          <p className="mt-1 text-sm text-slate-600">Selisih bernilai besar, biaya modal yang tidak tersedia, dan opname pertama memerlukan persetujuan Owner.</p>
+          <h3 className="font-semibold">Persetujuan selisih opname</h3>
+          <p className="mt-1 text-sm text-slate-600">Selisih bernilai besar, biaya modal yang tidak tersedia, dan opname pertama memerlukan persetujuan Admin atau Owner.</p>
         </div>
         {query.data.per_product_threshold !== undefined ? (
           <>
@@ -168,7 +168,7 @@ export function OpnameSettingsPage({ embedded = false }: { embedded?: boolean } 
             </label>
             <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
               <input type="checkbox" checked={requireFirst} onChange={(event) => setRequireFirst(event.target.checked)} className="h-5 w-5" />
-              Persetujuan Owner wajib untuk opname pertama
+              Persetujuan Admin atau Owner wajib untuk opname pertama
             </label>
             <button
               type="button"
@@ -184,7 +184,7 @@ export function OpnameSettingsPage({ embedded = false }: { embedded?: boolean } 
             </button>
           </>
         ) : (
-          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">Nilai ambang dan pengaturan opname pertama hanya dapat dilihat dan diubah oleh Owner.</p>
+          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">Nilai ambang dan pengaturan opname pertama hanya dapat dilihat dan diubah oleh Admin pada model sederhana atau Owner.</p>
         )}
       </section>
     </div>

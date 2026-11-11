@@ -81,7 +81,7 @@ export function SyncFailedSheet({
           <button type="button" onClick={onClose} className="min-h-11 rounded-md border border-slate-300 px-3">Tutup</button>
         </header>
         {queueError && <p role="alert" className="rounded-md bg-rose-50 p-3 text-sm text-rose-900">{queueError}</p>}
-        <button type="button" disabled={syncing || pending.length === 0 || !navigator.onLine} onClick={onSync} className="min-h-11 w-full rounded-md bg-slate-900 px-4 font-medium text-white disabled:opacity-50">
+        <button type="button" disabled={syncing || pending.length === 0} onClick={onSync} className="min-h-11 w-full rounded-md bg-slate-900 px-4 font-medium text-white disabled:opacity-50">
           {syncing ? 'Menyinkronkan…' : 'Sinkronkan sekarang'}
         </button>
         {pending.length > 200 && <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">Antrean lebih dari 200 operasi. Segera sambungkan jaringan untuk sinkron.</p>}

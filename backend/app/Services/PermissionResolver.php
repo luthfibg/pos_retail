@@ -74,8 +74,10 @@ class PermissionResolver
             ->where('up.store_id', $storeId)
             ->get(['p.code', 'up.effect']);
 
+        $simpleAdmin = in_array('Admin', $roleNames, true)
+            && DB::table('settings')->where('store_id', $storeId)->where('setting_key', 'admin_model')->value('setting_value') !== json_encode('standard');
         $ownerOrAccounting = array_intersect($roleNames, ['Owner', 'Accounting']) !== [];
-        if (in_array('Admin', $roleNames, true) && ! $ownerOrAccounting) {
+        if (in_array('Admin', $roleNames, true) && ! $ownerOrAccounting && ! $simpleAdmin) {
             unset($set['opname.approve'], $set['opname.view_value']);
         }
         foreach ($overrides as $override) {
@@ -84,6 +86,7 @@ class PermissionResolver
             } else {
                 if (! (in_array('Admin', $roleNames, true)
                     && ! $ownerOrAccounting
+                    && ! $simpleAdmin
                     && in_array($override->code, ['opname.approve', 'opname.view_value'], true))) {
                     $set[$override->code] = true;
                 }

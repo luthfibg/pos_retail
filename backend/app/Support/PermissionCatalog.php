@@ -35,7 +35,7 @@ final class PermissionCatalog
             'opname.settings.manage' => 'Mengubah pengaturan sesi stock opname',
             'opname.review' => 'Melihat pratinjau hasil stock opname',
             'opname.post' => 'Mengajukan atau memposting hasil stock opname',
-            'opname.approve' => 'Menyetujui atau menolak hasil stock opname sebagai Owner',
+            'opname.approve' => 'Menyetujui atau menolak hasil stock opname (Admin pada model sederhana atau Owner)',
             'opname.view_value' => 'Melihat nilai rupiah selisih stock opname',
             'discount.manage' => 'Kelola diskon',
             'customer.create' => 'Menambah data karyawan (status menunggu verifikasi)',

@@ -49,8 +49,8 @@ class OpnameApprovalSettingsService
         $hasReminder = array_key_exists('reminder_enabled', $data)
             || array_key_exists('reminder_interval_days', $data)
             || array_key_exists('reminder_basis', $data);
-        if ($hasThresholds && ! $this->isOwner($user, $storeId)) {
-            abort(403, 'Hanya Owner yang dapat mengubah ambang persetujuan opname.');
+        if ($hasThresholds && ! $this->isApprovalAuthority($user, $storeId)) {
+            abort(403, 'Hanya Admin pada model sederhana atau Owner yang dapat mengubah ambang persetujuan opname.');
         }
         if ($hasReminder && ! $this->isAdminOrOwner($user, $storeId)) {
             abort(403, 'Hanya Admin atau Owner yang dapat mengubah pengingat opname.');
@@ -137,6 +137,23 @@ class OpnameApprovalSettingsService
             ->where('ur.user_id', $user->id)
             ->where('ur.store_id', $storeId)
             ->where('r.name', 'Owner')
+            ->exists();
+    }
+
+    public function isApprovalAuthority(User $user, int $storeId): bool
+    {
+        if ($this->isOwner($user, $storeId)) {
+            return true;
+        }
+
+        $simpleModel = DB::table('settings')->where('store_id', $storeId)
+            ->where('setting_key', 'admin_model')->value('setting_value') !== json_encode('standard');
+
+        return $simpleModel && DB::table('user_roles as ur')
+            ->join('roles as r', 'r.id', '=', 'ur.role_id')
+            ->where('ur.user_id', $user->id)
+            ->where('ur.store_id', $storeId)
+            ->where('r.name', 'Admin')
             ->exists();
     }
 
