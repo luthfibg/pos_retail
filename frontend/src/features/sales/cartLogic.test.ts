@@ -16,6 +16,18 @@ describe('keranjang', () => {
     expect(l).toHaveLength(1);
     expect(l[0]?.qty).toBe('1.6');
   });
+  it('setelah satu scan, qty bisa diubah sebelum dikirim untuk pratinjau harga', () => {
+    const scanned = addProduct([], air);
+    const line = scanned[0];
+    expect(line).toBeDefined();
+    const updated = setQty(scanned, line!.key, '12');
+    expect(updated[0]?.qty).toBe('12');
+    expect(buildSaleInput(updated, 'scan-qty', {
+      mode: 'cash',
+      customerId: null,
+      tendered: '120000',
+    }).items).toEqual([{ product_id: air.id, qty: '12.000' }]);
+  });
   it('qty tak valid saat menambah diabaikan', () => {
     expect(addProduct([], air, '0')).toEqual([]);
     expect(addProduct([], air, '1.2345')).toEqual([]);

@@ -14,7 +14,7 @@ const toCartProduct = (p: Product): CartProduct => ({
 });
 
 interface Props {
-  onPick: (p: CartProduct) => void;
+  onPick: (p: CartProduct, source: 'scan' | 'search') => void;
   inputRef: RefObject<HTMLInputElement | null>;
   disabled?: boolean;
 }
@@ -27,7 +27,7 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const debounced = useDebounce(text.trim(), 250);
 
   const results = useQuery({
@@ -37,15 +37,21 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
   });
   const options = (results.data?.data ?? []).filter((p) => p.status !== 'inactive');
 
-  function accept(p: Product) {
+  function accept(p: Product, source: 'scan' | 'search' = 'search') {
     if (!isSellable(p)) {
-      setMessage(`“${p.name}” belum dapat dijual (menunggu harga atau nonaktif).`);
+      setMessage({ type: 'error', text: `“${p.name}” belum dapat dijual (menunggu harga atau nonaktif).` });
       return;
     }
-    setMessage(null);
-    onPick(toCartProduct(p));
+    onPick(toCartProduct(p), source);
     setText('');
     setOpen(false);
+    setMessage({
+      type: 'success',
+      text: source === 'scan'
+        ? `“${p.name}” ditemukan. Masukkan jumlah di kolom Qty, lalu tekan Enter untuk scan berikutnya.`
+        : `“${p.name}” ditambahkan ke keranjang. Siap untuk scan berikutnya.`,
+    });
+    inputRef.current?.focus();
   }
 
   async function onEnter() {
@@ -54,19 +60,19 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
     setBusy(true);
     setMessage(null);
     try {
-      accept(await productApi.byBarcode(code));
+      accept(await productApi.byBarcode(code), 'scan');
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         try {
           const res = await productApi.list({ q: code, per_page: 8 });
           const found = res.data.find((p) => p.status !== 'inactive' && isSellable(p)) ?? res.data[0];
           if (found) accept(found);
-          else setMessage(`Produk “${code}” tidak ditemukan.`);
+          else setMessage({ type: 'error', text: `Produk “${code}” tidak ditemukan.` });
         } catch (e2) {
-          setMessage(e2 instanceof ApiError ? e2.firstError() : 'Gagal mencari produk.');
+          setMessage({ type: 'error', text: e2 instanceof ApiError ? e2.firstError() : 'Gagal mencari produk.' });
         }
       } else {
-        setMessage(e instanceof ApiError ? e.firstError() : 'Gagal mencari produk.');
+        setMessage({ type: 'error', text: e instanceof ApiError ? e.firstError() : 'Gagal mencari produk.' });
       }
     } finally {
       setBusy(false);
@@ -80,7 +86,9 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
         className={`${inputCls} py-3 text-base`}
         value={text}
         disabled={disabled}
-        placeholder="Scan barcode atau ketik nama / SKU, lalu Enter"
+        placeholder="Scan barcode atau ketik nama / SKU"
+        aria-label="Scan barcode atau cari produk"
+        aria-busy={busy}
         autoComplete="off"
         onChange={(e) => { setText(e.target.value); setOpen(true); setMessage(null); }}
         onFocus={() => setOpen(true)}
@@ -90,7 +98,25 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
           if (e.key === 'Escape') setOpen(false);
         }}
       />
-      {message && <p role="alert" className="mt-1 text-sm text-red-700">{message}</p>}
+      <div className="mt-1 flex min-h-5 items-center justify-between gap-3">
+        <p className="text-xs text-slate-500">
+          Klik kolom ini lalu scan. Scanner harus berfungsi sebagai keyboard dan mengirim Enter.
+        </p>
+        {busy && (
+          <p role="status" aria-live="polite" className="shrink-0 text-xs font-medium text-slate-600">
+            Mencari barcode…
+          </p>
+        )}
+      </div>
+      {message && (
+        <p
+          role={message.type === 'success' ? 'status' : 'alert'}
+          aria-live={message.type === 'success' ? 'polite' : undefined}
+          className={`mt-1 text-sm ${message.type === 'success' ? 'text-emerald-800' : 'text-red-700'}`}
+        >
+          {message.text}
+        </p>
+      )}
 
       {open && debounced.length > 0 && !disabled && (
         <ul className="absolute z-20 mt-1 max-h-80 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">

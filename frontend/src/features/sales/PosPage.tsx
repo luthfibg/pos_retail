@@ -32,8 +32,10 @@ export function PosPage() {
   const qc = useQueryClient();
   const { can } = useAuth();
   const searchRef = useRef<HTMLInputElement>(null);
+  const qtyInputRefs = useRef(new Map<number, HTMLInputElement>());
 
   const [lines, setLines] = useState<CartLine[]>([]);
+  const [scanQuantityProductId, setScanQuantityProductId] = useState<number | null>(null);
   const [mode, setMode] = useState<PaymentMode>('cash');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [tendered, setTendered] = useState('');
@@ -175,8 +177,18 @@ export function PosPage() {
 
   useEffect(() => { if (sellingAllowed && !done) searchRef.current?.focus(); }, [sellingAllowed, done]);
 
-  function pick(p: CartProduct) {
+  useEffect(() => {
+    if (scanQuantityProductId === null) return;
+    const input = qtyInputRefs.current.get(scanQuantityProductId);
+    if (!input) return;
+    input.focus();
+    input.select();
+    setScanQuantityProductId(null);
+  }, [lines, scanQuantityProductId]);
+
+  function pick(p: CartProduct, source: 'scan' | 'search' = 'search') {
     setLines((ls) => addProduct(ls, p));
+    if (source === 'scan') setScanQuantityProductId(p.id);
     setErrors(NO_ERRORS);
     setTopError(null);
     searchRef.current?.focus();
@@ -307,12 +319,22 @@ export function PosPage() {
                     </td>
                     <td className="px-3 py-2">
                       <LocalDecimalInput
+                        elementRef={(element) => {
+                          if (element) qtyInputRefs.current.set(l.product.id, element);
+                          else qtyInputRefs.current.delete(l.product.id);
+                        }}
                         className={`${inputCls} tabular-nums ${e.qty ? 'border-red-400' : ''}`}
                         kind="quantity"
                         aria-label={`Qty ${l.product.name}`}
                         value={l.qty}
                         disabled={locked}
                         onChange={(value) => { setLines((ls) => setQty(ls, l.key, value)); setErrors(NO_ERRORS); }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            searchRef.current?.focus();
+                          }
+                        }}
                       />
                       <span className="text-xs text-slate-400">{l.product.unit_name}</span>
                       {e.qty && <p role="alert" className="text-xs text-red-700">{e.qty}</p>}
