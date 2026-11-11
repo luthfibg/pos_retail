@@ -893,7 +893,6 @@ export function OpnameSessionDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link to="/inventory/adjustments/opname" className="inline-flex min-h-9 items-center text-xs font-medium underline">← Daftar sesi</Link>
-
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={session.status} />
@@ -1288,7 +1287,6 @@ function OpnameWorkflowPanel({
       {session.status === 'in_progress' && !isOnline && (
         <p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Laporan dan posting hanya tersedia online. Tampilan hitungan offline selalu buta.</p>
       )}
-
       {session.status === 'in_progress' && !canReview && complete && (
         <p className="text-sm text-slate-600">Laporan selisih belum tersedia untuk akun ini.</p>
       )}
