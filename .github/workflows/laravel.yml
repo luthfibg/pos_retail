@@ -11,25 +11,48 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    # Semua step `run` dijalankan dari folder backend/ (tempat composer.json & artisan berada)
+    defaults:
+      run:
+        working-directory: backend
+
+    # Migrasi proyek ini memakai sintaks khusus MySQL (ADD CONSTRAINT ... CHECK, MODIFY, ENUM),
+    # jadi test harus jalan di MySQL, bukan SQLite.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: pos_retail_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
     steps:
+    - uses: actions/checkout@v4
     - uses: shivammathur/setup-php@15c43e89cdef867065b0213be354c2841860869e
       with:
-        php-version: '8.0'
-    - uses: actions/checkout@v4
+        php-version: '8.3'
+        extensions: mbstring, pdo_mysql, bcmath
+        tools: composer:v2
     - name: Copy .env
       run: php -r "file_exists('.env') || copy('.env.example', '.env');"
     - name: Install Dependencies
-      run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+      run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
     - name: Generate key
       run: php artisan key:generate
     - name: Directory Permissions
       run: chmod -R 777 storage bootstrap/cache
-    - name: Create Database
-      run: |
-        mkdir -p database
-        touch database/database.sqlite
-    - name: Execute tests (Unit and Feature tests) via PHPUnit/Pest
+    - name: Execute tests (Unit and Feature tests)
       env:
-        DB_CONNECTION: sqlite
-        DB_DATABASE: database/database.sqlite
+        DB_CONNECTION: mysql
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_DATABASE: pos_retail_test   # harus berakhiran _test (dicek di tests/TestCase.php)
+        DB_USERNAME: root
+        DB_PASSWORD: root
       run: php artisan test
