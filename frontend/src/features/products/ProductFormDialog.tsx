@@ -11,7 +11,7 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { formatRupiah } from '@/lib/format';
 import {
   buildCreatePayload, buildUpdatePayload, emptyValues, valuesFromProduct, validateProduct,
-  type FormErrors, type ProductFormValues, type UpdatePayload,
+  normalizeScannedBarcode, type FormErrors, type ProductFormValues, type UpdatePayload,
 } from './productForm';
 
 type Job =
@@ -52,6 +52,7 @@ export function ProductFormDialog({ product, onClose }: Props) {
   const [values, setValues] = useState<ProductFormValues>(() => (product ? valuesFromProduct(product) : emptyValues()));
   const [errors, setErrors] = useState<FormErrors>({});
   const [created, setCreated] = useState<Product | null>(null);
+  const [scannerValue, setScannerValue] = useState('');
 
   const categories = useQuery({ queryKey: ['categories', 'active'], queryFn: () => categoryApi.list(true) });
   const suppliers = useQuery({
@@ -73,6 +74,16 @@ export function ProductFormDialog({ product, onClose }: Props) {
 
   const set = <K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
+
+  function applyScannerValue(value: string) {
+    const barcode = normalizeScannedBarcode(value);
+    if (!barcode) return;
+
+    set('barcode', barcode);
+    setScannerValue('');
+    setErrors((current) => ({ ...current, barcode: undefined }));
+    mutation.reset();
+  }
 
   // Pesan dari server (422) per kolom, bila ada; kesalahan klien didahulukan.
   const serverErrors: FormErrors = {};
@@ -140,8 +151,27 @@ export function ProductFormDialog({ product, onClose }: Props) {
           {showTopError && <ErrorNotice error={mutation.error} />}
           <ErrorNotice error={suppliers.error} />
 
+          {mode === 'create' && (
+            <Field label="Scan barcode">
+              <input
+                className={`${inputCls} min-h-11 font-mono`}
+                value={scannerValue}
+                placeholder="Scan barcode"
+                autoFocus
+                inputMode="none"
+                onChange={(event) => setScannerValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    applyScannerValue(event.currentTarget.value);
+                  }
+                }}
+              />
+            </Field>
+          )}
+
           <Field label="Nama produk" error={err('name')}>
-            <input className={inputCls} value={values.name} onChange={(e) => set('name', e.target.value)} autoFocus />
+            <input className={inputCls} value={values.name} onChange={(e) => set('name', e.target.value)} />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
@@ -154,11 +184,11 @@ export function ProductFormDialog({ product, onClose }: Props) {
                 onChange={(e) => set('sku', e.target.value)}
               />
             </Field>
-            <Field label="Barcode" error={err('barcode')} hint={mode === 'create' ? 'Kosongkan untuk dibuat otomatis (EAN-13).' : 'Tidak dapat diubah.'}>
+            <Field label={mode === 'create' ? 'Barcode manual' : 'Barcode'} error={err('barcode')} hint={mode === 'create' ? 'Opsional; kosongkan untuk barcode otomatis.' : 'Tidak dapat diubah.'}>
               <input
                 className={`${inputCls} font-mono`}
                 value={values.barcode}
-                placeholder={mode === 'create' ? 'Otomatis' : undefined}
+                placeholder={mode === 'create' ? 'Input manual' : undefined}
                 disabled={mode === 'edit'}
                 onChange={(e) => set('barcode', e.target.value)}
               />

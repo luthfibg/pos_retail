@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/lib/api/types';
 import {
-  buildCreatePayload, buildUpdatePayload, emptyValues, sharedActiveSuppliers, validateProduct, valuesFromProduct,
+  buildCreatePayload, buildUpdatePayload, emptyValues, normalizeScannedBarcode, sharedActiveSuppliers, validateProduct, valuesFromProduct,
 } from './productForm';
 
 const admin = { canSetPrice: true, canSetCost: true, canActivate: true };
@@ -47,6 +47,13 @@ describe('validateProduct', () => {
   });
 });
 
+describe('normalizeScannedBarcode', () => {
+  it('trims scanner input and ignores empty scans', () => {
+    expect(normalizeScannedBarcode('  8991234567890\r\n')).toBe('8991234567890');
+    expect(normalizeScannedBarcode(' \t')).toBeNull();
+  });
+});
+
 describe('sharedActiveSuppliers', () => {
   const supplierA = { id: 8, code: 'SUP-8', name: 'Supplier Teh', is_active: true, default_payment_terms: 'cod' as const };
   const supplierB = { id: 9, code: 'SUP-9', name: 'Supplier B', is_active: true, default_payment_terms: 'cod' as const };
@@ -87,6 +94,11 @@ describe('buildCreatePayload', () => {
     expect(p.unit_cost).toBe('2000');
     expect('sku' in p).toBe(false);
     expect('barcode' in p).toBe(false);
+  });
+
+  it('mengirim barcode yang dimasukkan manual sebagai cadangan scan', () => {
+    const p = buildCreatePayload({ ...emptyValues(), name: 'Roti', barcode: '8991234567890' }, admin);
+    expect(p.barcode).toBe('8991234567890');
   });
 });
 

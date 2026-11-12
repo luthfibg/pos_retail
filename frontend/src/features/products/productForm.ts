@@ -75,6 +75,11 @@ export function normalizeDecimal(s: string): string {
   return s.trim().replace(',', '.');
 }
 
+export function normalizeScannedBarcode(value: string): string | null {
+  const barcode = value.trim();
+  return barcode || null;
+}
+
 const PRICE_RE = /^\d{1,12}(\.\d{1,2})?$/;
 const QTY_RE = /^\d{1,9}(\.\d{1,3})?$/;
 
