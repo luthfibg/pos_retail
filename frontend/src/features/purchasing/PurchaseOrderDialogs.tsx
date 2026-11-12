@@ -169,7 +169,7 @@ export function PurchaseOrderCreateDialog({
           <Field label="Tanggal PO">
             <input className={inputCls} type="date" required value={orderDate} onChange={(event) => setOrderDate(event.target.value)} />
           </Field>
-          <Field label="Perkiraan tanggal tiba">
+          <Field label="Permintaan tiba">
             <input className={inputCls} type="date" min={orderDate} value={expectedDate} onChange={(event) => setExpectedDate(event.target.value)} />
           </Field>
         </div>

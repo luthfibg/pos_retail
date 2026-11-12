@@ -1350,6 +1350,11 @@ export interface PurchaseRequisition extends PurchaseRequisitionSummary {
   }>;
 }
 
+export interface DeferredPurchaseRequisitionItem {
+  requisition: PurchaseRequisition;
+  next_requisition: PurchaseRequisition;
+}
+
 export interface PurchaseRequisitionInput {
   reason?: string;
   items: Array<{

@@ -535,6 +535,130 @@ class PurchaseRequisitionService
     }
 
     /**
+     * Move one held line from a returned automatic requisition into the next automatic draft.
+     *
+     * @return array{requisition: array<string, mixed>, next_requisition: array<string, mixed>}
+     */
+    public function deferAutomaticItem(User $actor, int $storeId, int $id, int $itemId): array
+    {
+        return DB::transaction(function () use ($actor, $storeId, $id, $itemId) {
+            $pr = $this->lock($storeId, $id);
+            abort_unless((bool) $pr->is_auto_generated, 403, 'Hanya item PR otomatis yang dapat ditunda.');
+            $this->assertCanManage($actor, $storeId, $pr);
+            $this->assertStatus($pr, ['returned'], 'Item hanya dapat ditunda dari PR otomatis yang dikembalikan.');
+
+            $item = DB::table('purchase_requisition_items')
+                ->where('pr_id', $id)
+                ->where('id', $itemId)
+                ->lockForUpdate()
+                ->first(['id', 'product_id', 'qty', 'est_price', 'note']);
+            abort_if($item === null, 404, 'Item PR tidak ditemukan.');
+
+            DB::table('purchase_requisition_items')->where('id', $itemId)->delete();
+            $remainingItems = DB::table('purchase_requisition_items')
+                ->where('pr_id', $id)
+                ->orderBy('id')
+                ->get(['product_id', 'qty', 'est_price', 'note'])
+                ->map(fn ($row) => [
+                    'product_id' => (int) $row->product_id,
+                    'qty' => (string) $row->qty,
+                    'est_price' => $row->est_price,
+                    'note' => $row->note,
+                ])
+                ->all();
+            $remainingTotal = Decimal::moneyString($this->sumTotal($remainingItems));
+            $newStatus = $remainingItems === [] ? 'cancelled' : 'returned';
+
+            DB::table('purchase_requisitions')->where('id', $id)->update([
+                'status' => $newStatus,
+                'est_total' => $remainingTotal,
+            ]);
+
+            $nextDraft = DB::table('purchase_requisitions')
+                ->where('store_id', $storeId)
+                ->where('is_auto_generated', 1)
+                ->where('status', 'draft')
+                ->lockForUpdate()
+                ->first();
+
+            $deferredLine = [[
+                'product_id' => (int) $item->product_id,
+                'qty' => (string) $item->qty,
+                'est_price' => $item->est_price,
+                'note' => $item->note,
+            ]];
+
+            if ($nextDraft === null) {
+                $nextDraftId = DB::table('purchase_requisitions')->insertGetId([
+                    'store_id' => $storeId,
+                    'doc_number' => $this->nextDocNumber($storeId, 'PR'),
+                    'requested_by' => $actor->id,
+                    'reason' => 'Pemantauan stok otomatis',
+                    'est_total' => Decimal::moneyString($this->sumTotal($deferredLine)),
+                    'status' => 'draft',
+                    'is_auto_generated' => 1,
+                ]);
+                $this->insertItems($nextDraftId, $deferredLine);
+                $this->audit->log(
+                    'purchase_requisition.auto_create',
+                    'purchase_requisition',
+                    $nextDraftId,
+                    after: ['items' => 1, 'est_total' => Decimal::moneyString($this->sumTotal($deferredLine))],
+                    actorId: $actor->id,
+                    storeId: $storeId,
+                );
+            } else {
+                $nextDraftId = (int) $nextDraft->id;
+                $draftItems = DB::table('purchase_requisition_items')
+                    ->where('pr_id', $nextDraftId)
+                    ->orderBy('id')
+                    ->get(['product_id', 'qty', 'est_price', 'note'])
+                    ->map(fn ($row) => [
+                        'product_id' => (int) $row->product_id,
+                        'qty' => (string) $row->qty,
+                        'est_price' => $row->est_price,
+                        'note' => $row->note,
+                    ])
+                    ->all();
+                $alreadyIncluded = collect($draftItems)->contains(
+                    fn (array $draftItem) => $draftItem['product_id'] === (int) $item->product_id,
+                );
+
+                if (! $alreadyIncluded) {
+                    $draftItems = [...$draftItems, ...$deferredLine];
+                    $this->insertItems($nextDraftId, $deferredLine);
+                    $nextTotal = Decimal::moneyString($this->sumTotal($draftItems));
+                    DB::table('purchase_requisitions')->where('id', $nextDraftId)->update(['est_total' => $nextTotal]);
+                    $this->audit->log(
+                        'purchase_requisition.auto_update',
+                        'purchase_requisition',
+                        $nextDraftId,
+                        before: ['items' => count($draftItems) - 1, 'est_total' => $nextDraft->est_total],
+                        after: ['items' => count($draftItems), 'est_total' => $nextTotal],
+                        actorId: $actor->id,
+                        storeId: $storeId,
+                    );
+                }
+            }
+
+            $this->audit->log(
+                'purchase_requisition.defer_item',
+                'purchase_requisition',
+                $id,
+                before: ['product_id' => (int) $item->product_id, 'qty' => (string) $item->qty, 'status' => 'returned'],
+                after: ['next_pr_id' => $nextDraftId, 'status' => $newStatus, 'remaining_items' => count($remainingItems)],
+                actorId: $actor->id,
+                storeId: $storeId,
+            );
+
+            return [
+                'requisition' => $this->load($storeId, $id) ?? [],
+                'next_requisition' => $this->load($storeId, $nextDraftId) ?? [],
+            ];
+        });
+    }
+
+    /**
      * Pemeriksaan Finance: 'pass' (siap dibuat PO; Owner mengesahkan saat PO dibuat) atau 'return'.
      *
      * @return array<string, mixed>

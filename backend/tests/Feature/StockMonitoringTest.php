@@ -159,4 +159,138 @@ class StockMonitoringTest extends SeededTestCase
         $this->getJson('/api/settings/inventory/stock-monitoring')->assertForbidden();
         $this->putJson('/api/settings/inventory/stock-monitoring', ['low_stock_threshold' => '4'])->assertForbidden();
     }
+
+    public function test_cashier_can_defer_one_item_from_returned_automatic_pr_and_resubmit_the_remaining_items(): void
+    {
+        $admin = $this->signIn('Admin');
+        $products = [
+            $this->product('SM-DEFER-1', '5.000'),
+            $this->product('SM-DEFER-2', '5.000'),
+            $this->product('SM-DEFER-3', '5.000'),
+        ];
+        foreach ($products as $productId) {
+            $this->openingBalance($admin, [[
+                'product_id' => $productId,
+                'qty' => '2.000',
+                'unit_cost' => '1000.0000',
+            ]]);
+        }
+
+        $pr = DB::table('purchase_requisitions')
+            ->where('store_id', $this->storeId())
+            ->where('is_auto_generated', 1)
+            ->where('status', 'draft')
+            ->first();
+        $this->assertNotNull($pr);
+        $this->assertSame(3, DB::table('purchase_requisition_items')->where('pr_id', $pr->id)->count());
+
+        $cashier = $this->makeUser('Kasir', 'kasir-stock-monitor-defer');
+        Sanctum::actingAs($cashier, ['*']);
+        $heldItem = DB::table('purchase_requisition_items')
+            ->where('pr_id', $pr->id)
+            ->where('product_id', $products[1])
+            ->first();
+        $this->postJson("/api/purchase-requisitions/{$pr->id}/items/{$heldItem->id}/defer")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
+        $this->postJson("/api/purchase-requisitions/{$pr->id}/submit")
+            ->assertOk()->assertJsonPath('data.status', 'submitted');
+
+        Sanctum::actingAs($admin, ['*']);
+        $this->postJson("/api/purchase-requisitions/{$pr->id}/finance-check", [
+            'decision' => 'return',
+            'note' => 'Tahan satu barang, lainnya disetujui.',
+        ])->assertOk()->assertJsonPath('data.status', 'returned');
+
+        $additionalProduct = $this->product('SM-DEFER-4', '5.000');
+        $this->openingBalance($admin, [[
+            'product_id' => $additionalProduct,
+            'qty' => '2.000',
+            'unit_cost' => '1000.0000',
+        ]]);
+
+        Sanctum::actingAs($cashier, ['*']);
+        $response = $this->postJson("/api/purchase-requisitions/{$pr->id}/items/{$heldItem->id}/defer")
+            ->assertOk()
+            ->assertJsonPath('data.requisition.status', 'returned')
+            ->assertJsonCount(2, 'data.requisition.items')
+            ->assertJsonPath('data.next_requisition.status', 'draft')
+            ->assertJsonPath('data.next_requisition.is_auto_generated', true)
+            ->assertJsonCount(2, 'data.next_requisition.items')
+            ->assertJsonPath('data.next_requisition.est_total', '10000.00')
+            ->assertJsonFragment(['product_id' => $products[1]])
+            ->assertJsonFragment(['product_id' => $additionalProduct]);
+
+        $nextPrId = $response->json('data.next_requisition.id');
+        $this->assertNotSame((int) $pr->id, $nextPrId);
+        $this->assertDatabaseMissing('purchase_requisition_items', [
+            'pr_id' => $pr->id,
+            'product_id' => $products[1],
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'purchase_requisition.defer_item',
+            'entity_id' => $pr->id,
+            'actor_id' => $cashier->id,
+        ]);
+
+        $this->postJson("/api/purchase-requisitions/{$pr->id}/submit")
+            ->assertOk()->assertJsonPath('data.status', 'submitted')
+            ->assertJsonCount(2, 'data.items');
+    }
+
+    public function test_defer_all_items_cancels_the_empty_returned_pr_and_keeps_all_items_in_the_next_draft(): void
+    {
+        $admin = $this->signIn('Admin');
+        $productId = $this->product('SM-DEFER-ALL', '5.000');
+        $this->openingBalance($admin, [[
+            'product_id' => $productId,
+            'qty' => '2.000',
+            'unit_cost' => '1000.0000',
+        ]]);
+        $prId = (int) DB::table('purchase_requisitions')
+            ->where('store_id', $this->storeId())
+            ->where('is_auto_generated', 1)
+            ->where('status', 'draft')
+            ->value('id');
+
+        $cashier = $this->makeUser('Kasir', 'kasir-stock-monitor-defer-all');
+        Sanctum::actingAs($cashier, ['*']);
+        $this->postJson("/api/purchase-requisitions/{$prId}/submit")->assertOk();
+        Sanctum::actingAs($admin, ['*']);
+        $this->postJson("/api/purchase-requisitions/{$prId}/finance-check", [
+            'decision' => 'return',
+            'note' => 'Tahan dulu.',
+        ])->assertOk();
+
+        Sanctum::actingAs($cashier, ['*']);
+        $itemId = (int) DB::table('purchase_requisition_items')->where('pr_id', $prId)->value('id');
+        $this->postJson("/api/purchase-requisitions/{$prId}/items/{$itemId}/defer")
+            ->assertOk()
+            ->assertJsonPath('data.requisition.status', 'cancelled')
+            ->assertJsonCount(0, 'data.requisition.items')
+            ->assertJsonPath('data.next_requisition.status', 'draft')
+            ->assertJsonPath('data.next_requisition.items.0.product_id', $productId);
+    }
+
+    public function test_defer_is_not_available_for_manual_requisitions(): void
+    {
+        $productId = $this->product('SM-DEFER-MANUAL', '5.000');
+        $purchaser = $this->makeUser('Purchasing', 'purchasing-defer-manual');
+        Sanctum::actingAs($purchaser, ['*']);
+        $prId = (int) $this->postJson('/api/purchase-requisitions', [
+            'items' => [['product_id' => $productId, 'qty' => '5', 'est_price' => '1000']],
+        ])->assertCreated()->json('data.id');
+        $this->postJson("/api/purchase-requisitions/{$prId}/submit")->assertOk();
+
+        $admin = $this->signIn('Admin');
+        $this->postJson("/api/purchase-requisitions/{$prId}/finance-check", [
+            'decision' => 'return',
+            'note' => 'Revisi.',
+        ])->assertOk();
+
+        Sanctum::actingAs($purchaser, ['*']);
+        $itemId = (int) DB::table('purchase_requisition_items')->where('pr_id', $prId)->value('id');
+        $this->postJson("/api/purchase-requisitions/{$prId}/items/{$itemId}/defer")->assertForbidden();
+        $this->assertSame(1, DB::table('purchase_requisition_items')->where('pr_id', $prId)->count());
+    }
 }

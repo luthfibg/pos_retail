@@ -79,6 +79,15 @@ class PurchaseRequisitionController extends Controller
         return response()->json(['data' => $this->requisitions->submit($user, $this->stores->requireIdFor($user), $pr)]);
     }
 
+    public function deferItem(Request $request, int $pr, int $item): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json(['data' => $this->requisitions->deferAutomaticItem(
+            $user, $this->stores->requireIdFor($user), $pr, $item,
+        )]);
+    }
+
     public function financeCheck(FinanceCheckRequest $request, int $pr): JsonResponse
     {
         $user = $request->user();

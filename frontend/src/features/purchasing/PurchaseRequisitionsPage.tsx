@@ -379,6 +379,8 @@ export function PurchaseRequisitionDetailDialog({
   const qc = useQueryClient();
   const [confirmAction, setConfirmAction] = useState<'cancel' | 'finance-return' | null>(null);
   const [note, setNote] = useState('');
+  const [itemToDefer, setItemToDefer] = useState<number | null>(null);
+  const [deferredNotice, setDeferredNotice] = useState('');
   const detail = useQuery({ queryKey: ['purchase-requisition', prId], queryFn: () => purchaseRequisitionApi.get(prId) });
   const refresh = async () => {
     await Promise.all([
@@ -396,7 +398,15 @@ export function PurchaseRequisitionDetailDialog({
     mutationFn: (decision: 'pass' | 'return') => purchaseRequisitionApi.financeCheck(prId, { decision, note: note.trim() || undefined }),
     onSuccess: refresh,
   });
-  const saving = submit.isPending || cancel.isPending || financeCheck.isPending;
+  const deferItem = useMutation({
+    mutationFn: (itemId: number) => purchaseRequisitionApi.deferItem(prId, itemId),
+    onSuccess: async (result) => {
+      setItemToDefer(null);
+      setDeferredNotice(`Barang dipindahkan ke ${result.next_requisition.doc_number}.`);
+      await refresh();
+    },
+  });
+  const saving = submit.isPending || cancel.isPending || financeCheck.isPending || deferItem.isPending;
   const pr = detail.data;
   const active = Boolean(pr && (pr.status === 'draft' || pr.status === 'returned'));
   const cancellable = Boolean(pr && ['draft', 'returned', 'submitted'].includes(pr.status));
@@ -407,7 +417,8 @@ export function PurchaseRequisitionDetailDialog({
         <div className="space-y-3 p-5"><ErrorNotice error={detail.error} /></div>
       ) : pr ? (
         <div className="space-y-4 p-5">
-          <ErrorNotice error={submit.error ?? cancel.error ?? financeCheck.error} />
+          <ErrorNotice error={deferItem.error ?? submit.error ?? cancel.error ?? financeCheck.error} />
+          {deferredNotice && <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">{deferredNotice}</p>}
           {!pr.is_auto_generated && <PurchaseStageTracker current={trackerStageForPr(pr)} />}
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <Detail label="Nomor Permintaan" value={pr.doc_number} />
@@ -426,19 +437,41 @@ export function PurchaseRequisitionDetailDialog({
             <h3 className="text-sm font-semibold">Barang yang diminta</h3>
             <div className="overflow-x-auto rounded-md border border-slate-200">
               <table className="w-full min-w-[420px] text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2 text-right">Jumlah Barang</th><th className="px-3 py-2 text-right">Harga satuan</th></tr></thead>
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2 text-right">Jumlah Barang</th><th className="px-3 py-2 text-right">Harga satuan</th>{canManagePr && pr.is_auto_generated && pr.status === 'returned' && <th className="px-3 py-2 text-right">Aksi</th>}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {pr.items.map((item) => (
                     <tr key={item.id}>
                       <td className="px-3 py-2">{item.name}<div className="font-mono text-xs text-slate-500">{item.sku}{item.note && !pr.is_auto_generated ? ` · ${item.note}` : ''}</div></td>
                       <td className="px-3 py-2 text-right">{formatQty(item.qty)} {item.unit_name}</td>
                       <td className="px-3 py-2 text-right">{formatRupiah(item.est_price)}</td>
+                      {canManagePr && pr.is_auto_generated && pr.status === 'returned' && (
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => { setDeferredNotice(''); setItemToDefer(item.id); }}
+                            className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-800 disabled:opacity-50"
+                          >
+                            Tunda
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </section>
+
+          {itemToDefer !== null && pr.is_auto_generated && pr.status === 'returned' && (
+            <ConfirmBox
+              text={`Pindahkan ${pr.items.find((item) => item.id === itemToDefer)?.name ?? 'barang ini'} ke PR otomatis berikutnya?`}
+              pending={deferItem.isPending}
+              onBack={() => setItemToDefer(null)}
+              onConfirm={() => deferItem.mutate(itemToDefer)}
+              confirmLabel="Tunda barang"
+            />
+          )}
 
           {pr.approvals.length > 0 && (
             <section className="space-y-2">

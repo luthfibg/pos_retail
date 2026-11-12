@@ -18,6 +18,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('pr')->middleware('can:purchase_order.create');
     Route::patch('purchase-requisitions/{pr}', [PurchaseRequisitionController::class, 'update'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
     Route::post('purchase-requisitions/{pr}/submit', [PurchaseRequisitionController::class, 'submit'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
+    Route::post('purchase-requisitions/{pr}/items/{item}/defer', [PurchaseRequisitionController::class, 'deferItem'])
+        ->whereNumber('pr')->whereNumber('item')->middleware('can:purchase_requisition.create');
     Route::post('purchase-requisitions/{pr}/cancel', [PurchaseRequisitionController::class, 'cancel'])->whereNumber('pr')->middleware('can:purchase_requisition.create');
     Route::post('purchase-requisitions/{pr}/finance-check', [PurchaseRequisitionController::class, 'financeCheck'])->whereNumber('pr')->middleware('can:purchase_requisition.finance_check');
     Route::post('purchase-requisitions/{pr}/approve', [PurchaseRequisitionController::class, 'approve'])->whereNumber('pr')->middleware('can:purchase_requisition.approve');

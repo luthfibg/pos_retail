@@ -2,7 +2,7 @@ import { api, apiDownload } from './client';
 import type {
   Category, CategoryInput, CashDeposit, CashMovement, CashMovementType, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
-  PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary,
+  PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary, DeferredPurchaseRequisitionItem,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
   GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
   PurchaseOrderRequisitionItem, PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
@@ -363,6 +363,10 @@ export const purchaseRequisitionApi = {
     api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}/cancel`, {
       method: 'POST',
       body: reason ? { reason } : {},
+    }).then((r) => r.data),
+  deferItem: (id: number, itemId: number) =>
+    api<{ data: DeferredPurchaseRequisitionItem }>(`/purchase-requisitions/${id}/items/${itemId}/defer`, {
+      method: 'POST',
     }).then((r) => r.data),
   financeCheck: (id: number, input: { decision: 'pass' | 'return'; note?: string }) =>
     api<{ data: PurchaseRequisition }>(`/purchase-requisitions/${id}/finance-check`, {
