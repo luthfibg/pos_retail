@@ -20,8 +20,8 @@ const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module)
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
 const AdjustmentsPage = lazy(() => import('@/features/inventory/AdjustmentsPage').then((module) => ({ default: module.AdjustmentsPage })));
-const OpnameSessionsPage = lazy(() => import('@/features/inventory/OpnameSessionsPage').then((module) => ({ default: module.OpnameSessionsPage })));
-const OpnameSessionDetailPage = lazy(() => import('@/features/inventory/OpnameSessionsPage').then((module) => ({ default: module.OpnameSessionDetailPage })));
+const OpnamePage = lazy(() => import('@/features/inventory/OpnamePage').then((module) => ({ default: module.OpnamePage })));
+const OpnameProcessPage = lazy(() => import('@/features/inventory/OpnameProcessPage').then((module) => ({ default: module.OpnameProcessPage })));
 const TransfersPage = lazy(() => import('@/features/inventory/TransfersPage').then((module) => ({ default: module.TransfersPage })));
 const GoodsReceiptsPage = lazy(() => import('@/features/purchasing/GoodsReceiptsPage').then((module) => ({ default: module.GoodsReceiptsPage })));
 const SupplierReturnsPage = lazy(() => import('@/features/purchasing/SupplierReturnsPage').then((module) => ({ default: module.SupplierReturnsPage })));
@@ -108,8 +108,8 @@ export const router = createBrowserRouter([
                 path: 'opname',
                 element: <RequirePermission permission="opname.view" />,
                 children: [
-                  { index: true, element: <LazyPage><OpnameSessionsPage /></LazyPage> },
-                  { path: ':sessionId', element: <LazyPage><OpnameSessionDetailPage /></LazyPage> },
+                  { index: true, element: <LazyPage><OpnamePage /></LazyPage> },
+                  { path: ':sessionId', element: <LazyPage><OpnameProcessPage /></LazyPage> },
                 ],
               },
             ],

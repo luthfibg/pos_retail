@@ -14,7 +14,7 @@ import type {
 } from '@/lib/api/types';
 import { formatDateTime, formatQty } from '@/lib/format';
 import type { ProductOption } from './openingForm';
-import { previewAdjustmentStock, validateAdjustment } from './adjustmentForm';
+import { calculateAdjustmentPlan, validateAdjustment } from './adjustmentForm';
 
 const PER_PAGE = 25;
 type ManualReasonCode = Exclude<AdjustmentReasonCode, 'opname_result'>;
@@ -388,25 +388,27 @@ function AdjustmentForm({
   const queryClient = useQueryClient();
   const [productOption, setProductOption] = useState<ProductOption | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
-  const [type, setType] = useState<AdjustmentType>('increase');
   const [quantity, setQuantity] = useState('');
+  const [submitted, setSubmitted] = useState(false);
   const [reasonCode, setReasonCode] = useState<ManualReasonCode | ''>('');
   const [notes, setNotes] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const requestId = useRef(crypto.randomUUID());
   const reason = meta?.reasons.find((item) => item.code === reasonCode && item.selectable) ?? null;
-  const values = { product, type, quantity, reason, notes, expiryDate };
+  const values = { product, quantity, reason, notes, expiryDate };
   const errors = validateAdjustment(values);
-  const previewStock = previewAdjustmentStock(values);
+  const plan = calculateAdjustmentPlan(product, quantity);
+  const type = plan?.type ?? null;
   const currentStock = product?.store_floor_stock_sellable;
   const valid = Object.keys(errors).length === 0;
   const create = useMutation({
     mutationFn: () => {
-      if (!product || !reasonCode || !valid) throw new Error('Lengkapi data adjustment yang valid.');
+      if (!product || !reasonCode || !plan?.type || plan.quantity === null || !valid) {
+        throw new Error('Lengkapi data adjustment yang valid.');
+      }
       return adjustmentApi.create({
         product_id: product.id,
-        type,
-        quantity: Number(quantity),
+        target_quantity: plan.stockAfter,
         reason_code: reasonCode,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(expiryDate ? { expiry_date: expiryDate } : {}),
@@ -431,6 +433,7 @@ function AdjustmentForm({
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    setSubmitted(true);
     if (!valid || create.isPending) return;
     create.mutate();
   }
@@ -451,9 +454,13 @@ function AdjustmentForm({
                 value={productOption}
                 onChange={(value) => {
                   setProductOption(value);
-                  if (!value) setProduct(null);
+                  if (!value) {
+                    setProduct(null);
+                    setQuantity('');
+                    setSubmitted(false);
+                  }
                 }}
-                onSelect={(selected) => { setProduct(selected); setReasonCode(''); }}
+                onSelect={(selected) => { setProduct(selected); setReasonCode(''); setQuantity(''); setSubmitted(false); }}
                 placeholder="Cari nama, SKU, atau scan barcode"
                 autoFocus
                 disabled={create.isPending}
@@ -472,43 +479,34 @@ function AdjustmentForm({
               </div>
             )}
 
-            <fieldset disabled={create.isPending} className="space-y-2">
-              <legend className="text-sm font-medium">Tipe</legend>
-              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipe adjustment">
-                {(['increase', 'decrease'] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={type === value}
-                    onClick={() => setType(value)}
-                    className={`min-h-12 rounded-md border px-3 text-sm font-medium ${type === value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white'}`}
-                  >
-                    {value === 'increase' ? 'Tambah stok' : 'Kurangi stok'}
-                  </button>
-                ))}
+            {(type || apiFieldError(create.error, 'type')) && (
+              <div aria-live="polite" className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                {type && <strong>{typeLabel(type)} stok</strong>}
+                {apiFieldError(create.error, 'type') && <p role="alert" className="mt-1 text-xs text-red-700">{apiFieldError(create.error, 'type')}</p>}
               </div>
-            </fieldset>
+            )}
 
-            <Field label="Jumlah">
+            <Field label="Jumlah stok setelah adjustment">
               <div className="grid grid-cols-[3rem_minmax(0,1fr)_3rem] gap-2">
-                <button type="button" disabled={create.isPending} aria-label="Kurangi jumlah" onClick={() => setQuantity((current) => String(Math.max(1, (Number(current) || 1) - 1)))} className="min-h-12 rounded-md border border-slate-300 text-xl disabled:opacity-50">−</button>
+                <button type="button" disabled={create.isPending} aria-label="Kurangi jumlah stok" onClick={() => setQuantity((current) => String(Math.max(0, (Number(current) || 0) - 1)))} className="min-h-12 rounded-md border border-slate-300 text-xl disabled:opacity-50">−</button>
                 <input
                   type="number"
                   inputMode="numeric"
-                  min="1"
+                  min="0"
                   max="999999999"
-                  step="1"
+                  step="0.001"
                   className={`${inputCls} min-h-12 text-center text-lg tabular-nums`}
                   value={quantity}
                   onChange={(event) => setQuantity(event.target.value)}
                   disabled={create.isPending}
-                  aria-describedby="adjustment-quantity-hint"
                 />
-                <button type="button" disabled={create.isPending} aria-label="Tambah jumlah" onClick={() => setQuantity((current) => String((Number(current) || 0) + 1))} className="min-h-12 rounded-md border border-slate-300 text-xl disabled:opacity-50">+</button>
+                <button type="button" disabled={create.isPending} aria-label="Tambah jumlah stok" onClick={() => setQuantity((current) => String((Number(current) || 0) + 1))} className="min-h-12 rounded-md border border-slate-300 text-xl disabled:opacity-50">+</button>
               </div>
-              <p id="adjustment-quantity-hint" className="mt-1 text-xs text-slate-500">Gunakan bilangan bulat.</p>
-              {(errors.quantity || apiFieldError(create.error, 'quantity')) && <p role="alert" className="mt-1 text-xs text-red-700">{errors.quantity ?? apiFieldError(create.error, 'quantity')}</p>}
+              {(submitted || quantity !== '') && (errors.quantity || apiFieldError(create.error, 'quantity') || apiFieldError(create.error, 'target_quantity')) && (
+                <p role="alert" className="mt-1 text-xs text-red-700">
+                  {errors.quantity ?? apiFieldError(create.error, 'target_quantity') ?? apiFieldError(create.error, 'quantity')}
+                </p>
+              )}
             </Field>
 
             <fieldset disabled={create.isPending || !meta} className="space-y-2">
@@ -552,13 +550,6 @@ function AdjustmentForm({
                 <span>{notes.length}/500</span>
               </div>
             </Field>
-
-            {previewStock !== null && product && (
-              <p role="status" className="rounded-md bg-slate-50 p-3 text-sm">
-                Stok akan menjadi <strong className="tabular-nums">{formatQty(previewStock)} {product.unit_name}</strong>.
-                <span className="ml-1 text-xs text-slate-500">Perkiraan; saldo final ditentukan server.</span>
-              </p>
-            )}
 
             {create.error && (
               <div className="space-y-2">

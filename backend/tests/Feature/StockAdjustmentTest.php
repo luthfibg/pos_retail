@@ -103,6 +103,54 @@ class StockAdjustmentTest extends SeededTestCase
         ]);
     }
 
+    public function test_target_stock_automatically_derives_adjustment_type_and_quantity(): void
+    {
+        $fixture = $this->fixture();
+        $this->actAsAdmin();
+
+        $this->postJson('/api/inventory/adjustments', [
+            'product_id' => $fixture['product_id'],
+            'target_quantity' => '5.000',
+            'reason_code' => 'input_correction',
+            'client_request_id' => fake()->uuid(),
+        ])->assertCreated()
+            ->assertJsonPath('data.type', 'decrease')
+            ->assertJsonPath('data.quantity', 3)
+            ->assertJsonPath('data.stock_before', '8.000')
+            ->assertJsonPath('data.stock_after', '5.000');
+
+        $this->postJson('/api/inventory/adjustments', [
+            'product_id' => $fixture['product_id'],
+            'target_quantity' => '8.000',
+            'reason_code' => 'input_correction',
+            'client_request_id' => fake()->uuid(),
+        ])->assertCreated()
+            ->assertJsonPath('data.type', 'increase')
+            ->assertJsonPath('data.quantity', 3)
+            ->assertJsonPath('data.stock_before', '5.000')
+            ->assertJsonPath('data.stock_after', '8.000');
+    }
+
+    public function test_target_stock_rejects_no_op_and_fractional_adjustment_deltas(): void
+    {
+        $fixture = $this->fixture();
+        $this->actAsAdmin();
+
+        foreach (['8.000', '7.500'] as $targetQuantity) {
+            $this->postJson('/api/inventory/adjustments', [
+                'product_id' => $fixture['product_id'],
+                'target_quantity' => $targetQuantity,
+                'reason_code' => 'input_correction',
+                'client_request_id' => fake()->uuid(),
+            ])->assertUnprocessable()
+                ->assertJsonValidationErrors(['target_quantity']);
+        }
+
+        $this->assertSame(8.0, (float) DB::table('inventory_balances')
+            ->where('product_id', $fixture['product_id'])->sum('qty_sellable'));
+        $this->assertSame(0, DB::table('stock_adjustments')->whereNotNull('reason_code')->count());
+    }
+
     public function test_decrease_over_stock_returns_insufficient_stock_and_rolls_back_document(): void
     {
         $fixture = $this->fixture('2');

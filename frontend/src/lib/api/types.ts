@@ -822,15 +822,16 @@ export interface Adjustment {
   created_at: string;
 }
 
-export interface AdjustmentInput {
+export type AdjustmentInput = {
   product_id: number;
-  type: AdjustmentType;
-  quantity: number;
   reason_code: Exclude<AdjustmentReasonCode, 'opname_result'>;
   notes?: string;
   expiry_date?: string;
   client_request_id: string;
-}
+} & (
+  | { target_quantity: string; type?: never; quantity?: never }
+  | { target_quantity?: never; type: AdjustmentType; quantity: number }
+);
 
 export type StockTransferStatus = 'draft' | 'posted' | 'cancelled';
 

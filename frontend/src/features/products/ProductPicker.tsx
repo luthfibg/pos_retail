@@ -20,6 +20,7 @@ interface Props {
   searchAdapterKey?: string | number;
   inputRef?: RefObject<HTMLInputElement | null>;
   placeholder?: string;
+  exactBarcodeOnly?: boolean;
   includeInactive?: boolean;
   autoFocus?: boolean;
   disabled?: boolean;
@@ -36,6 +37,7 @@ export function ProductPicker({
   searchAdapterKey,
   inputRef,
   placeholder = 'Cari nama, SKU, atau barcode',
+  exactBarcodeOnly = false,
   includeInactive = false,
   autoFocus,
   disabled = false,
@@ -105,12 +107,14 @@ export function ProductPicker({
         setBarcodeError(error instanceof ApiError ? error.message : 'Produk tidak dapat dicari. Coba lagi.');
         return;
       }
-      if (error instanceof ApiError && error.status === 404 && options[0]) {
+      if (error instanceof ApiError && error.status === 404 && options[0] && !exactBarcodeOnly) {
         pick(options[0]);
       } else {
         setBarcodeError(error instanceof ApiError && error.status !== 404
           ? error.firstError()
-          : error instanceof ApiError ? error.message : 'Barcode tidak ditemukan. Periksa kode atau cari berdasarkan nama.');
+          : error instanceof ApiError && exactBarcodeOnly
+            ? 'Barcode tidak cocok dengan produk. Cari nama atau SKU, lalu pilih produk dari daftar.'
+            : error instanceof ApiError ? error.message : 'Barcode tidak ditemukan. Periksa kode atau cari berdasarkan nama.');
       }
     } finally {
       setBarcodeLoading(false);

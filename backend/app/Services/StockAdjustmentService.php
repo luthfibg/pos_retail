@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\Decimal;
 use App\Support\DocumentNumber;
 use App\Support\StockAuthorityPolicy;
 use Carbon\Carbon;
@@ -116,6 +117,32 @@ class StockAdjustmentService
 
                     return ['adjustment' => $this->find($actor, $storeId, (int) $existing->id) ?? [], 'created' => false];
                 }
+            }
+
+            if ($source === 'manual' && array_key_exists('target_quantity', $data)) {
+                $locationId = $this->inventory->sellingLocationId($storeId);
+                $stock = DB::table('inventory_balances')
+                    ->where('product_id', (int) $product->id)
+                    ->where('location_id', $locationId)
+                    ->sum('qty_sellable');
+                $difference = Decimal::qty((string) $data['target_quantity'])
+                    - Decimal::qty((string) ($stock ?? 0));
+
+                if ($difference === 0) {
+                    throw ValidationException::withMessages([
+                        'target_quantity' => ['Jumlah sama dengan stok saat ini; tidak ada perubahan untuk disimpan.'],
+                    ]);
+                }
+
+                $absoluteDifference = abs($difference);
+                if ($absoluteDifference % 1000 !== 0 || intdiv($absoluteDifference, 1000) > 999999999) {
+                    throw ValidationException::withMessages([
+                        'target_quantity' => ['Selisih adjustment harus berupa bilangan bulat maksimal 999.999.999.'],
+                    ]);
+                }
+
+                $data['type'] = $difference > 0 ? 'increase' : 'decrease';
+                $data['quantity'] = intdiv($absoluteDifference, 1000);
             }
 
             $reasonCode = (string) $data['reason_code'];

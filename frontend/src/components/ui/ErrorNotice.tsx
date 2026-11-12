@@ -15,14 +15,6 @@ export function ErrorNotice({ error }: { error: unknown }) {
 }
 
 function formatStockLockMessage(lockedProducts: NonNullable<ApiError['lockedProducts']>): string {
-  const grouped = new Map<string, Set<string>>();
-  for (const product of lockedProducts) {
-    const names = grouped.get(product.session_number) ?? new Set<string>();
-    names.add(product.name);
-    grouped.set(product.session_number, names);
-  }
-  const details = [...grouped.entries()]
-    .map(([session, names]) => `${[...names].join(', ')} (sesi ${session})`)
-    .join('; ');
-  return `Transaksi ditolak karena opname mengunci produk berikut: ${details}. Isian Anda tetap tersedia.`;
+  const names = [...new Set(lockedProducts.map((product) => product.name))];
+  return `Sedang opname: ${names.join(', ')}`;
 }

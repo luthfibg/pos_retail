@@ -20,6 +20,13 @@ Nama menu pengaturan bergantung pada merek scanner. Ikuti petunjuk produsennya u
 
 Label menu dan PIN dapat berbeda menurut model scanner dan versi sistem operasi.
 
+## Memindai produk pada kasir dan adjustment
+
+- Pairing Bluetooth tetap dilakukan dari pengaturan perangkat. Di halaman kasir atau form adjustment, klik kolom produk terlebih dahulu lalu scan; aplikasi menerima scanner sebagai input keyboard, tidak membuat koneksi Bluetooth tersendiri.
+- Di kasir, scan barcode memilih produk tepat dan menambahkannya ke keranjang. Untuk scan pertama produk, jumlah otomatis difokuskan agar bisa diubah; tekan Enter dari kolom jumlah untuk kembali ke kolom scan. Scan ulang produk yang sudah ada menambah jumlah satu.
+- Di form adjustment, scan barcode memilih produk tepat dan memfokuskan kolom jumlah. Pilih tipe dan alasan adjustment, lengkapi data wajib lain, lalu simpan.
+- Jika barcode tidak dikenal, aplikasi tidak memilih produk lain secara otomatis. Cari berdasarkan nama atau SKU dan pilih hasil yang benar secara manual.
+
 ## Uji dan kalibrasi
 
 Pada sesi opname, buka menu **⋯ → Uji scanner**. Scan tiga barcode yang berbeda dan pastikan kode, jeda, panjang, serta akhiran **Enter** terbaca. Pilih **Hitung ambang**, lalu **Simpan hasil kalibrasi**. Pengaturan disimpan di browser pada HP tersebut; lakukan lagi jika memakai browser/perangkat berbeda.

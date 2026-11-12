@@ -17,8 +17,9 @@ class StoreStockAdjustmentRequest extends FormRequest
     {
         return [
             'product_id' => ['required', 'integer', 'min:1'],
-            'type' => ['required', Rule::in(['increase', 'decrease'])],
-            'quantity' => ['required', 'integer', 'min:1', 'max:999999999'],
+            'type' => ['required_without:target_quantity', 'nullable', Rule::in(['increase', 'decrease'])],
+            'quantity' => ['required_without:target_quantity', 'nullable', 'integer', 'min:1', 'max:999999999'],
+            'target_quantity' => ['required_without:quantity', 'numeric', 'decimal:0,3', 'min:0', 'max:999999999'],
             'reason_code' => ['required', Rule::in([
                 'damaged', 'expired', 'lost', 'found', 'input_correction', 'own_use', 'sample', 'other',
             ])],

@@ -3,8 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/endpoints';
 import { setUnauthorizedHandler, tokenStore } from '@/lib/api/client';
 import type { Me } from '@/lib/api/types';
-import { countSyncQueue, offlineSessionIndex, type QueuedCountOperation } from '@/features/inventory/opnameOfflineStore';
-import { syncUserCountQueue } from '@/features/inventory/opnameOfflineSync';
 
 type Status = 'loading' | 'authed' | 'anon';
 
@@ -63,40 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    if (me?.user.id) {
-      let queued: QueuedCountOperation[];
-      try {
-        queued = await countSyncQueue.forUser(me.user.id);
-      } catch (error) {
-        window.alert(error instanceof Error ? `Antrean opname tidak dapat diperiksa: ${error.message}` : 'Antrean opname tidak dapat diperiksa.');
-        return;
-      }
-      if (queued.length > 0) {
-        if (!window.confirm(`${queued.length} hitungan belum tersinkron. Pilih OK untuk mencoba sinkronisasi sekarang; pilih Batal untuk tetap di halaman dan sinkronkan nanti.`)) return;
-        try {
-          await syncUserCountQueue(me.user.id);
-        } catch (error) {
-          window.alert(error instanceof Error ? `Sinkronisasi belum selesai: ${error.message}` : 'Sinkronisasi belum selesai.');
-        }
-        try {
-          queued = await countSyncQueue.forUser(me.user.id);
-        } catch (error) {
-          window.alert(error instanceof Error ? `Antrean opname tidak dapat diperiksa: ${error.message}` : 'Antrean opname tidak dapat diperiksa.');
-          return;
-        }
-        if (queued.length > 0 && !window.confirm(`${queued.length} operasi masih tersimpan di perangkat ini. Tetap keluar? Antrean akan tetap terpisah untuk akun ini dan dilanjutkan saat akun yang sama masuk kembali.`)) return;
-      }
-      if (queued.length === 0) {
-        try {
-          await offlineSessionIndex.removeForUser(me.user.id);
-        } catch (error) {
-          if (!window.confirm(`Indeks offline akun ini tidak dapat dihapus: ${error instanceof Error ? error.message : 'penyimpanan lokal gagal'}. Tetap keluar? Data tersimpan tetap terpisah untuk akun ini.`)) return;
-        }
-      }
-    }
     try { await authApi.logout(); } catch { /* token mungkin sudah tidak berlaku; tetap keluar */ }
     reset();
-  }, [me, reset]);
+  }, [reset]);
 
   const refreshMe = useCallback(async () => {
     setMe(await authApi.me());

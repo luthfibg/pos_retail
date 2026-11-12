@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/lib/api/types';
-import { previewAdjustmentStock, validateAdjustment } from './adjustmentForm';
+import { calculateAdjustmentPlan, previewAdjustmentStock, validateAdjustment } from './adjustmentForm';
 
 const product: Product = {
   id: 1,
@@ -26,24 +26,41 @@ const product: Product = {
 const reason = { code: 'damaged', label: 'Barang rusak', requires_notes: false, selectable: true } as const;
 
 describe('direct adjustment form validation', () => {
-  it('requires an integer quantity and prevents reducing more than available stock', () => {
+  it('automatically derives decrease and sends the difference from the target stock', () => {
+    expect(calculateAdjustmentPlan(product, '2.5')).toEqual({
+      type: 'decrease',
+      quantity: 3,
+      stockAfter: '2.500',
+      unchanged: false,
+    });
+
     const errors = validateAdjustment({
       product,
-      type: 'decrease',
-      quantity: '6',
+      quantity: '2.5',
       reason,
       notes: '',
       expiryDate: '',
     });
 
-    expect(errors.quantity).toContain('melebihi stok');
+    expect(errors.quantity).toBeUndefined();
+  });
+
+  it('automatically derives increase, accepts zero stock, and rejects a no-op', () => {
+    expect(calculateAdjustmentPlan(product, '8.5')?.type).toBe('increase');
+    expect(calculateAdjustmentPlan(product, '0')?.type).toBe('decrease');
+    expect(validateAdjustment({
+      product,
+      quantity: '5.5',
+      reason,
+      notes: '',
+      expiryDate: '',
+    }).quantity).toContain('tidak berubah');
   });
 
   it('requires notes for the other reason and expiry for tracked products', () => {
     const errors = validateAdjustment({
       product: { ...product, track_expiry: true },
-      type: 'increase',
-      quantity: '1',
+      quantity: '6.5',
       reason: { code: 'other', label: 'Lainnya', requires_notes: true, selectable: true },
       notes: '',
       expiryDate: '',
@@ -53,14 +70,20 @@ describe('direct adjustment form validation', () => {
     expect(errors.expiryDate).toContain('wajib diisi');
   });
 
-  it('previews stock using exact thousandths without floating-point arithmetic', () => {
+  it('uses exact thousandths and only allows whole-unit adjustment differences', () => {
     expect(previewAdjustmentStock({
       product,
-      type: 'increase',
-      quantity: '2',
+      quantity: '7.5',
       reason,
       notes: '',
       expiryDate: '',
     })).toBe('7.500');
+    expect(validateAdjustment({
+      product,
+      quantity: '5',
+      reason,
+      notes: '',
+      expiryDate: '',
+    }).quantity).toContain('bilangan bulat');
   });
 });

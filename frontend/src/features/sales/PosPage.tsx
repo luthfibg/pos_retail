@@ -254,10 +254,8 @@ export function PosPage() {
         <ErrorNotice error={shiftQuery.error} />
         <ErrorNotice error={opnameLock.error} />
         {opnameLock.data?.locked && (
-          <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-            {opnameLock.data.store_wide
-              ? 'Opname sedang berjalan. Penjualan seluruh toko sedang ditutup.'
-              : `Opname sedang berjalan. Penjualan produk tertentu sedang ditutup. Cakupan: ${opnameLock.data.sessions.map((session) => `${session.scope_summary} (${session.number})`).join('; ')}.`}
+          <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">
+            {opnameLock.data.store_wide ? 'Penjualan ditutup: opname' : 'Sebagian produk ditutup: opname'}
           </div>
         )}
         {!shiftQuery.error && !sellingAllowed && (

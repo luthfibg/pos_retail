@@ -7,29 +7,6 @@
 html, body, #root { height: 100%; }
 body { @apply bg-slate-50 text-slate-900 antialiased; }
 
-.opname-workspace-page { overscroll-behavior-y: contain; }
-.opname-workspace-page [aria-label="Peta progres opname"],
-.opname-workspace-page [aria-label="Panel input"] { overscroll-behavior: contain; }
-.opname-workspace-page button { touch-action: manipulation; }
-.opname-workspace-page .opname-short-card,
-.opname-workspace-page .opname-keypad { user-select: none; -webkit-tap-highlight-color: transparent; }
-
-@media (max-width: 767px) and (max-height: 560px) {
-  .opname-counted-items,
-  .opname-recommendation-items {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.25rem;
-  }
-
-  .opname-counted-items > *,
-  .opname-recommendation-items > * {
-    margin-block: 0;
-  }
-
-  .opname-active-count-card { padding: 0.5rem; }
-  .opname-short-card { min-height: 44px; padding: 0.25rem 0.5rem; }
-}
 
 @page receipt58 {
   size: 58mm auto;
@@ -69,8 +46,7 @@ body { @apply bg-slate-50 text-slate-900 antialiased; }
 }
 
 @media print {
-  .opname-workspace-page > :not(.opname-report) { display: none !important; }
-  .opname-report { border: 0 !important; padding: 0 !important; color: #000 !important; }
+    .opname-report { border: 0 !important; padding: 0 !important; color: #000 !important; }
   .opname-report > section { break-inside: avoid; }
   .opname-report button { display: none !important; }
 }
