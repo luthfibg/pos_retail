@@ -397,12 +397,30 @@ class PurchaseOrderTest extends SeededTestCase
         $product = $this->product();
         $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
         $bank = $this->bankAccount();
-        Sanctum::actingAs($this->makeUser('Purchasing', 'purchasing-po'), ['*']);
+        $purchasing = $this->makeUser('Purchasing', 'purchasing-po');
+        Sanctum::actingAs($purchasing, ['*']);
         $this->getJson('/api/bank-accounts')->assertOk()->assertJsonPath('data.0.id', $bank);
-        $this->makeUser('Owner', 'owner-po');
+        $owner = $this->makeUser('Owner', 'owner-po');
+        $admin = $this->actAsAdmin();
+        $this->getJson('/api/settings/purchase-order-owner')
+            ->assertOk()
+            ->assertJsonPath('data.owner', null);
+        $this->putJson('/api/settings/purchase-order-owner', ['owner_user_id' => $owner->id])
+            ->assertOk()
+            ->assertJsonPath('data.owner.id', $owner->id);
+        Sanctum::actingAs($purchasing, ['*']);
+        $this->getJson('/api/settings/purchase-order-owner')
+            ->assertOk()
+            ->assertJsonPath('data.owner.id', $owner->id);
+        $this->putJson('/api/settings/purchase-order-owner', ['owner_user_id' => $admin->id])
+            ->assertForbidden();
+        $this->postJson('/api/purchase-orders', $this->payload($pr, $this->supplier(), $product, bankId: $bank, credentials: [
+            'approver_user_id' => $admin->id,
+            'approver_password' => 'sandi-admin-123',
+        ]))->assertUnprocessable()->assertJsonValidationErrors(['approver_user_id']);
         $this->actAsAdmin();
         $po = $this->postJson('/api/purchase-orders', $this->payload($pr, $this->supplier(), $product, bankId: $bank, credentials: [
-            'approver_username' => 'owner-po',
+            'approver_user_id' => $owner->id,
             'approver_password' => 'rahasia-12345',
         ]))->assertCreated()->assertJsonPath('data.status', 'approved')
             ->assertJsonPath('data.bank_account.id', $bank)->json('data.id');
@@ -417,6 +435,20 @@ class PurchaseOrderTest extends SeededTestCase
             'action' => 'purchase_order.create',
             'entity_id' => $po,
             'reason' => null,
+        ]);
+    }
+
+    public function test_purchase_order_owner_setting_rejects_accounts_without_approval_permission(): void
+    {
+        $this->actAsAdmin();
+
+        $this->putJson('/api/settings/purchase-order-owner', ['owner_user_id' => $this->cashier->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['owner_user_id']);
+
+        $this->assertDatabaseMissing('settings', [
+            'store_id' => $this->storeId(),
+            'setting_key' => 'purchase_order_owner_user_id',
         ]);
     }
 

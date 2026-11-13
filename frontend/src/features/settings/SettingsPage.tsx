@@ -8,6 +8,7 @@ const StoreName = lazy(() => import('./StoreNameSettingsPage').then((module) => 
 const Warehouse = lazy(() => import('./WarehouseSettingsPage').then((module) => ({ default: module.WarehouseSettingsPage })));
 const StockMonitoring = lazy(() => import('./StockMonitoringSettingsPage').then((module) => ({ default: module.StockMonitoringSettingsPage })));
 const PurchaseOrderSuppliers = lazy(() => import('./PurchaseOrderSupplierSettingsPage').then((module) => ({ default: module.PurchaseOrderSupplierSettingsPage })));
+const PurchaseOrderOwner = lazy(() => import('./PurchaseOrderOwnerSettingsPage').then((module) => ({ default: module.PurchaseOrderOwnerSettingsPage })));
 const InventoryMenus = lazy(() => import('./InventoryMenuSettingsPage').then((module) => ({ default: module.InventoryMenuSettingsPage })));
 const BankAccounts = lazy(() => import('./BankAccountsSettingsPage').then((module) => ({ default: module.BankAccountsSettingsPage })));
 const StockAuthority = lazy(() => import('./StockAuthoritySettingsPage').then((module) => ({ default: module.StockAuthoritySettingsPage })));
@@ -27,6 +28,7 @@ function SectionBody({ id }: { id: SectionId }) {
     case 'warehouse': return <Warehouse embedded />;
     case 'stock-monitoring': return <StockMonitoring embedded />;
     case 'purchase-order-suppliers': return <PurchaseOrderSuppliers embedded />;
+    case 'purchase-order-owner': return <PurchaseOrderOwner embedded />;
     case 'inventory-menus': return <InventoryMenus embedded />;
     case 'bank-accounts': return <BankAccounts embedded />;
     case 'stock-authority': return <StockAuthority embedded />;

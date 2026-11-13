@@ -79,7 +79,7 @@ describe('sidebar navigation', () => {
     expect(paths.indexOf('/shift')).toBeLessThan(paths.indexOf('/pos'));
     expect(paths.indexOf('/pos')).toBeLessThan(paths.indexOf('/sales'));
     const inventory = groups.find((group) => group.label === 'Inventory');
-    expect(inventory?.items.map((item) => item.to)).toContain('/goods-receipts');
+    expect(inventory?.items[0]?.to).toBe('/goods-receipts');
     expect(inventory?.items.map((item) => item.to)).toContain('/supplier-returns');
     expect(paths).not.toContain('/inventory/opening');
     expect(paths).not.toContain('/inventory/transfers');

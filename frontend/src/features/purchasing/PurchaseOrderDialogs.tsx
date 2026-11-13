@@ -68,6 +68,10 @@ export function PurchaseOrderCreateDialog({
     queryKey: ['settings', 'purchase-order-supplier-selection'],
     queryFn: settingsApi.purchaseOrderSupplierSelection,
   });
+  const ownerSetting = useQuery({
+    queryKey: ['settings', 'purchase-order-owner'],
+    queryFn: settingsApi.purchaseOrderOwner,
+  });
   const masterSuppliers = useQuery({
     queryKey: ['suppliers', 'purchase-order'],
     queryFn: loadActiveSuppliers,
@@ -141,7 +145,7 @@ export function PurchaseOrderCreateDialog({
       pr_id: pr.id,
       supplier_id: Number(supplierId),
       bank_account_id: Number(bankAccountId),
-      approver_username: credentials.approver_username.trim(),
+      ...(ownerSetting.data?.owner ? { approver_user_id: ownerSetting.data.owner.id } : {}),
       ...(approvalMode !== 'key' ? { approver_password: credentials.approver_password } : {}),
       ...(approvalMode !== 'password' ? { approver_key: credentials.approver_key } : {}),
       payment_terms: terms,
@@ -185,6 +189,7 @@ export function PurchaseOrderCreateDialog({
         <ErrorNotice error={availability.error} />
         <ErrorNotice error={bankAccountsQuery.error} />
         <ErrorNotice error={supplierSelection.error ?? masterSuppliers.error} />
+        <ErrorNotice error={ownerSetting.error} />
         <ErrorNotice error={create.error} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Supplier">
@@ -296,8 +301,13 @@ export function PurchaseOrderCreateDialog({
             <h3 className="text-sm font-semibold">Persetujuan Owner</h3>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Username Owner">
-              <input className={inputCls} autoComplete="username" required value={credentials.approver_username} onChange={(event) => setCredentials({ ...credentials, approver_username: event.target.value })} />
+            <Field label="Nama Owner">
+              <input
+                className={inputCls}
+                readOnly
+                value={ownerSetting.data?.owner?.name ?? ''}
+                placeholder={ownerSetting.isLoading ? 'Memuat nama Owner…' : 'Atur akun Owner di Pengaturan'}
+              />
             </Field>
             {approvalMode !== 'key' && <Field label="Password Owner">
               <input className={inputCls} type="password" autoComplete="current-password" required value={credentials.approver_password} onChange={(event) => setCredentials({ ...credentials, approver_password: event.target.value })} />
@@ -306,12 +316,15 @@ export function PurchaseOrderCreateDialog({
               <input className={inputCls} type="password" autoComplete="off" required value={credentials.approver_key} onChange={(event) => setCredentials({ ...credentials, approver_key: event.target.value })} />
             </Field>}
           </div>
+          {ownerSetting.data && !ownerSetting.data.owner && (
+            <p className="text-sm text-amber-800">Pilih akun Owner yang berwenang di Pengaturan.</p>
+          )}
         </section>
 
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
           <button type="button" disabled={create.isPending} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || supplierId === '' || bankAccountsQuery.isLoading || bankAccountsQuery.isError || !selectedBank || selectedLineCount === 0 || hasInvalidSelectedLine || (terms === 'top' && !/^[1-9]\d*$/.test(paymentTermDays))} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-            {create.isPending ? 'Membuat PO…' : 'Setujui & buat PO'}
+          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || ownerSetting.isLoading || ownerSetting.isError || !ownerSetting.data?.owner || supplierId === '' || bankAccountsQuery.isLoading || bankAccountsQuery.isError || !selectedBank || selectedLineCount === 0 || hasInvalidSelectedLine || (terms === 'top' && !/^[1-9]\d*$/.test(paymentTermDays))} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {create.isPending ? 'Membuat PO…' : 'Lanjutkan'}
           </button>
         </div>
       </form>

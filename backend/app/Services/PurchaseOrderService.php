@@ -39,6 +39,7 @@ class PurchaseOrderService
         private ReauthService $reauth,
         private NotificationService $notifications,
         private PurchaseRequisitionService $requisitions,
+        private PurchaseOrderOwnerSettingService $ownerSettings,
     ) {}
 
     // ------------------------------------------------------------------ baca
@@ -143,11 +144,29 @@ class PurchaseOrderService
     {
         abort_unless($this->permissions->allows($actor, 'purchase_order.create', $storeId), 403, 'Anda tidak berwenang membuat PO.');
 
+        $owner = $this->ownerSettings->get($storeId)['owner'];
+        if ($owner === null) {
+            throw ValidationException::withMessages([
+                'approver_user_id' => ['Pilih akun Owner di Pengaturan sebelum membuat PO.'],
+            ]);
+        }
+        if (isset($data['approver_user_id']) && (int) $data['approver_user_id'] !== $owner['id']) {
+            throw ValidationException::withMessages([
+                'approver_user_id' => ['Akun Owner tidak sesuai dengan pengaturan toko.'],
+            ]);
+        }
+        if (isset($data['approver_username']) && $data['approver_username'] !== $owner['username']) {
+            throw ValidationException::withMessages([
+                'approver_username' => ['Gunakan akun Owner yang ditetapkan pada Pengaturan toko.'],
+            ]);
+        }
+
         $reauth = (bool) $this->setting($storeId, 'approval_reauth_required', true);
         if ($reauth) {
-            $this->reauth->assertProvided($data, $actor);
+            $reauthData = [...$data, 'approver_username' => $owner['username']];
+            $this->reauth->assertProvided($reauthData, $actor);
             $approver = $this->reauth->confirm(
-                (string) $data['approver_username'],
+                $owner['username'],
                 (string) ($data['approver_password'] ?? ''),
                 'purchase_requisition.approve',
                 $actor,

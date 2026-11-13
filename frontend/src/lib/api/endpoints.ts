@@ -11,7 +11,7 @@ import type {
   AnnualReceivableReport, AnnualReceivableReportYears, AnnualReceivableReportSetting,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
   WarehouseSetting, InventoryMenuSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting, StockMonitoringSetting,
-  PurchaseOrderSupplierSelectionSetting,
+  PurchaseOrderSupplierSelectionSetting, PurchaseOrderOwnerSetting,
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
   SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
   BankAccount, BankAccountSummary,
@@ -693,6 +693,13 @@ export const settingsApi = {
     api<{ data: PurchaseOrderSupplierSelectionSetting }>('/settings/purchase-order-supplier-selection', {
       method: 'PUT',
       body: { mode },
+    }).then((r) => r.data),
+  purchaseOrderOwner: () =>
+    api<{ data: PurchaseOrderOwnerSetting }>('/settings/purchase-order-owner').then((r) => r.data),
+  savePurchaseOrderOwner: (owner_user_id: number) =>
+    api<{ data: PurchaseOrderOwnerSetting }>('/settings/purchase-order-owner', {
+      method: 'PUT',
+      body: { owner_user_id },
     }).then((r) => r.data),
   adminModel: () => api<{ data: AdminModelSetting }>('/settings/admin-model').then((r) => r.data),
   /** `confirm: true` wajib (konfirmasi eksplisit); backend menolak tanpa itu. */

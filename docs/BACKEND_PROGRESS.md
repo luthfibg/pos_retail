@@ -438,7 +438,7 @@ Detail PR (`data`): `id, doc_number ("PR-202610-000001"), status, reason, est_to
 
 Daftar item PO yang tersedia (`GET /api/purchase-requisitions/{pr}/purchase-order-items`, hanya PR `approved`): `{ "pr_id": 5, "items": [{ "product_id": 12, "sku": "…", "name": "…", "unit_name": "pcs", "qty_available": "4.000", "est_price": "2500.00", "suppliers": [{ "id": 2, "code": "SUP-02", "name": "Supplier", "default_payment_terms": "credit" }] }] }`. `qty_available` menghitung jumlah PR dikurangi kuantitas PO aktif; PO dibatalkan tidak mengurangi jumlah tersedia. `suppliers` hanya berisi supplier aktif yang terhubung ke produk.
 
-Untuk PO baru, autentikasi ulang Owner dikirim bersama create PO (bila toko memakai mode kunci, lihat bagian 14: kirim juga/atau `approver_key`): `approver_username` + `approver_password` (diketik pemberi persetujuan sendiri; salah → 422 `errors.approver_password`). Wajib selama setting `approval_reauth_required` aktif (default aktif). Bila pembuat PR = pemberi otorisasi, aturan `sod_owner_self_approve` (Owner) atau `sod_pr_creator_approver` (non-Owner) tetap diberlakukan; penandaan swa-persetujuan dicatat pada audit PO. Autentikasi dan persetujuan PR terpisah tetap berlaku untuk PR lama.
+Untuk PO baru, akun Owner ditetapkan per toko: `GET /api/settings/purchase-order-owner` dapat dibaca oleh `settings.manage` atau `purchase_order.create`, sedangkan `PUT` hanya oleh `settings.manage` dengan `{ "owner_user_id" }`. Kandidat harus aktif dan memiliki `purchase_requisition.approve`. Pengguna pembuat PO dapat membaca nama akun terpilih untuk ditampilkan pada form. Form mengirim `approver_user_id`; backend mencocokkannya dengan konfigurasi, lalu melakukan autentikasi ulang terhadap akun tersebut tanpa menerima identitas autentikasi dari klien. (Klien lama dapat mengirim `approver_username`, tetapi harus cocok dengan akun terpilih.) Kredensial `approver_password` atau `approver_key` tetap diketik oleh pemberi persetujuan; salah → 422. Wajib selama setting `approval_reauth_required` aktif (default aktif). Bila pembuat PR = pemberi otorisasi, aturan `sod_owner_self_approve` (Owner) atau `sod_pr_creator_approver` (non-Owner) tetap diberlakukan; penandaan swa-persetujuan dicatat pada audit PO. Autentikasi dan persetujuan PR terpisah tetap berlaku untuk PR lama. Jika terdapat beberapa kandidat dan belum ada akun yang ditetapkan, pembuatan PO ditolak sampai admin memilihnya di Pengaturan.
 
 ### 6.2 Purchase Order (PO)
 
@@ -448,7 +448,7 @@ Daftar supplier dapat dibaca oleh pemegang `supplier.manage`, `purchase_order.cr
 |---|---|---|---|
 | GET | `/api/purchase-orders` | Salah satu: `purchase_order.create`, `purchase_order.send`, `purchase_requisition.approve`, `goods_receipt.create` | Daftar. Pengelola PO: semua; **Kasir: hanya PO yang bisa menerima barang, tanpa harga** (`unit_price`/`total` = `null`). Query: `status`, `receipt_status`, `supplier_id`, `pr_id`, `receivable=1`, `q`, `per_page` |
 | GET | `/api/purchase-orders/{po}` | Sama dengan izin daftar | Detail + item, rekening tersamarkan, dan daftar penerimaan; pembatasan status untuk Kasir tetap berlaku |
-| POST | `/api/purchase-orders` | `purchase_order.create` | Buat PO langsung `approved` secara atomik dari PR lolos Finance; request mewajibkan rekening aktif (`bank_account_id`), item, dan autentikasi Owner (`approver_username` + `approver_password` atau `approver_key` sesuai mode). Tidak memeriksa saldo atau membuat alokasi |
+| POST | `/api/purchase-orders` | `purchase_order.create` | Buat PO langsung `approved` secara atomik dari PR lolos Finance; request mewajibkan rekening aktif (`bank_account_id`), item, akun Owner terpilih (`approver_user_id`), dan autentikasi ulang sesuai mode. Tidak memeriksa saldo atau membuat alokasi |
 | PATCH | `/api/purchase-orders/{po}` | `purchase_order.create` | Ubah hanya PO `draft` lama (`pr_id` tidak dapat diubah); PO baru tidak memiliki tahap draft |
 | POST | `/api/purchase-orders/{po}/submit` | `purchase_order.create` | Endpoint kompatibilitas untuk PO draft lama; draft menjadi `pending_confirmation` tanpa alokasi dana |
 | POST | `/api/purchase-orders/{po}/confirm` | `purchase_requisition.approve` | Endpoint kompatibilitas untuk PO lama berstatus `pending_confirmation`; PO baru sudah disetujui saat dibuat |
@@ -458,7 +458,7 @@ Daftar supplier dapat dibaca oleh pemegang `supplier.manage`, `purchase_order.cr
 
 Permintaan buat:
 ```json
-{ "pr_id": 5, "supplier_id": 2, "bank_account_id": 1, "approver_username": "owner", "approver_password": "…",
+{ "pr_id": 5, "supplier_id": 2, "bank_account_id": 1, "approver_user_id": 3, "approver_password": "…",
   "payment_terms": "top", "payment_term_days": 30, "order_date": "2026-10-24", "expected_date": "2026-10-30",
   "items": [ { "product_id": 12, "qty_ordered": "10", "unit_price": "2400" } ] }
 ```

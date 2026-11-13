@@ -400,6 +400,18 @@ export interface PurchaseOrderSupplierSelectionSetting {
   mode: 'manual' | 'product';
 }
 
+export interface PurchaseOrderOwner {
+  id: number;
+  name: string;
+  username: string;
+  roles: string[];
+}
+
+export interface PurchaseOrderOwnerSetting {
+  owner: PurchaseOrderOwner | null;
+  owners: PurchaseOrderOwner[];
+}
+
 export type PurchaseOrderResetPeriod = 'day' | 'week' | 'month' | 'all_time';
 
 export interface PurchaseOrderResetPreview {
@@ -1466,7 +1478,8 @@ export interface PurchaseOrderInput {
   pr_id: number;
   supplier_id: number;
   bank_account_id: number;
-  approver_username: string;
+  approver_user_id?: number;
+  approver_username?: string;
   approver_password?: string;
   approver_key?: string;
   payment_terms?: PurchaseOrderPaymentTerms;

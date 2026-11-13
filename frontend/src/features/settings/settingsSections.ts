@@ -2,7 +2,7 @@
  * Daftar bagian layar Pengaturan. Satu sumber untuk: isi layar, indeks kategori, izin akses, dan pengalihan rute lama.
  * Izin hanya untuk tampilan; backend tetap penentu akhir.
  */
-export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'purchase-order-suppliers' | 'inventory-menus' | 'bank-accounts' | 'stock-authority' | 'opname' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth' | 'annual-receivable';
+export type SectionId = 'store-name' | 'admin-model' | 'warehouse' | 'stock-monitoring' | 'purchase-order-suppliers' | 'purchase-order-owner' | 'inventory-menus' | 'bank-accounts' | 'stock-authority' | 'opname' | 'registers' | 'vat' | 'discounts' | 'float-policy' | 'users' | 'approval-auth' | 'annual-receivable';
 export type GroupId = 'store' | 'inventory' | 'sales' | 'cash' | 'accounts' | 'billing';
 
 export interface SettingsSection {
@@ -50,6 +50,11 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     id: 'purchase-order-suppliers', group: 'store', title: 'Supplier Purchase Order', permission: 'settings.manage', defaultOpen: false,
     description: 'Pilih supplier PO dari master data atau otomatis dari supplier produk.',
     keywords: ['supplier', 'pembelian', 'purchase order', 'po', 'produk', 'otomatis'],
+  },
+  {
+    id: 'purchase-order-owner', group: 'store', title: 'Nama Owner Purchase Order', permission: 'settings.manage', defaultOpen: false,
+    description: 'Tetapkan akun Owner yang ditampilkan dan digunakan untuk autentikasi PO.',
+    keywords: ['owner', 'nama', 'akun', 'persetujuan', 'pembelian', 'purchase order', 'po'],
   },
   {
     id: 'inventory-menus', group: 'store', title: 'Menu Inventory', permission: 'settings.manage', defaultOpen: false,

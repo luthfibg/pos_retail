@@ -101,7 +101,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Kasir ?? [], false, ['Kasir'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Stok Barang, Penerimaan Barang, Retur Barang, Adjustment, Pergerakan Stok',
+      'Inventory > Penerimaan Barang, Stok Barang, Retur Barang, Adjustment, Pergerakan Stok',
       'Penjualan > Kasir Jaga, Kasir, Penjualan',
       'Karyawan',
     ]);
