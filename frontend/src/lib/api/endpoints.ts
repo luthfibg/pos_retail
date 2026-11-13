@@ -7,10 +7,11 @@ import type {
   GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
   PurchaseOrderRequisitionItem, PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
-  DashboardReport, ProfitReport, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
+  DashboardReport, ProfitReport, FinancialReport, FinancialPurchaseOrder, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
   AnnualReceivableReport, AnnualReceivableReportYears, AnnualReceivableReportSetting,
   ManagedRole, ManagedUser, PlatformStore, PlatformStoreDetail, PlatformTenantInput,
   WarehouseSetting, InventoryMenuSetting, AdminModelId, AdminModelSetting, ApprovalAuthMode, ApprovalAuthSetting, StockMonitoringSetting,
+  PurchaseOrderSupplierSelectionSetting,
   AuthorizationKeyStatus, AuthorizationKeyType, AuthorizationKeyHolder, StockAuthoritySetting, StockAuthorityUpdate,
   SupplierReturn, SupplierReturnInput, SupplierReturnStatus, SupplierReturnSummary,
   BankAccount, BankAccountSummary,
@@ -94,6 +95,20 @@ export const reportApi = {
     api<{ data: DashboardReport }>('/reports/dashboard', { query: filters }).then((r) => r.data),
   profit: (filters: { date_from: string; date_to: string }) =>
     api<{ data: ProfitReport }>('/reports/profit', { query: filters }).then((r) => r.data),
+};
+
+export const financialApi = {
+  report: (filters: { date_from: string; date_to: string }) =>
+    api<{ data: FinancialReport }>('/financial/report', { query: filters }).then((r) => r.data),
+  purchaseOrders: (page = 1) =>
+    api<Paginated<FinancialPurchaseOrder>>('/financial/purchase-orders', { query: { page, per_page: 25 } }),
+  recordPurchaseOrderPayment: (id: number, input: { amount: string }) =>
+    api<{ data: { id: number; po_id: number; amount: string; payment_status: 'partial' | 'paid' } }>(
+      `/financial/purchase-orders/${id}/payments`,
+      { method: 'POST', body: input },
+    ).then((r) => r.data),
+  recordExpense: (input: { category: 'operational' | 'payroll'; description: string; amount: string; paid_on: string }) =>
+    api<{ data: { id: number; amount: string } }>('/financial/expenses', { method: 'POST', body: input }).then((r) => r.data),
 };
 
 export const billingApi = {
@@ -672,6 +687,13 @@ export const settingsApi = {
   warehouse: () => api<{ data: WarehouseSetting }>('/settings/warehouse').then((r) => r.data),
   saveWarehouse: (enabled: boolean) =>
     api<{ data: WarehouseSetting }>('/settings/warehouse', { method: 'PUT', body: { enabled } }).then((r) => r.data),
+  purchaseOrderSupplierSelection: () =>
+    api<{ data: PurchaseOrderSupplierSelectionSetting }>('/settings/purchase-order-supplier-selection').then((r) => r.data),
+  savePurchaseOrderSupplierSelection: (mode: PurchaseOrderSupplierSelectionSetting['mode']) =>
+    api<{ data: PurchaseOrderSupplierSelectionSetting }>('/settings/purchase-order-supplier-selection', {
+      method: 'PUT',
+      body: { mode },
+    }).then((r) => r.data),
   adminModel: () => api<{ data: AdminModelSetting }>('/settings/admin-model').then((r) => r.data),
   /** `confirm: true` wajib (konfirmasi eksplisit); backend menolak tanpa itu. */
   saveAdminModel: (model: AdminModelId) =>

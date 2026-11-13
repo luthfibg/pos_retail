@@ -149,9 +149,9 @@ export function PurchaseRequisitionsPage() {
                   <tr>
                     <th className="px-3 py-2">Nomor Permintaan</th>
                     {canViewAll && <th className="px-3 py-2">Pemohon</th>}
-                    <th className="px-3 py-2">Alasan</th>
+                    {canViewAll && <th className="px-3 py-2">Alasan</th>}
                     <th className="px-3 py-2 text-right">Barang</th>
-                    <th className="px-3 py-2 text-right">Estimasi</th>
+                    <th className="px-3 py-2 text-right">Total Permintaan</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Diajukan</th>
                     <th className="px-3 py-2" />
@@ -165,7 +165,7 @@ export function PurchaseRequisitionsPage() {
                         {pr.is_auto_generated && <span className="mt-1 block font-sans text-xs font-medium text-blue-700">Otomatis · pemantauan stok</span>}
                       </td>
                       {canViewAll && <td className="px-3 py-2">{pr.is_auto_generated ? 'Sistem pemantauan stok' : pr.requester_name}</td>}
-                      <td className="max-w-xs truncate px-3 py-2">{pr.reason || '—'}</td>
+                      {canViewAll && <td className="max-w-xs truncate px-3 py-2">{pr.reason || '—'}</td>}
                       <td className="px-3 py-2 text-right tabular-nums">{pr.items_count}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(pr.est_total)}</td>
                       <td className="px-3 py-2"><PurchaseRequisitionStatusText status={pr.status} /></td>
@@ -315,7 +315,7 @@ export function PurchaseRequisitionForm({
                   <Field label="Jumlah" error={rowErrors.qty}>
                     <LocalDecimalInput className={inputCls} kind="quantity" value={row.qty} onChange={(value) => updateRow(row.key, { qty: value })} />
                   </Field>
-                  <Field label="Estimasi harga / unit (opsional)" error={rowErrors.est_price}>
+                  <Field label="Total Permintaan harga / unit (opsional)" error={rowErrors.est_price}>
                     <LocalDecimalInput className={inputCls} kind="price" value={row.estPrice} onChange={(value) => updateRow(row.key, { estPrice: value })} />
                   </Field>
                   <Field label="Catatan baris" error={rowErrors.note}>
@@ -434,9 +434,8 @@ export function PurchaseRequisitionDetailDialog({
           {pr.reason && !pr.is_auto_generated && <p className="rounded-md bg-slate-50 p-3 text-sm">{pr.reason}</p>}
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold">Barang yang diminta</h3>
             <div className="overflow-x-auto rounded-md border border-slate-200">
-              <table className="w-full min-w-[420px] text-left text-sm">
+              <table className="w-full min-w-105 text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2 text-right">Jumlah Barang</th><th className="px-3 py-2 text-right">Harga satuan</th>{canManagePr && pr.is_auto_generated && pr.status === 'returned' && <th className="px-3 py-2 text-right">Aksi</th>}</tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {pr.items.map((item) => (

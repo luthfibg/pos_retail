@@ -75,6 +75,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Keuangan',
     items: [
+      { to: '/financial', label: 'Laporan Keuangan', permission: 'financial.report.view' },
       { to: '/shifts', label: 'Laporan Kasir Jaga', permission: 'shift.review' },
       { to: '/cash-deposits', label: 'Setoran Masuk', permission: 'cash_deposit.receive' },
       { to: '/billing', label: 'Laporan Piutang', permission: ['billing_period.manage', 'invoice.generate'] },

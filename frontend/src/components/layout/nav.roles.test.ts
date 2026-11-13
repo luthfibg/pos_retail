@@ -17,7 +17,7 @@ const PERMISSIONS: Record<string, string[]> = {
   ],
   Finance: [
     'inventory.view', 'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit', 'purchase_requisition.finance_check',
-    'shift.review', 'float.propose', 'cash_deposit.receive', 'receipt.reprint', 'reports.view',
+    'shift.review', 'float.propose', 'cash_deposit.receive', 'financial.report.view', 'financial.transaction.create', 'receipt.reprint', 'reports.view',
   ],
   Purchasing: [
     'product.create', 'product.update', 'category.manage', 'supplier.manage', 'shelf_layout.view', 'inventory.view',
@@ -25,13 +25,13 @@ const PERMISSIONS: Record<string, string[]> = {
   ],
   Accounting: [
     'inventory.view', 'opname.view', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close', 'invoice.generate',
-    'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'reports.view',
+    'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'financial.report.view', 'financial.transaction.create', 'reports.view',
   ],
   Owner: [
     'user.manage', 'role.manage', 'settings.manage', 'audit_log.view', 'inventory.opening_balance', 'product.activate', 'price.change', 'discount.manage',
     'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve', 'customer.select', 'customer.update',
     'customer.verify', 'customer.set_limit', 'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
-    'shift.review', 'float.configure', 'reports.view', 'opname.view', 'opname.create', 'opname.cancel',
+    'shift.review', 'float.configure', 'reports.view', 'financial.report.view', 'opname.view', 'opname.create', 'opname.cancel',
   ],
 };
 
@@ -52,7 +52,7 @@ describe('menu per role (model standar retail)', () => {
 
   it('Finance melihat laporan kasir jaga, setoran masuk, dan pemeriksaan Permintaan', () => {
     expect(menuFor('Finance')).toEqual([
-      '/cash-deposits', '/customers', '/dashboard', '/inventory/movements', '/products', '/purchase-requisitions', '/shifts',
+      '/cash-deposits', '/customers', '/dashboard', '/financial', '/inventory/movements', '/products', '/purchase-requisitions', '/shifts',
     ]);
   });
 
@@ -63,7 +63,7 @@ describe('menu per role (model standar retail)', () => {
   });
 
   it('Accounting melihat laporan piutang dan laporan kasir jaga', () => {
-    expect(menuFor('Accounting')).toEqual(['/billing', '/dashboard', '/inventory/adjustments', '/inventory/movements', '/products', '/shifts']);
+    expect(menuFor('Accounting')).toEqual(['/billing', '/dashboard', '/financial', '/inventory/adjustments', '/inventory/movements', '/products', '/shifts']);
   });
 
   it('Owner melihat persetujuan, kebijakan, pengaturan, dan model administrasi', () => {
@@ -112,7 +112,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Dashboard',
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Pergerakan Stok',
-      'Keuangan > Laporan Kasir Jaga, Setoran Masuk',
+      'Keuangan > Laporan Keuangan, Laporan Kasir Jaga, Setoran Masuk',
       'Karyawan',
     ]);
   });
@@ -130,7 +130,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Accounting ?? [])).toEqual([
       'Dashboard',
       'Inventory > Stok Barang, Adjustment & Opname, Pergerakan Stok',
-      'Keuangan > Laporan Kasir Jaga, Laporan Piutang',
+      'Keuangan > Laporan Keuangan, Laporan Kasir Jaga, Laporan Piutang',
     ]);
   });
 
@@ -139,7 +139,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Dashboard',
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Retur Barang, Adjustment & Opname, Pergerakan Stok',
-      'Laporan Kasir Jaga',
+      'Keuangan > Laporan Keuangan, Laporan Kasir Jaga',
       'Karyawan',
       'Pengaturan',
     ]);
@@ -151,7 +151,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Retur Barang, Adjustment & Opname, Pergerakan Stok',
       'Penjualan',
-      'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
+      'Keuangan > Laporan Keuangan, Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
       'Data Master > Kategori, Supplier, Karyawan',
       'Pengaturan',
     ]);

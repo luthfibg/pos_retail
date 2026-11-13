@@ -4,6 +4,7 @@ use App\Http\Controllers\AdminModelController;
 use App\Http\Controllers\BankAccountController;
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\InventoryMenuSettingController;
+use App\Http\Controllers\PurchaseOrderSupplierSettingController;
 use App\Http\Controllers\StockAuthorityController;
 use App\Http\Controllers\StockMonitoringSettingController;
 use App\Http\Controllers\StoreNameSettingController;
@@ -22,6 +23,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('account')->middleware('can:settings.manage');
     Route::get('settings/inventory/menus', [InventoryMenuSettingController::class, 'show']);
     Route::put('settings/inventory/menus', [InventoryMenuSettingController::class, 'update'])->middleware('can:settings.manage');
+    Route::get('settings/purchase-order-supplier-selection', [PurchaseOrderSupplierSettingController::class, 'show']);
+    Route::put('settings/purchase-order-supplier-selection', [PurchaseOrderSupplierSettingController::class, 'update'])->middleware('can:settings.manage');
 
     Route::get('discounts', [DiscountController::class, 'index'])->middleware('can:discount.manage');
     Route::post('discounts', [DiscountController::class, 'store'])->middleware('can:discount.manage');

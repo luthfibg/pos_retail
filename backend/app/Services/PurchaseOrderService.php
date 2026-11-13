@@ -21,7 +21,7 @@ use Illuminate\Validation\ValidationException;
  *  - PO berasal dari PR yang lolos Finance; satu PR boleh dipecah ke beberapa PO (per supplier)
  *  - qty per produk, kumulatif di semua PO aktif dari PR yang sama, tidak boleh melebihi qty PR
  *  - status penerimaan (receipt_status) dan pembayaran (payment_status) terpisah dari status dokumen;
- *    payment_status = unpaid sampai Paket 2
+ *    Finance mencatat pembayaran aktual dan dapat membayar PO secara bertahap
  *  - Kasir (hanya goods_receipt.create) melihat PO yang bisa diterima tanpa harga
  */
 class PurchaseOrderService

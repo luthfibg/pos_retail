@@ -7,6 +7,7 @@ const AdminModel = lazy(() => import('./AdminModelSettingsPage').then((module) =
 const StoreName = lazy(() => import('./StoreNameSettingsPage').then((module) => ({ default: module.StoreNameSettingsPage })));
 const Warehouse = lazy(() => import('./WarehouseSettingsPage').then((module) => ({ default: module.WarehouseSettingsPage })));
 const StockMonitoring = lazy(() => import('./StockMonitoringSettingsPage').then((module) => ({ default: module.StockMonitoringSettingsPage })));
+const PurchaseOrderSuppliers = lazy(() => import('./PurchaseOrderSupplierSettingsPage').then((module) => ({ default: module.PurchaseOrderSupplierSettingsPage })));
 const InventoryMenus = lazy(() => import('./InventoryMenuSettingsPage').then((module) => ({ default: module.InventoryMenuSettingsPage })));
 const BankAccounts = lazy(() => import('./BankAccountsSettingsPage').then((module) => ({ default: module.BankAccountsSettingsPage })));
 const StockAuthority = lazy(() => import('./StockAuthoritySettingsPage').then((module) => ({ default: module.StockAuthoritySettingsPage })));
@@ -25,6 +26,7 @@ function SectionBody({ id }: { id: SectionId }) {
     case 'admin-model': return <AdminModel embedded />;
     case 'warehouse': return <Warehouse embedded />;
     case 'stock-monitoring': return <StockMonitoring embedded />;
+    case 'purchase-order-suppliers': return <PurchaseOrderSuppliers embedded />;
     case 'inventory-menus': return <InventoryMenus embedded />;
     case 'bank-accounts': return <BankAccounts embedded />;
     case 'stock-authority': return <StockAuthority embedded />;

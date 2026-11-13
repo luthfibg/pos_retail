@@ -396,6 +396,10 @@ export interface StockMonitoringSetting {
   low_stock_threshold: Decimal;
 }
 
+export interface PurchaseOrderSupplierSelectionSetting {
+  mode: 'manual' | 'product';
+}
+
 export type PurchaseOrderResetPeriod = 'day' | 'week' | 'month' | 'all_time';
 
 export interface PurchaseOrderResetPreview {
@@ -1059,6 +1063,37 @@ export interface ProfitReport {
     cash: { valid_profit: Decimal };
     payroll_credit: { valid_profit: Decimal; expected_profit: Decimal };
   };
+}
+
+export interface FinancialReport {
+  period: { date_from: string; date_to: string };
+  cash: {
+    account_name: string;
+    opening_balance: Decimal;
+    cash_in: Decimal;
+    cash_out: Decimal;
+    closing_balance: Decimal;
+  };
+  profit: {
+    gross_profit: Decimal;
+    operating_expenses: Decimal;
+    payroll_expenses: Decimal;
+    approved_return_losses: Decimal;
+    net_profit: Decimal;
+  };
+  supplier_payments: Decimal;
+}
+
+export interface FinancialPurchaseOrder {
+  id: number;
+  doc_number: string;
+  status: PurchaseOrderStatus;
+  payment_terms: 'prepaid' | 'credit' | 'cod';
+  payment_status: 'unpaid' | 'partial';
+  supplier_name: string;
+  total: Decimal;
+  amount_paid: Decimal;
+  amount_remaining: Decimal;
 }
 
 export type CustomerStatus = 'pending_verification' | 'active' | 'inactive';

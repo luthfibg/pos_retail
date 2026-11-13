@@ -6,7 +6,7 @@ const only = (...permissions: string[]) => (permission: string) => permissions.i
 
 describe('settingsSections', () => {
   it('pemegang semua izin melihat semua bagian dalam urutan kategori', () => {
-    expect(visibleSections(all).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'inventory-menus', 'bank-accounts', 'stock-authority', 'opname', 'vat', 'discounts', 'float-policy', 'registers', 'users', 'approval-auth', 'annual-receivable']);
+    expect(visibleSections(all).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'purchase-order-suppliers', 'inventory-menus', 'bank-accounts', 'stock-authority', 'opname', 'vat', 'discounts', 'float-policy', 'registers', 'users', 'approval-auth', 'annual-receivable']);
   });
 
   it('bagian mengikuti izin masing-masing', () => {
@@ -16,7 +16,7 @@ describe('settingsSections', () => {
     expect(visibleSections(only('opname.settings.manage')).map((section) => section.id)).toEqual(['opname']);
     expect(visibleSections(only('float.configure')).map((section) => section.id)).toEqual(['float-policy']);
     expect(visibleSections(only('register.manage')).map((section) => section.id)).toEqual(['registers']);
-    expect(visibleSections(only('settings.manage')).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'inventory-menus', 'bank-accounts', 'stock-authority', 'vat', 'approval-auth', 'annual-receivable']);
+    expect(visibleSections(only('settings.manage')).map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'purchase-order-suppliers', 'inventory-menus', 'bank-accounts', 'stock-authority', 'vat', 'approval-auth', 'annual-receivable']);
     expect(visibleSections(only('shift.review'))).toEqual([]);
   });
 
@@ -28,6 +28,7 @@ describe('settingsSections', () => {
     expect(visibleSections(all, 'SANDI').map((section) => section.id)).toEqual(['users']);
     expect(visibleSections(all, 'opname').map((section) => section.id)).toEqual(['stock-authority', 'opname']);
     expect(visibleSections(all, 'Permintaan otomatis').map((section) => section.id)).toEqual(['stock-monitoring']);
+    expect(visibleSections(all, 'Supplier PO').map((section) => section.id)).toEqual(['purchase-order-suppliers']);
     expect(visibleSections(all, 'endapan').map((section) => section.id)).toEqual(['float-policy']);
     expect(visibleSections(all, 'kunci').map((section) => section.id)).toEqual(['approval-auth']);
     expect(visibleSections(all, 'tidak-ada')).toEqual([]);
@@ -37,7 +38,7 @@ describe('settingsSections', () => {
   it('mengelompokkan per kategori dan membuang kategori kosong', () => {
     const groups = groupSections(visibleSections(only('settings.manage', 'user.manage')));
     expect(groups.map((group) => group.label)).toEqual(['Toko', 'Penjualan & harga', 'Akun', 'Piutang']);
-    expect(groups[0]?.sections.map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'inventory-menus', 'bank-accounts', 'stock-authority']);
+    expect(groups[0]?.sections.map((section) => section.id)).toEqual(['store-name', 'admin-model', 'warehouse', 'stock-monitoring', 'purchase-order-suppliers', 'inventory-menus', 'bank-accounts', 'stock-authority']);
   });
 
   it('membaca hash hanya untuk bagian yang tersedia', () => {

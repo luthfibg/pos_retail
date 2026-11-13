@@ -28,6 +28,7 @@ const SupplierReturnsPage = lazy(() => import('@/features/purchasing/SupplierRet
 const PurchasingEntryPage = lazy(() => import('@/features/purchasing/PurchaseBoardPage').then((module) => ({ default: module.PurchasingEntryPage })));
 const DashboardPage = lazy(() => import('@/features/reports/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 const BillingPage = lazy(() => import('@/features/billing/BillingPage').then((module) => ({ default: module.BillingPage })));
+const FinancialPage = lazy(() => import('@/features/reports/FinancialPage').then((module) => ({ default: module.FinancialPage })));
 const PlatformStoresPage = lazy(() => import('@/features/platform/PlatformStoresPage').then((module) => ({ default: module.PlatformStoresPage })));
 
 function LazyPage({ children }: { children: ReactNode }) {
@@ -69,6 +70,10 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="reports.view" />,
             children: [{ path: 'dashboard', element: <LazyPage><DashboardPage /></LazyPage> }],
+          },
+          {
+            element: <RequirePermission permission="financial.report.view" />,
+            children: [{ path: 'financial', element: <LazyPage><FinancialPage /></LazyPage> }],
           },
           {
             element: <RequireAnyPermission permissions={['billing_period.manage', 'invoice.generate']} />,

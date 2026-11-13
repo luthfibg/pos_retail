@@ -45,6 +45,7 @@ class GoodsReceiptService
         private InventoryService $inventory,
         private NotificationService $notifications,
         private SupplierReturnService $supplierReturns,
+        private FinancialService $financial,
     ) {}
 
     // ------------------------------------------------------------------ baca
@@ -570,20 +571,32 @@ class GoodsReceiptService
                 }
             }
 
+            $postedAt = $this->nowUtc();
+            $autoPayment = null;
+            if (! $isReplacementReceipt && $poStatus === 'received' && $receiptStatus === 'complete') {
+                $autoPayment = $this->financial->settleOnFullReceipt(
+                    $actor,
+                    $storeId,
+                    (int) $po->id,
+                    $gr->doc_number,
+                    $postedAt,
+                );
+            }
+
             $this->inventory->synchronizeAutomaticPurchaseRequisitions(
                 $actor,
                 $storeId,
                 $items->pluck('product_id')->map(fn ($productId) => (int) $productId)->unique()->values()->all(),
             );
 
-            DB::table('goods_receipts')->where('id', $id)->update(['status' => 'posted', 'posted_at' => $this->nowUtc()]);
+            DB::table('goods_receipts')->where('id', $id)->update(['status' => 'posted', 'posted_at' => $postedAt]);
 
             $this->audit->log(
                 'goods_receipt.post',
                 'goods_receipt',
                 $id,
                 before: ['status' => $gr->status],
-                after: ['status' => 'posted', 'po_status' => $poStatus, 'lines' => $lines],
+                after: ['status' => 'posted', 'po_status' => $poStatus, 'auto_payment_id' => $autoPayment['id'] ?? null, 'lines' => $lines],
                 actorId: $actor->id,
                 storeId: $storeId,
             );

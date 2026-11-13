@@ -73,6 +73,8 @@ final class PermissionCatalog
             'invoice.record_payment' => 'Mencatat pembayaran invoice dari HRD',
             'reports.view' => 'Melihat laporan',
             'reports.profit.view' => 'Melihat laporan laba',
+            'financial.report.view' => 'Melihat laporan keuangan',
+            'financial.transaction.create' => 'Mencatat pembayaran dan biaya keuangan',
         ];
     }
 
@@ -130,7 +132,7 @@ final class PermissionCatalog
             'opname.review', 'opname.post', 'opname.approve', 'opname.view_value',
             'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
-            'shift.review', 'register.manage', 'float.configure', 'reports.view', 'reports.profit.view',
+            'shift.review', 'register.manage', 'float.configure', 'reports.view', 'reports.profit.view', 'financial.report.view',
         ];
     }
 
@@ -140,7 +142,7 @@ final class PermissionCatalog
         return [
             'inventory.view', 'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
             'purchase_requisition.finance_check', 'shift.review', 'float.propose', 'cash_deposit.receive',
-            'invoice.record_payment',
+            'invoice.record_payment', 'financial.report.view', 'financial.transaction.create',
             'receipt.reprint', 'reports.view', 'reports.profit.view',
         ];
     }
@@ -160,7 +162,7 @@ final class PermissionCatalog
         return [
             'inventory.view', 'opname.view', 'opname.view_value', 'goods_receipt.verify_documents', 'billing_period.manage', 'billing_period.close',
             'invoice.generate', 'invoice.issue', 'invoice.record_payment', 'audit_log.view', 'shift.review', 'reports.view',
-            'reports.profit.view',
+            'reports.profit.view', 'financial.report.view', 'financial.transaction.create',
         ];
     }
 

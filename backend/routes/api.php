@@ -50,4 +50,5 @@ require __DIR__.'/api/settings.php';
 require __DIR__.'/api/authorization.php';
 require __DIR__.'/api/users.php';
 require __DIR__.'/api/reports.php';
+require __DIR__.'/api/financial.php';
 require __DIR__.'/api/platform.php';

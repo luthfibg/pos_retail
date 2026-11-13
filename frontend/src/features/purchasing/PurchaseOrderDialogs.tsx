@@ -4,8 +4,8 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
-import { bankAccountApi, purchaseOrderApi, purchaseRequisitionApi } from '@/lib/api/endpoints';
-import type { ApprovalAuthMode, PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition } from '@/lib/api/types';
+import { bankAccountApi, purchaseOrderApi, purchaseRequisitionApi, settingsApi, supplierApi } from '@/lib/api/endpoints';
+import type { ApprovalAuthMode, PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition, Supplier } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
 import { centsToMoney, lineCents, moneyToCents, qtyToMilli } from '@/lib/money';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -31,6 +31,19 @@ function today(): string {
   return localDate.toISOString().slice(0, 10);
 }
 
+async function loadActiveSuppliers(): Promise<Supplier[]> {
+  const firstPage = await supplierApi.list({ active_only: true, per_page: 100 });
+  if (firstPage.last_page === 1) return firstPage.data;
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: firstPage.last_page - 1 }, (_, index) =>
+      supplierApi.list({ active_only: true, per_page: 100, page: index + 2 }),
+    ),
+  );
+
+  return [...firstPage.data, ...remainingPages.flatMap((page) => page.data)];
+}
+
 export function PurchaseOrderCreateDialog({
   pr,
   onClose,
@@ -50,15 +63,28 @@ export function PurchaseOrderCreateDialog({
     queryKey: ['purchase-requisition', pr.id, 'purchase-order-items'],
     queryFn: () => purchaseRequisitionApi.purchaseOrderItems(pr.id),
   });
+  const supplierSelection = useQuery({
+    queryKey: ['settings', 'purchase-order-supplier-selection'],
+    queryFn: settingsApi.purchaseOrderSupplierSelection,
+  });
+  const masterSuppliers = useQuery({
+    queryKey: ['suppliers', 'purchase-order'],
+    queryFn: loadActiveSuppliers,
+    enabled: supplierSelection.data?.mode === 'manual',
+  });
   const rowsWithRemaining = availability.data?.items ?? [];
-  const supplierOptions = useMemo(() => {
+  const productSupplierOptions = useMemo(() => {
     const options = new Map<number, (typeof rowsWithRemaining)[number]['suppliers'][number]>();
     for (const item of rowsWithRemaining) {
       for (const supplier of item.suppliers) options.set(supplier.id, supplier);
     }
     return [...options.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [rowsWithRemaining]);
-  const autoSupplier = supplierOptions.length === 1 ? supplierOptions[0] : null;
+  const automaticSupplierSelection = supplierSelection.data?.mode === 'product';
+  const supplierOptions = automaticSupplierSelection
+    ? productSupplierOptions
+    : masterSuppliers.data ?? [];
+  const autoSupplier = automaticSupplierSelection && supplierOptions.length === 1 ? supplierOptions[0] : null;
   const [supplierId, setSupplierId] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
   const [terms, setTerms] = useState<'prepaid' | 'credit' | 'cod'>('cod');
@@ -77,13 +103,13 @@ export function PurchaseOrderCreateDialog({
     initializedAvailability.current = true;
   }, [availability.data]);
   useEffect(() => {
-    if (!availability.data) return;
+    if (!availability.data || !supplierSelection.data) return;
     setSupplierId((current) => {
       if (current && supplierOptions.some((supplier) => String(supplier.id) === current)) return current;
       return autoSupplier ? String(autoSupplier.id) : '';
     });
     if (autoSupplier) setTerms(autoSupplier.default_payment_terms ?? 'cod');
-  }, [availability.data, autoSupplier, supplierOptions]);
+  }, [availability.data, autoSupplier, supplierOptions, supplierSelection.data]);
   const chosenSupplierId = Number(supplierId);
   const availableItems = rowsWithRemaining.filter((item) =>
     item.suppliers.some((supplier) => supplier.id === chosenSupplierId),
@@ -151,11 +177,18 @@ export function PurchaseOrderCreateDialog({
       <form className="space-y-4 p-5" onSubmit={submit}>
         <ErrorNotice error={availability.error} />
         <ErrorNotice error={bankAccountsQuery.error} />
+        <ErrorNotice error={supplierSelection.error ?? masterSuppliers.error} />
         <ErrorNotice error={create.error} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Supplier">
-            <select className={inputCls} required value={supplierId} onChange={(event) => chooseSupplier(event.target.value)} disabled={availability.isLoading || supplierOptions.length <= 1}>
-              <option value="">{supplierOptions.length === 0 ? 'Tidak ada supplier terkait' : 'Pilih supplier'}</option>
+            <select
+              className={inputCls}
+              required
+              value={supplierId}
+              onChange={(event) => chooseSupplier(event.target.value)}
+              disabled={availability.isLoading || supplierSelection.isLoading || supplierSelection.isError || masterSuppliers.isLoading || masterSuppliers.isError || (automaticSupplierSelection && supplierOptions.length <= 1)}
+            >
+              <option value="">{supplierOptions.length === 0 ? (automaticSupplierSelection ? 'Tidak ada supplier produk' : 'Tidak ada supplier aktif') : 'Pilih supplier'}</option>
               {supplierOptions.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} · {supplier.name}</option>)}
             </select>
           </Field>
@@ -180,7 +213,7 @@ export function PurchaseOrderCreateDialog({
             <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Memuat jumlah barang yang dapat dipesan…</p>
           ) : availability.error ? null : rowsWithRemaining.length === 0 ? (
             <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Semua jumlah Permintaan sudah dialokasikan ke PO.</p>
-          ) : supplierOptions.length === 0 ? (
+          ) : productSupplierOptions.length === 0 ? (
             <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">Belum ada supplier aktif yang terhubung ke produk pada Permintaan ini.</p>
           ) : supplierId === '' ? (
             <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Pilih supplier untuk melihat produk yang dapat dipesan.</p>

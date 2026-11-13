@@ -91,8 +91,64 @@ class GoodsReceiptTest extends SeededTestCase
 
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
         $this->assertSame('complete', DB::table('purchase_orders')->where('id', $po)->value('receipt_status'));
+        $this->assertSame('paid', DB::table('purchase_orders')->where('id', $po)->value('payment_status'));
+        $this->assertSame('20000.00', DB::table('purchase_orders')->where('id', $po)->value('amount_paid'));
+        $this->assertDatabaseHas('purchase_order_payments', [
+            'po_id' => $po,
+            'amount' => '20000.00',
+            'reference' => $response->json('data.doc_number'),
+        ]);
+        $fundId = DB::table('fund_accounts')->where('store_id', $this->storeId())->where('type', 'main_cash')->value('id');
+        $this->assertSame(-2000000, (int) (DB::table('fund_ledger_entries')
+            ->where('fund_account_id', $fundId)
+            ->sum(DB::raw('amount * 100'))));
         $this->assertSame(10.0, (float) DB::table('purchase_order_items')->where('id', $item)->value('qty_received'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'goods_receipt.post', 'actor_id' => $this->cashier->id]);
+    }
+
+    public function test_full_receipt_only_auto_pays_the_remaining_balance(): void
+    {
+        $productId = $this->product();
+        [$po, $poItem] = $this->sentPo($productId);
+        $fundId = (int) DB::table('fund_accounts')->where('store_id', $this->storeId())->where('type', 'main_cash')->value('id');
+        $paymentId = DB::table('purchase_order_payments')->insertGetId([
+            'store_id' => $this->storeId(),
+            'po_id' => $po,
+            'amount' => '5000.00',
+            'paid_at' => now('UTC')->format('Y-m-d H:i:s.v'),
+            'reference' => 'CICILAN-01',
+            'recorded_by' => $this->cashier->id,
+        ]);
+        DB::table('purchase_orders')->where('id', $po)->update([
+            'amount_paid' => '5000.00',
+            'payment_status' => 'partial',
+        ]);
+        DB::table('fund_ledger_entries')->insert([
+            'fund_account_id' => $fundId,
+            'entry_type' => 'purchase_order_payment',
+            'amount' => '-5000.00',
+            'ref_type' => 'purchase_order_payment',
+            'ref_id' => $paymentId,
+            'occurred_at' => now('UTC')->format('Y-m-d H:i:s.v'),
+            'created_by' => $this->cashier->id,
+            'note' => 'Cicilan PO',
+        ]);
+
+        $this->postJson('/api/goods-receipts', $this->receipt($po, $poItem, [], ['post' => true]))
+            ->assertCreated();
+
+        $this->assertSame('paid', DB::table('purchase_orders')->where('id', $po)->value('payment_status'));
+        $this->assertSame('20000.00', DB::table('purchase_orders')->where('id', $po)->value('amount_paid'));
+        $this->assertSame(2, DB::table('purchase_order_payments')->where('po_id', $po)->count());
+        $this->assertDatabaseHas('purchase_order_payments', [
+            'po_id' => $po,
+            'amount' => '15000.00',
+            'reference' => DB::table('goods_receipts')->where('po_id', $po)->value('doc_number'),
+        ]);
+        $this->assertSame(-2000000, (int) (DB::table('fund_ledger_entries')
+            ->where('fund_account_id', $fundId)
+            ->where('ref_type', 'purchase_order_payment')
+            ->sum(DB::raw('amount * 100'))));
     }
 
     public function test_final_receipt_calculates_received_quantity_closes_shortage_and_creates_return(): void
@@ -164,6 +220,9 @@ class GoodsReceiptTest extends SeededTestCase
 
         $this->getJson('/api/purchase-orders?receivable=1')->assertOk()->assertJsonMissing(['doc_number' => DB::table('purchase_orders')->where('id', $po)->value('doc_number')]);
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
+        $this->assertSame('partial', DB::table('purchase_orders')->where('id', $po)->value('receipt_status'));
+        $this->assertSame('unpaid', DB::table('purchase_orders')->where('id', $po)->value('payment_status'));
+        $this->assertSame(0, DB::table('purchase_order_payments')->where('po_id', $po)->count());
         $receiptId = (int) DB::table('goods_receipts')->where('po_id', $po)->value('id');
         $this->assertSame(0, DB::table('supplier_returns')->where('goods_receipt_id', $receiptId)->count());
     }

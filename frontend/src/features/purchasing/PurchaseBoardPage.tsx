@@ -369,10 +369,8 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
             <th className="px-3 py-2">Nomor Permintaan</th>
-            <th className="px-3 py-2">Pemohon</th>
-            <th className="px-3 py-2">Alasan</th>
-            <th className="px-3 py-2 text-right">Barang</th>
-            <th className="px-3 py-2 text-right">Estimasi</th>
+            <th className="px-3 py-2 text-right">Total item dipesan</th>
+            <th className="px-3 py-2 text-right">Total Permintaan</th>
             <th className="px-3 py-2">Diajukan</th>
             <th className="px-3 py-2" />
           </tr>
@@ -384,8 +382,6 @@ function PrTable({ rows, stage, highlightId, busyKey, canAct, canCreatePo, onOpe
                 {pr.doc_number}
                 {pr.is_auto_generated && <span className="mt-1 block font-sans text-xs font-medium text-blue-700">Otomatis · pemantauan stok</span>}
               </td>
-              <td className="px-3 py-2">{pr.is_auto_generated ? 'Sistem pemantauan stok' : pr.requester_name}</td>
-              <td className="max-w-xs truncate px-3 py-2">{pr.reason || '—'}</td>
               <td className="px-3 py-2 text-right tabular-nums">{pr.items_count}</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(pr.est_total)}</td>
               <td className="px-3 py-2">{formatDateTime(pr.submitted_at)}</td>
