@@ -1039,6 +1039,81 @@ class InventoryService
     }
 
     /**
+     * Classify sellable stock by the age of its oldest active goods-receipt batch.
+     *
+     * @param  list<int>  $productIds
+     * @return array{products: list<array{product_id: int, fifo_type: string}>}
+     */
+    public function fifoMonitoring(int $storeId, array $productIds): array
+    {
+        $products = DB::table('products')
+            ->where('store_id', $storeId)
+            ->whereIn('id', $productIds)
+            ->orderBy('id')
+            ->get(['id']);
+
+        $oldestReceiptByProduct = [];
+        $unclassifiedProductIds = [];
+
+        $stockRows = DB::table('inventory_balances as bal')
+            ->join('products as p', 'p.id', '=', 'bal.product_id')
+            ->leftJoin('product_batches as pb', 'pb.id', '=', 'bal.batch_id')
+            ->where('p.store_id', $storeId)
+            ->whereIn('p.id', $products->pluck('id'))
+            ->where('bal.qty_sellable', '>', 0)
+            ->get([
+                'p.id as product_id',
+                'bal.batch_id',
+                'pb.goods_receipt_item_id',
+                'pb.is_opening',
+                'pb.received_at',
+            ]);
+
+        foreach ($stockRows as $row) {
+            $productId = (int) $row->product_id;
+            if ($row->batch_id === null || $row->goods_receipt_item_id === null || (bool) $row->is_opening || $row->received_at === null) {
+                $unclassifiedProductIds[$productId] = true;
+
+                continue;
+            }
+
+            if (isset($unclassifiedProductIds[$productId])) {
+                continue;
+            }
+
+            $receivedAt = (string) $row->received_at;
+            if (! isset($oldestReceiptByProduct[$productId]) || $receivedAt < $oldestReceiptByProduct[$productId]) {
+                $oldestReceiptByProduct[$productId] = $receivedAt;
+            }
+        }
+
+        $today = Carbon::now('Asia/Jakarta')->startOfDay();
+
+        return [
+            'products' => $products->map(function ($product) use ($oldestReceiptByProduct, $unclassifiedProductIds, $today) {
+                $productId = (int) $product->id;
+                if (isset($unclassifiedProductIds[$productId])) {
+                    $fifoType = 'unclassified';
+                } elseif (! isset($oldestReceiptByProduct[$productId])) {
+                    $fifoType = 'no_stock';
+                } else {
+                    $receivedAt = Carbon::parse($oldestReceiptByProduct[$productId], 'UTC')
+                        ->setTimezone('Asia/Jakarta')
+                        ->startOfDay();
+                    $oneMonthAfterReceipt = $receivedAt->copy()->addMonthNoOverflow();
+                    $twoMonthsAfterReceipt = $receivedAt->copy()->addMonthsNoOverflow(2);
+
+                    $fifoType = $today->lt($oneMonthAfterReceipt)
+                        ? 'fast_moving'
+                        : ($today->lte($twoMonthsAfterReceipt) ? 'normal' : 'slow_moving');
+                }
+
+                return ['product_id' => $productId, 'fifo_type' => $fifoType];
+            })->all(),
+        ];
+    }
+
+    /**
      * Rincian stok satu produk per batch/posisi + total.
      *
      * @return array<string, mixed>|null

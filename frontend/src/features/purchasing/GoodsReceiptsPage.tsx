@@ -406,7 +406,7 @@ function GoodsReceiptDetailDialog({
           <div className="overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full min-w-[600px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr><th className="px-3 py-2">Barang</th><th className="px-3 py-2 text-right">Masuk stok</th><th className="px-3 py-2 text-right">Rusak</th><th className="px-3 py-2 text-right">Tidak dikirim</th><th className="px-3 py-2">Kedaluwarsa</th></tr>
+                <tr><th className="px-3 py-2">Barang</th><th className="px-3 py-2 text-right">Barang bagus</th><th className="px-3 py-2 text-right">Barang rusak</th><th className="px-3 py-2 text-right">Tidak dikirim</th><th className="px-3 py-2">Tanggal kedaluwarsa</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {receipt.items.map((item) => (

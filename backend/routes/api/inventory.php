@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Route;
 // Dimuat dari routes/api.php (prefix /api sudah terpasang).
 Route::middleware('auth:sanctum')->prefix('inventory')->group(function () {
     Route::get('expiry-monitoring', [InventoryController::class, 'expiryMonitoring'])->middleware('can:inventory.view');
+    Route::get('fifo-monitoring', [InventoryController::class, 'fifoMonitoring'])->middleware('can:inventory.view');
     Route::get('products/{product}/stock', [InventoryController::class, 'productStock'])
         ->whereNumber('product')->middleware('can:inventory.view');
 

@@ -4,7 +4,7 @@ import type {
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary, DeferredPurchaseRequisitionItem,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
-  GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, InventoryExpiryMonitoring, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
+  GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, InventoryExpiryMonitoring, InventoryFifoMonitoring, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
   PurchaseOrderRequisitionItem, PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
   StockTransfer, StockTransferInput, StockTransferStatus, StockTransferSummary,
   DashboardReport, ProfitReport, FinancialReport, FinancialPurchaseOrder, BillingPeriod, Invoice, InvoiceSummary, InvoiceStatus,
@@ -526,6 +526,10 @@ export const inventoryApi = {
   expiryMonitoring: (productIds?: number[]) =>
     api<{ data: InventoryExpiryMonitoring }>('/inventory/expiry-monitoring', {
       query: productIds ? { 'product_ids[]': productIds } : undefined,
+    }).then((r) => r.data),
+  fifoMonitoring: (productIds: number[]) =>
+    api<{ data: InventoryFifoMonitoring }>('/inventory/fifo-monitoring', {
+      query: { 'product_ids[]': productIds },
     }).then((r) => r.data),
   productStock: (productId: number) =>
     api<{ data: ProductStock }>(`/inventory/products/${productId}/stock`).then((r) => r.data),

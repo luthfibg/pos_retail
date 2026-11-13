@@ -725,6 +725,12 @@ export interface InventoryExpiryMonitoring {
   products: Array<{ product_id: number; expiry_status: ExpiryProductStatus }>;
 }
 
+export type FifoType = 'fast_moving' | 'normal' | 'slow_moving' | 'no_stock' | 'unclassified';
+
+export interface InventoryFifoMonitoring {
+  products: Array<{ product_id: number; fifo_type: FifoType }>;
+}
+
 export interface StockTotals {
   qty_sellable: Decimal;
   qty_quarantine: Decimal;

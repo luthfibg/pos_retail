@@ -35,6 +35,19 @@ class InventoryController extends Controller
         )]);
     }
 
+    public function fifoMonitoring(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'product_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'product_ids.*' => ['required', 'integer', 'min:1'],
+        ]);
+
+        return response()->json(['data' => $this->inventory->fifoMonitoring(
+            $this->stores->requireIdFor($request->user()),
+            array_values(array_unique(array_map('intval', $filters['product_ids']))),
+        )]);
+    }
+
     public function movements(Request $request): JsonResponse
     {
         $filters = $request->validate([

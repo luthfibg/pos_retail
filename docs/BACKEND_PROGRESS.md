@@ -85,6 +85,7 @@ Troubleshooting exchange 401: backend menulis `Platform CLI login ticket issued.
 |---|---|---|---|
 | GET | `/api/inventory/products/{product}/stock` | `inventory.view` | Stok satu produk per batch/posisi + total |
 | GET | `/api/inventory/expiry-monitoring` | `inventory.view` | Jumlah batch layak jual yang kedaluwarsa/akan kedaluwarsa; `product_ids[]` opsional untuk status per produk |
+| GET | `/api/inventory/fifo-monitoring` | `inventory.view` | Tipe pergerakan stok per produk dari umur batch penerimaan tertua yang masih memiliki stok layak jual |
 | GET | `/api/inventory/movements` | `inventory.view` | Riwayat pergerakan stok (terbaru dulu) |
 | POST | `/api/inventory/opening-balances` | `inventory.adjust.approve` (Admin) | **Stok eksisting toko** (satu dokumen, banyak baris, atomik) |
 | GET | `/api/inventory/transfers` | `stock_transfer.create` | Daftar/filter dokumen transfer |
@@ -143,6 +144,26 @@ Kesalahan 422 menunjuk baris: `errors["items.1.product_id"]` (produk tidak ada /
 - `unit_cost` (Harga Modal) sensitif secara bisnis; tampilkan hanya kepada pengguna berizin.
 
 `GET /api/inventory/expiry-monitoring` memakai ambang toko `expiry_warning_days` (default 30 hari). Tanpa filter produk, respons memberi jumlah batch layak jual yang sudah kedaluwarsa dan yang akan kedaluwarsa dalam ambang. Dengan `product_ids[]`, respons juga memberi status per produk; prioritas tampilan: expired → near_expiry → tanpa tanggal → ok → tanpa stok → tidak dilacak. Snackbar global menampilkan jumlah tersebut dan dapat ditutup sampai sesi aplikasi berakhir.
+
+### GET `/api/inventory/fifo-monitoring` — tipe pergerakan stok pada daftar produk
+
+Query wajib `product_ids[]` (1–100 ID produk). Respons mengembalikan `{ product_id, fifo_type }` untuk produk milik toko:
+
+```json
+{ "data": { "products": [
+    { "product_id": 12, "fifo_type": "fast_moving" },
+    { "product_id": 15, "fifo_type": "normal" }
+] } }
+```
+
+Kategori dihitung langsung dari umur batch penerimaan tertua yang masih memiliki `qty_sellable` positif, bukan disimpan sebagai nilai manual:
+- `fast_moving`: kurang dari satu bulan kalender sejak tanggal penerimaan.
+- `normal`: satu sampai dua bulan kalender (termasuk tepat satu dan tepat dua bulan).
+- `slow_moving`: lebih dari dua bulan kalender.
+- `no_stock`: produk tidak memiliki stok layak jual.
+- `unclassified`: ada stok layak jual dari stok awal, penyesuaian, atau batch tanpa tanggal penerimaan barang yang dapat diverifikasi.
+
+Jika produk memiliki beberapa batch aktif, kategori mengikuti batch aktif tertua. Stok awal tidak dianggap memiliki tanggal historis yang tepercaya. Endpoint ini memakai tanggal `product_batches.received_at` dari penerimaan barang; data saldo dan alokasi batch penjualan yang ada tetap dipakai tanpa migrasi atau input manual tambahan.
 
 ### GET `/api/inventory/movements`
 Query: `product_id`, `movement_type` (`opening_balance|receipt|putaway|transfer|sale|sale_void|customer_return|supplier_return_out|supplier_replacement_in|adjustment|write_off`), `date_from`, `date_to` (`YYYY-MM-DD`, tanggal WIB), `per_page` (1–100, default 25).

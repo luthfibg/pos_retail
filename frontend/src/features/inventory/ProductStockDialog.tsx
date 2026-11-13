@@ -26,14 +26,10 @@ export function ProductStockDialog({ product, onClose }: { product: Product; onC
 
         {stock && (
           <>
-            <dl className="grid grid-cols-3 gap-3">
+            <dl className="grid grid-cols-2 gap-3">
               <div className="rounded-md bg-slate-50 p-3">
                 <dt className="text-xs text-slate-500">Layak jual</dt>
                 <dd className="text-lg font-semibold tabular-nums">{formatQty(stock.totals.qty_sellable)} <span className="text-sm font-normal text-slate-500">{stock.unit_name}</span></dd>
-              </div>
-              <div className="rounded-md bg-slate-50 p-3">
-                <dt className="text-xs text-slate-500">Karantina</dt>
-                <dd className="text-lg font-semibold tabular-nums">{formatQty(stock.totals.qty_quarantine)}</dd>
               </div>
               <div className="rounded-md bg-slate-50 p-3">
                 <dt className="text-xs text-slate-500">Rusak</dt>
