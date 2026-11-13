@@ -135,7 +135,7 @@ class SupplierReturnTest extends SeededTestCase
             ->json('data.replacement_goods_receipts.0.id');
 
         $this->postJson("/api/goods-receipts/{$replacement}/post")
-            ->assertOk()->assertJsonMissingPath('data.status');
+            ->assertOk()->assertJsonPath('data.status', 'posted');
         $this->assertSame('posted', DB::table('goods_receipts')->where('id', $replacement)->value('status'));
         $this->assertSame('replacement_received', DB::table('supplier_returns')->where('id', $id)->value('status'));
 

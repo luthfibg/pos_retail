@@ -10,6 +10,18 @@ class OpnameHistoryTest extends SeededTestCase
 {
     use BuildsPurchasing;
 
+    /**
+     * Admin pada model administrasi `standard` (tanpa Owner/Accounting) TIDAK memegang opname.view_value,
+     * sehingga field nilai rupiah harus disembunyikan. Model default toko adalah `simple`, di mana Admin
+     * memegang semua permission (lihat RbacTest), jadi model `standard` harus disetel eksplisit.
+     */
+    private function actAsStandardModelAdmin(): \App\Models\User
+    {
+        $this->setSetting('admin_model', 'standard');
+
+        return $this->actAsAdmin();
+    }
+
     private function createOpnameSession(int $actorId, string $number, string $status, string $startedAt, ?string $postedAt = null, array $overrides = []): int
     {
         return DB::table('stock_opname_sessions')->insertGetId($overrides + [
@@ -48,7 +60,7 @@ class OpnameHistoryTest extends SeededTestCase
 
     public function test_periods_use_store_timezone_and_only_posted_sessions_contribute_to_variance_totals(): void
     {
-        $admin = $this->actAsAdmin();
+        $admin = $this->actAsStandardModelAdmin();
         $october = $this->createOpnameSession((int) $admin->id, 'OPN-HIST-001', 'posted', '2026-10-20 04:00:00', '2026-10-31 16:30:00', [
             'variance_products' => 2, 'short_qty' => '2.000', 'over_qty' => '1.000', 'abs_value' => '300.00',
         ]);
@@ -75,7 +87,7 @@ class OpnameHistoryTest extends SeededTestCase
 
     public function test_frequent_variance_aggregates_posted_snapshots_and_last_status_defaults_to_no_reminder(): void
     {
-        $admin = $this->actAsAdmin();
+        $admin = $this->actAsStandardModelAdmin();
         $productId = $this->product();
         $first = $this->createOpnameSession((int) $admin->id, 'OPN-HIST-011', 'posted', '2026-11-01 01:00:00', '2026-11-01 02:00:00', [
             'variance_products' => 1, 'short_qty' => '1.000', 'abs_value' => '100.00',
@@ -105,7 +117,7 @@ class OpnameHistoryTest extends SeededTestCase
 
     public function test_csv_export_uses_bom_formula_neutralization_and_omits_value_for_admin(): void
     {
-        $admin = $this->actAsAdmin();
+        $admin = $this->actAsStandardModelAdmin();
         $productId = $this->product();
         $sessionId = $this->createOpnameSession((int) $admin->id, 'OPN-HIST-021', 'posted', '2026-11-05 01:00:00', '2026-11-05 02:00:00', [
             'variance_products' => 1, 'short_qty' => '1.000', 'abs_value' => '100.00',
@@ -177,7 +189,7 @@ class OpnameHistoryTest extends SeededTestCase
     public function test_value_fields_are_permission_gated_and_history_requires_opname_view(): void
     {
         $this->getJson('/api/stock-opname-sessions/periods')->assertUnauthorized();
-        $admin = $this->actAsAdmin();
+        $admin = $this->actAsStandardModelAdmin();
         $productId = $this->product();
         $sessionId = $this->createOpnameSession((int) $admin->id, 'OPN-HIST-031', 'posted', '2026-11-05 01:00:00', '2026-11-05 02:00:00', [
             'variance_products' => 1, 'short_qty' => '1.000', 'abs_value' => '100.00',

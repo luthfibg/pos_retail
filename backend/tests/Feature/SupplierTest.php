@@ -56,11 +56,13 @@ class SupplierTest extends SeededTestCase
             ->assertStatus(422)->assertJsonValidationErrors('default_payment_terms');
     }
 
-    public function test_cashier_has_no_access(): void
+    public function test_cashier_can_list_suppliers_but_cannot_create_or_update_them(): void
     {
         $this->signIn('Kasir');
 
-        $this->getJson('/api/suppliers')->assertForbidden();
+        // Kasir memegang product.create, sehingga boleh membaca daftar supplier untuk memilihnya di master produk.
+        $this->getJson('/api/suppliers')->assertOk();
         $this->postJson('/api/suppliers', ['code' => 'X', 'name' => 'Y'])->assertForbidden();
+        $this->patchJson('/api/suppliers/1', ['name' => 'Z'])->assertForbidden();
     }
 }

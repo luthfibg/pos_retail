@@ -85,7 +85,8 @@ class ReportTest extends SeededTestCase
         $batch = DB::table('product_batches')->insertGetId([
             'product_id' => $expiring,
             'batch_code' => 'EXP-01',
-            'expiry_date' => '2026-10-30',
+            // Relatif terhadap hari ini (Asia/Jakarta): tanggal tetap suatu saat lewat dan statusnya berubah jadi 'kedaluwarsa'.
+            'expiry_date' => now('Asia/Jakarta')->addDays(10)->toDateString(),
         ]);
         DB::table('inventory_balances')->insert([
             'product_id' => $expiring,

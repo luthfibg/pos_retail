@@ -243,7 +243,8 @@ class PlatformStoreManagementTest extends SeededTestCase
         $this->assertSame(1, DB::table('locations')->where('store_id', $storeId)->where('type', 'store_floor')->where('is_active', 1)->count());
         $this->assertSame(1, DB::table('locations')->where('store_id', $storeId)->where('type', 'warehouse')->where('is_active', 0)->count());
         $this->assertSame(1, DB::table('registers')->where('store_id', $storeId)->count());
-        $this->assertSame(3, DB::table('fund_accounts')->where('store_id', $storeId)->count());
+        // Kas Besar (main_cash) + satu Kas Kecil per kasir; dana pembelian (purchase_fund) sudah dihapus.
+        $this->assertSame(2, DB::table('fund_accounts')->where('store_id', $storeId)->count());
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'platform.store_create',
             'entity_type' => 'store',
@@ -317,6 +318,7 @@ class PlatformStoreManagementTest extends SeededTestCase
 
         $this->assertSame(2, DB::table('stores')->count());
         $this->assertSame(1, DB::table('users')->where('username', 'owner-client-01')->count());
-        $this->assertSame(10, DB::table('settings')->where('store_id', DB::table('stores')->where('code', 'CLIENT-01')->value('id'))->count());
+        // 13 pengaturan default dari TenantProvisioner::initialize().
+        $this->assertSame(13, DB::table('settings')->where('store_id', DB::table('stores')->where('code', 'CLIENT-01')->value('id'))->count());
     }
 }

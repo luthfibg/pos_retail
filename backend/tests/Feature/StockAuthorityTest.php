@@ -141,26 +141,33 @@ class StockAuthorityTest extends SeededTestCase
 
         $kasir = User::where('username', 'kasir-s')->firstOrFail();
         $p = $this->product();
-        $pr = $this->pr($kasir->id, [$p => ['10', '2000']], 'converted');
-        $po = $this->po($pr, $this->supplier(), [$p => ['10', '2000']], 'sent');
-        $item = $this->poItemId($po, $p);
-        $payload = fn (int $location) => ['po_id' => $po, 'receiving_location_id' => $location, 'items' => [['po_item_id' => $item, 'qty_received' => '1']]];
+        // Satu PO hanya boleh punya satu penerimaan aktif, jadi setiap penerimaan yang berhasil dibuat memakai PO sendiri.
+        $newPo = function () use ($kasir, $p): array {
+            $pr = $this->pr($kasir->id, [$p => ['10', '2000']], 'converted');
+            $po = $this->po($pr, $this->supplier(), [$p => ['10', '2000']], 'sent');
+
+            return [$po, $this->poItemId($po, $p)];
+        };
+        $payload = fn (array $po, int $location) => ['po_id' => $po[0], 'receiving_location_id' => $location, 'items' => [['po_item_id' => $po[1], 'qty_received' => '1']]];
+        $poWarehouseDraft = $newPo();
+        $poFloor = $newPo();
+        $poAdminWarehouse = $newPo();
 
         // default: Kasir boleh di toko dan gudang
         $this->actAs('kasir-s');
-        $draftAtWarehouse = $this->postJson('/api/goods-receipts', $payload($warehouse))->assertCreated()->json('data.id');
+        $draftAtWarehouse = $this->postJson('/api/goods-receipts', $payload($poWarehouseDraft, $warehouse))->assertCreated()->json('data.id');
 
         // hanya Admin yang boleh menerima ke gudang
         $this->actAs('admin-uji');
         $this->putJson('/api/settings/stock-authority', $this->rule('receipt.warehouse', ['Admin']))->assertOk();
 
         $this->actAs('kasir-s');
-        $this->postJson('/api/goods-receipts', $payload($warehouse))->assertForbidden();
+        $this->postJson('/api/goods-receipts', $payload($poFloor, $warehouse))->assertForbidden();
         $this->postJson("/api/goods-receipts/{$draftAtWarehouse}/post")->assertForbidden();   // draft lama tidak lolos posting
-        $this->postJson('/api/goods-receipts', $payload($floor))->assertCreated();
+        $this->postJson('/api/goods-receipts', $payload($poFloor, $floor))->assertCreated();
 
         $this->actAs('admin-uji');
-        $this->postJson('/api/goods-receipts', $payload($warehouse))->assertCreated();
+        $this->postJson('/api/goods-receipts', $payload($poAdminWarehouse, $warehouse))->assertCreated();
     }
 
     public function test_transfer_and_adjustment_scope_for_warehouse(): void
