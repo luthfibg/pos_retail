@@ -5,12 +5,13 @@ import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Modal } from '@/components/ui/Modal';
 import { bankAccountApi, purchaseOrderApi, purchaseRequisitionApi, settingsApi, supplierApi } from '@/lib/api/endpoints';
-import type { ApprovalAuthMode, PurchaseOrder, PurchaseOrderStatus, PurchaseRequisition, Supplier } from '@/lib/api/types';
+import type { ApprovalAuthMode, PurchaseOrder, PurchaseOrderPaymentTerms, PurchaseOrderStatus, PurchaseRequisition, Supplier } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
 import { centsToMoney, lineCents, moneyToCents, qtyToMilli } from '@/lib/money';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { PurchaseStageTracker } from './PurchaseStageTracker';
 import { isPoPrintable, poStage } from './purchaseFlow';
+import { PURCHASE_ORDER_PAYMENT_TERMS_LABEL, purchaseOrderTermsFromSupplier } from './paymentTerms';
 
 export const ORDER_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
   draft: 'Draft',
@@ -87,7 +88,8 @@ export function PurchaseOrderCreateDialog({
   const autoSupplier = automaticSupplierSelection && supplierOptions.length === 1 ? supplierOptions[0] : null;
   const [supplierId, setSupplierId] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
-  const [terms, setTerms] = useState<'prepaid' | 'credit' | 'cod'>('cod');
+  const [terms, setTerms] = useState<PurchaseOrderPaymentTerms>('cod');
+  const [paymentTermDays, setPaymentTermDays] = useState('');
   const [orderDate, setOrderDate] = useState(today);
   const [expectedDate, setExpectedDate] = useState('');
   const [lines, setLines] = useState<Record<number, OrderLine>>({});
@@ -108,7 +110,10 @@ export function PurchaseOrderCreateDialog({
       if (current && supplierOptions.some((supplier) => String(supplier.id) === current)) return current;
       return autoSupplier ? String(autoSupplier.id) : '';
     });
-    if (autoSupplier) setTerms(autoSupplier.default_payment_terms ?? 'cod');
+    if (autoSupplier) {
+      setTerms(purchaseOrderTermsFromSupplier(autoSupplier.default_payment_terms));
+      setPaymentTermDays('');
+    }
   }, [availability.data, autoSupplier, supplierOptions, supplierSelection.data]);
   const chosenSupplierId = Number(supplierId);
   const availableItems = rowsWithRemaining.filter((item) =>
@@ -140,6 +145,7 @@ export function PurchaseOrderCreateDialog({
       ...(approvalMode !== 'key' ? { approver_password: credentials.approver_password } : {}),
       ...(approvalMode !== 'password' ? { approver_key: credentials.approver_key } : {}),
       payment_terms: terms,
+      ...(terms === 'top' ? { payment_term_days: Number(paymentTermDays) } : {}),
       order_date: orderDate,
       expected_date: expectedDate || undefined,
       items: availableItems.flatMap((item) => {
@@ -157,7 +163,8 @@ export function PurchaseOrderCreateDialog({
   function chooseSupplier(id: string) {
     setSupplierId(id);
     const supplier = supplierOptions.find((item) => String(item.id) === id);
-    setTerms(supplier?.default_payment_terms ?? 'cod');
+    setTerms(purchaseOrderTermsFromSupplier(supplier?.default_payment_terms));
+    setPaymentTermDays('');
   }
 
   function updateLine(productId: number, patch: Partial<OrderLine>) {
@@ -193,12 +200,34 @@ export function PurchaseOrderCreateDialog({
             </select>
           </Field>
           <Field label="Termin pembayaran">
-            <select className={inputCls} value={terms} onChange={(event) => setTerms(event.target.value as 'prepaid' | 'credit' | 'cod')}>
-              <option value="prepaid">Prabayar</option>
-              <option value="credit">Kredit</option>
-              <option value="cod">Bayar saat terima (COD)</option>
+            <select
+              className={inputCls}
+              value={terms}
+              onChange={(event) => {
+                const nextTerms = event.target.value as PurchaseOrderPaymentTerms;
+                setTerms(nextTerms);
+                if (nextTerms !== 'top') setPaymentTermDays('');
+              }}
+            >
+              {(Object.keys(PURCHASE_ORDER_PAYMENT_TERMS_LABEL) as PurchaseOrderPaymentTerms[]).map((term) => (
+                <option key={term} value={term}>{PURCHASE_ORDER_PAYMENT_TERMS_LABEL[term]}</option>
+              ))}
             </select>
           </Field>
+          {terms === 'top' && (
+            <Field label="Jumlah hari TOP">
+              <input
+                className={inputCls}
+                type="number"
+                min={1}
+                max={65535}
+                step={1}
+                required
+                value={paymentTermDays}
+                onChange={(event) => setPaymentTermDays(event.target.value)}
+              />
+            </Field>
+          )}
           <Field label="Tanggal PO">
             <input className={inputCls} type="date" required value={orderDate} onChange={(event) => setOrderDate(event.target.value)} />
           </Field>
@@ -281,7 +310,7 @@ export function PurchaseOrderCreateDialog({
 
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
           <button type="button" disabled={create.isPending} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || supplierId === '' || bankAccountsQuery.isLoading || bankAccountsQuery.isError || !selectedBank || selectedLineCount === 0 || hasInvalidSelectedLine} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+          <button type="submit" disabled={create.isPending || availability.isLoading || availability.isFetching || availability.isError || supplierId === '' || bankAccountsQuery.isLoading || bankAccountsQuery.isError || !selectedBank || selectedLineCount === 0 || hasInvalidSelectedLine || (terms === 'top' && !/^[1-9]\d*$/.test(paymentTermDays))} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
             {create.isPending ? 'Membuat PO…' : 'Setujui & buat PO'}
           </button>
         </div>

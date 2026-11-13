@@ -95,12 +95,15 @@ class PurchaseOrderTest extends SeededTestCase
         $supplier = $this->supplier(['default_payment_terms' => 'credit']);
         $pr = $this->pr($this->cashier->id, [$p => ['10', '2500']]);
 
-        $response = $this->postJson('/api/purchase-orders', $this->payload($pr, $supplier, $p))
+        $payload = $this->payload($pr, $supplier, $p);
+        $payload['payment_term_days'] = 30;
+        $response = $this->postJson('/api/purchase-orders', $payload)
             ->assertCreated()
             ->assertJsonPath('data.status', 'approved')
             ->assertJsonPath('data.receipt_status', 'none')
             ->assertJsonPath('data.payment_status', 'unpaid')
-            ->assertJsonPath('data.payment_terms', 'credit')        // dari supplier
+            ->assertJsonPath('data.payment_terms', 'top')           // dari termin bawaan supplier
+            ->assertJsonPath('data.payment_term_days', 30)
             ->assertJsonPath('data.total', '24000.00')
             ->assertJsonPath('data.items.0.line_total', '24000.00')
             ->assertJsonPath('data.items.0.qty_remaining', '10.000')
@@ -111,6 +114,32 @@ class PurchaseOrderTest extends SeededTestCase
         $this->assertSame('converted', DB::table('purchase_requisitions')->where('id', $pr)->value('status'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_requisition.convert', 'entity_id' => $pr]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_order.create']);
+    }
+
+    public function test_top_requires_days_on_create_and_draft_update(): void
+    {
+        $product = $this->product();
+        $supplier = $this->supplier();
+        $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
+
+        $this->postJson('/api/purchase-orders', [
+            ...$this->payload($pr, $supplier, $product),
+            'payment_terms' => 'top',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['payment_term_days']);
+
+        $draftPr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
+        $po = $this->po($draftPr, $supplier, [$product => ['5', '2000']], 'draft');
+        $this->patchJson("/api/purchase-orders/{$po}", ['payment_terms' => 'top'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['payment_term_days']);
+
+        $this->patchJson("/api/purchase-orders/{$po}", ['payment_terms' => 'top', 'payment_term_days' => 30])
+            ->assertOk()
+            ->assertJsonPath('data.payment_terms', 'top')
+            ->assertJsonPath('data.payment_term_days', 30);
+        $this->patchJson("/api/purchase-orders/{$po}", ['payment_terms' => 'cod'])
+            ->assertOk()
+            ->assertJsonPath('data.payment_terms', 'cod')
+            ->assertJsonPath('data.payment_term_days', null);
     }
 
     public function test_rejects_unapproved_pr_inactive_supplier_and_foreign_product(): void

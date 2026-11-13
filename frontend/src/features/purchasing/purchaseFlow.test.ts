@@ -25,7 +25,7 @@ function pr(id: number, status: PurchaseRequisitionSummary['status']): PurchaseR
 
 function po(id: number, status: PurchaseOrderSummary['status']): PurchaseOrderSummary {
   return {
-    id, doc_number: `PO-${id}`, status, receipt_status: 'none', payment_status: 'unpaid', payment_terms: 'cod',
+    id, doc_number: `PO-${id}`, status, receipt_status: 'none', payment_status: 'unpaid', payment_terms: 'cod', payment_term_days: null,
     pr_id: 1, pr_doc_number: 'PR-1', supplier_id: 1, supplier_name: 'CV Maju', order_date: '2026-10-27',
     expected_date: null, total: '1000', bank_account: null, created_at: '2026-10-27 00:00:00',
   };

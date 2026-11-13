@@ -91,7 +91,7 @@ class FinancialService
             ->whereIn('po.payment_status', ['unpaid', 'partial'])
             ->orderByDesc('po.id')
             ->paginate($perPage, [
-                'po.id', 'po.doc_number', 'po.status', 'po.payment_terms', 'po.total',
+                'po.id', 'po.doc_number', 'po.status', 'po.payment_terms', 'po.payment_term_days', 'po.total',
                 'po.amount_paid', 'po.payment_status', 's.name as supplier_name',
             ])
             ->through(fn ($po) => [
@@ -99,6 +99,7 @@ class FinancialService
                 'doc_number' => $po->doc_number,
                 'status' => $po->status,
                 'payment_terms' => $po->payment_terms,
+                'payment_term_days' => $po->payment_term_days === null ? null : (int) $po->payment_term_days,
                 'payment_status' => $po->payment_status,
                 'supplier_name' => $po->supplier_name,
                 'total' => $po->total,

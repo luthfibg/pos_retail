@@ -459,10 +459,10 @@ Daftar supplier dapat dibaca oleh pemegang `supplier.manage`, `purchase_order.cr
 Permintaan buat:
 ```json
 { "pr_id": 5, "supplier_id": 2, "bank_account_id": 1, "approver_username": "owner", "approver_password": "…",
-  "payment_terms": "credit", "order_date": "2026-10-24", "expected_date": "2026-10-30",
+  "payment_terms": "top", "payment_term_days": 30, "order_date": "2026-10-24", "expected_date": "2026-10-30",
   "items": [ { "product_id": 12, "qty_ordered": "10", "unit_price": "2400" } ] }
 ```
-`payment_terms` (`prepaid|credit|cod`) default dari supplier. `order_date` default hari ini (WIB).
+`payment_terms` adalah `top|cbd|cod`; TOP wajib menyertakan `payment_term_days` (1–65535), sedangkan CBD/COD tidak memakai jumlah hari. Nilai termin bawaan supplier lama dipetakan: `credit` → TOP, `prepaid` → CBD, `cod` → COD. `order_date` default hari ini (WIB).
 
 Setiap produk dalam PO harus terhubung ke `supplier_id` PO. Validasi ini berlaku di backend saat membuat PO maupun mengubah item/supplier pada PO draft. Untuk membagi Permintaan lintas supplier, buat PO terpisah untuk masing-masing supplier dan hanya masukkan produk yang terhubung dengannya.
 
@@ -470,7 +470,7 @@ Status PO baru: `approved` → `sent` → `partially_received` → `received`; c
 
 Aturan: PO **wajib dari PR `approved`**; satu PR boleh dipecah ke beberapa PO (per supplier); qty per produk **kumulatif** tidak boleh melebihi qty PR (422 `errors["items.N.qty_ordered"]` memuat sisa); PR otomatis menjadi `converted` bila semua item sudah tercakup dan kembali `approved` bila PO dibatalkan.
 
-Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_status, payment_terms, pr_id, pr_doc_number, supplier_id, supplier_name, order_date, expected_date, total, bank_account|null, created_by_name`, `bank_account` (`id, bank_name, account_name, account_number_masked`), `items[]` (`id` = **`po_item_id`** untuk penerimaan, `product_id, sku, name, unit_name, qty_ordered, qty_received, qty_remaining, unit_price, line_total`), `receipts[]` (`id, doc_number, status, document_status, posted_at`). `bank_account` dapat `null` pada PO lama yang tidak memiliki catatan rekening.
+Detail PO (`data`): `id, doc_number ("PO-…"), status, receipt_status, payment_status, payment_terms, payment_term_days|null, pr_id, pr_doc_number, supplier_id, supplier_name, order_date, expected_date, total, bank_account|null, created_by_name`, `bank_account` (`id, bank_name, account_name, account_number_masked`), `items[]` (`id` = **`po_item_id`** untuk penerimaan, `product_id, sku, name, unit_name, qty_ordered, qty_received, qty_remaining, unit_price, line_total`), `receipts[]` (`id, doc_number, status, document_status, posted_at`). `payment_term_days` hanya digunakan TOP; PO lama yang dahulu memakai kredit tetap bernilai `null` karena jumlah hari sebelumnya tidak tercatat. `bank_account` dapat `null` pada PO lama yang tidak memiliki catatan rekening.
 
 ### 6.2.1 Rekening bank dan pengaturan menu Inventory
 

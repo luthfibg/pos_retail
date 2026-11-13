@@ -97,6 +97,7 @@ class PurchaseOrderService
             'receipt_status' => $row->receipt_status,
             'payment_status' => $row->payment_status,
             'payment_terms' => $row->payment_terms,
+            'payment_term_days' => $row->payment_term_days === null ? null : (int) $row->payment_term_days,
             'pr_id' => (int) $row->pr_id,
             'pr_doc_number' => $row->pr_doc_number,
             'supplier_id' => (int) $row->supplier_id,
@@ -200,6 +201,14 @@ class PurchaseOrderService
             $items = $this->normalizeItems($pr, $data['items'], null, (int) $supplier->id);
             [$orderDate, $expectedDate] = $this->dates($data);
             $total = $this->sumTotal($items);
+            $paymentTerms = $this->purchaseOrderPaymentTerms($data['payment_terms'] ?? $supplier->default_payment_terms);
+            $paymentTermDays = $paymentTerms === 'top' ? (int) ($data['payment_term_days'] ?? 0) : null;
+            if ($paymentTerms === 'top' && $paymentTermDays < 1) {
+                throw ValidationException::withMessages(['payment_term_days' => ['Jumlah hari wajib diisi untuk termin TOP.']]);
+            }
+            if ($paymentTerms !== 'top' && ! empty($data['payment_term_days'])) {
+                throw ValidationException::withMessages(['payment_term_days' => ['Jumlah hari hanya berlaku untuk termin TOP.']]);
+            }
 
             $id = DB::table('purchase_orders')->insertGetId([
                 'store_id' => $storeId,
@@ -207,7 +216,8 @@ class PurchaseOrderService
                 'pr_id' => $pr->id,
                 'supplier_id' => $supplier->id,
                 'bank_account_id' => $bank->id,
-                'payment_terms' => $data['payment_terms'] ?? $supplier->default_payment_terms,
+                'payment_terms' => $paymentTerms,
+                'payment_term_days' => $paymentTermDays,
                 'total' => Decimal::moneyString($total),
                 'status' => 'draft',
                 'order_date' => $orderDate,
@@ -226,6 +236,8 @@ class PurchaseOrderService
                 after: [
                     'pr_id' => (int) $pr->id,
                     'supplier_id' => (int) $supplier->id,
+                    'payment_terms' => $paymentTerms,
+                    'payment_term_days' => $paymentTermDays,
                     'items' => count($items),
                     'total' => Decimal::moneyString($total),
                     'status' => 'approved',
@@ -267,8 +279,20 @@ class PurchaseOrderService
                 $changes['supplier_id'] = (int) $supplier->id;
             }
 
-            if (isset($data['payment_terms'])) {
-                $changes['payment_terms'] = $data['payment_terms'];
+            if (array_key_exists('payment_terms', $data) || array_key_exists('payment_term_days', $data)) {
+                $paymentTerms = $data['payment_terms'] ?? $po->payment_terms;
+                $paymentTermDays = $data['payment_term_days'] ?? $po->payment_term_days;
+                if ($paymentTerms === 'top' && (int) $paymentTermDays < 1) {
+                    throw ValidationException::withMessages(['payment_term_days' => ['Jumlah hari wajib diisi untuk termin TOP.']]);
+                }
+                if ($paymentTerms !== 'top') {
+                    if (! empty($data['payment_term_days'])) {
+                        throw ValidationException::withMessages(['payment_term_days' => ['Jumlah hari hanya berlaku untuk termin TOP.']]);
+                    }
+                    $paymentTermDays = null;
+                }
+                $changes['payment_terms'] = $paymentTerms;
+                $changes['payment_term_days'] = $paymentTermDays;
             }
 
             if (array_key_exists('order_date', $data) || array_key_exists('expected_date', $data)) {
@@ -800,6 +824,17 @@ class PurchaseOrderService
         return [$orderDate, $expected];
     }
 
+    private function purchaseOrderPaymentTerms(?string $terms): string
+    {
+        return match ($terms) {
+            'top', 'credit' => 'top',
+            'cbd', 'prepaid' => 'cbd',
+            'cod' => 'cod',
+            null => 'cod',
+            default => throw ValidationException::withMessages(['payment_terms' => ['Termin pembayaran supplier tidak valid.']]),
+        };
+    }
+
     /**
      * Validasi item PO terhadap PR: produk harus ada di PR, tidak ganda, qty kumulatif tidak melebihi qty PR.
      *
@@ -988,6 +1023,7 @@ class PurchaseOrderService
             'receipt_status' => $po->receipt_status,
             'payment_status' => $po->payment_status,
             'payment_terms' => $po->payment_terms,
+            'payment_term_days' => $po->payment_term_days === null ? null : (int) $po->payment_term_days,
             'pr_id' => (int) $po->pr_id,
             'pr_doc_number' => $po->pr_doc_number,
             'supplier_id' => (int) $po->supplier_id,

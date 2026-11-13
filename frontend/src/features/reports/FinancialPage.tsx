@@ -8,6 +8,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { financialApi } from '@/lib/api/endpoints';
 import type { FinancialPurchaseOrder } from '@/lib/api/types';
 import { formatRupiah } from '@/lib/format';
+import { formatPurchaseOrderPaymentTerms } from '@/features/purchasing/paymentTerms';
 
 function todayWib(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -136,7 +137,7 @@ export function FinancialPage() {
                 <form key={po.id} className="grid gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-[1fr_auto]" onSubmit={(event) => { event.preventDefault(); recordPayment.mutate(po); }}>
                   <div className="min-w-0 text-sm">
                     <div className="font-medium">{po.doc_number} · {po.supplier_name}</div>
-                    <div className="text-slate-600">Sisa {formatRupiah(po.amount_remaining)} · {po.payment_terms}</div>
+                    <div className="text-slate-600">Sisa {formatRupiah(po.amount_remaining)} · {formatPurchaseOrderPaymentTerms(po.payment_terms, po.payment_term_days)}</div>
                   </div>
                   <div className="flex gap-2">
                     <LocalDecimalInput

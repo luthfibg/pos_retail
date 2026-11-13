@@ -677,6 +677,7 @@ export interface OpnameCategoryOption {
 }
 
 export type PaymentTerms = 'prepaid' | 'credit' | 'cod';
+export type PurchaseOrderPaymentTerms = 'top' | 'cbd' | 'cod';
 
 export interface Supplier {
   id: number;
@@ -1088,7 +1089,8 @@ export interface FinancialPurchaseOrder {
   id: number;
   doc_number: string;
   status: PurchaseOrderStatus;
-  payment_terms: 'prepaid' | 'credit' | 'cod';
+  payment_terms: PurchaseOrderPaymentTerms;
+  payment_term_days: number | null;
   payment_status: 'unpaid' | 'partial';
   supplier_name: string;
   total: Decimal;
@@ -1406,7 +1408,8 @@ export interface PurchaseOrderSummary {
   status: PurchaseOrderStatus;
   receipt_status: 'none' | 'partial' | 'complete';
   payment_status: string;
-  payment_terms: 'prepaid' | 'credit' | 'cod';
+  payment_terms: PurchaseOrderPaymentTerms;
+  payment_term_days: number | null;
   pr_id: number;
   pr_doc_number: string;
   supplier_id: number;
@@ -1466,7 +1469,8 @@ export interface PurchaseOrderInput {
   approver_username: string;
   approver_password?: string;
   approver_key?: string;
-  payment_terms?: 'prepaid' | 'credit' | 'cod';
+  payment_terms?: PurchaseOrderPaymentTerms;
+  payment_term_days?: number;
   order_date?: string;
   expected_date?: string;
   items: Array<{

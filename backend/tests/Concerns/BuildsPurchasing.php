@@ -114,7 +114,7 @@ trait BuildsPurchasing
             'doc_number' => sprintf('PO-T-%06d', $n),
             'pr_id' => $prId,
             'supplier_id' => $supplierId,
-            'payment_terms' => 'prepaid',
+            'payment_terms' => 'cbd',
             'total' => number_format($total / 100, 2, '.', ''),
             'status' => $status,
             'order_date' => now('Asia/Jakarta')->toDateString(),

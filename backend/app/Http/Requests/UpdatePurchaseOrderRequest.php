@@ -18,7 +18,8 @@ class UpdatePurchaseOrderRequest extends FormRequest
         return [
             'pr_id' => ['prohibited'],
             'supplier_id' => ['sometimes', 'required', 'integer', 'min:1'],
-            'payment_terms' => ['sometimes', 'required', Rule::in(['prepaid', 'credit', 'cod'])],
+            'payment_terms' => ['sometimes', 'required', Rule::in(['top', 'cbd', 'cod'])],
+            'payment_term_days' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:65535'],
             'order_date' => ['sometimes', 'required', 'date_format:Y-m-d'],
             'expected_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'items' => ['sometimes', 'required', 'array', 'min:1', 'max:100'],
