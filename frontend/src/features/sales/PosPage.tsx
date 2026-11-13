@@ -8,7 +8,6 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { canSell } from '@/features/shifts/shiftLogic';
 import { CREDIT_HINT, canUseCredit } from '@/features/customers/creditState';
-import { Modal } from '@/components/ui/Modal';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
@@ -44,7 +43,6 @@ export function PosPage() {
   const [cartKey, setCartKey] = useState(() => newIdempotencyKey());
   const [errors, setErrors] = useState<SaleErrors>(NO_ERRORS);
   const [topError, setTopError] = useState<unknown>(null);
-  const [confirming, setConfirming] = useState(false);
   const [exceptionOpen, setExceptionOpen] = useState(false);
   /** Permintaan yang hasilnya tidak diketahui (jaringan putus/5xx). Keranjang dikunci; kirim ulang memakai kunci yang sama. */
   const [pending, setPending] = useState<SaleInput | null>(null);
@@ -103,7 +101,6 @@ export function PosPage() {
       setErrors(NO_ERRORS);
       setTopError(null);
       setPending(null);
-      setConfirming(false);
       setExceptionOpen(false);
       setCartKey(newIdempotencyKey());
       void qc.invalidateQueries({ queryKey: ['shifts'] });
@@ -111,7 +108,6 @@ export function PosPage() {
       void qc.invalidateQueries({ queryKey: ['customers'] });
     },
     onError: (err, input) => {
-      setConfirming(false);
       if (err instanceof ApiError && err.status === 422) {
         const e = mapSaleErrors(err.errors);
         setErrors(e);
@@ -166,7 +162,7 @@ export function PosPage() {
       if (msg) return;
       setErrors(NO_ERRORS);
     }
-    setConfirming(true);
+    mutation.mutate(buildInput());
   }
 
   function reset() {
@@ -244,7 +240,7 @@ export function PosPage() {
   const change = mode === 'cash' && total !== null && !validateTendered(tendered, total) ? subtractMoney(tendered.trim().replace(',', '.'), total) : null;
 
   return (
-    <div className="grid gap-4 p-4 lg:grid-cols-[1fr_24rem]">
+    <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_30rem]">
       <section className="min-w-0 space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">Kasir</h1>
@@ -404,15 +400,15 @@ export function PosPage() {
           </div>
         )}
 
-        <div className="space-y-1 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+        <div className="space-y-2 rounded-xl border-2 border-slate-300 bg-white p-5 text-base shadow-sm sm:p-6">
           {quote ? (
             <>
               <Row label="Subtotal" value={formatRupiah(quote.subtotal)} />
               {(moneyToCents(quote.discount_total) ?? 0n) !== 0n && <Row label="Diskon" value={`-${formatRupiah(quote.discount_total)}`} />}
               {(moneyToCents(quote.tax_amount) ?? 0n) !== 0n && <Row label={`PPN${quote.tax_rate ? ` ${formatQty(quote.tax_rate)}%` : ''}`} value={formatRupiah(quote.tax_amount)} />}
-              <div className="flex items-baseline justify-between border-t border-slate-200 pt-2">
-                <span className="font-medium">Total</span>
-                <span className="text-2xl font-semibold tabular-nums">{formatRupiah(quote.total)}</span>
+              <div className="space-y-1 border-t border-slate-300 pt-3">
+                <span className="block text-lg font-semibold">Total</span>
+                <span className="block text-4xl font-extrabold leading-tight tabular-nums tracking-tight sm:text-5xl xl:text-6xl">{formatRupiah(quote.total)}</span>
               </div>
             </>
           ) : lines.length === 0 ? (
@@ -472,31 +468,6 @@ export function PosPage() {
           </button>
         )}
       </aside>
-
-      {confirming && (
-        <Modal title="Proses transaksi?" onClose={() => { if (!mutation.isPending) setConfirming(false); }}>
-          <div className="space-y-2 p-5 text-sm">
-            <p>{lines.length} jenis barang · {MODE_LABEL[mode]}</p>
-            {total !== null
-              ? <p className="text-2xl font-semibold tabular-nums">{formatRupiah(total)}</p>
-              : <p className="text-slate-600">Total resmi dari server sedang dihitung.</p>}
-            {mode === 'payroll_credit' && customer && <p>Atas nama <span className="font-medium">{customer.name}</span> ({customer.customer_no}); ditagihkan lewat potong gaji.</p>}
-            {mode === 'cash' && <p>Uang diterima {formatRupiah(tendered.trim().replace(',', '.'))}{change !== null ? `, kembalian ${formatRupiah(change)}` : ''}.</p>}
-            <p className="text-slate-500">Setelah diproses, transaksi tidak dapat diubah (pembatalan hanya oleh Admin).</p>
-          </div>
-          <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
-            <button type="button" disabled={mutation.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Periksa lagi</button>
-            <button
-              type="button"
-              disabled={mutation.isPending}
-              onClick={() => { if (!mutation.isPending) mutation.mutate(buildInput()); }}
-              className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {mutation.isPending ? 'Memproses…' : 'Proses'}
-            </button>
-          </div>
-        </Modal>
-      )}
 
       {exceptionOpen && (
         <CreditExceptionDialog

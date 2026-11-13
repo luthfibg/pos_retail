@@ -26,7 +26,7 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const debounced = useDebounce(text.trim(), 250);
 
   const results = useQuery({
@@ -39,23 +39,19 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
   function accept(p: Product, source: 'scan' | 'search' = 'search') {
     if (!isSellable(p)) {
       const reason = p.status === 'inactive' ? 'produk nonaktif' : 'produk masih menunggu harga';
-      setMessage({ type: 'error', text: `“${p.name}” tidak dapat dijual karena ${reason}. Keranjang tidak berubah.` });
+      setMessage(`“${p.name}” tidak dapat dijual karena ${reason}. Keranjang tidak berubah.`);
       return;
     }
     const result = onPick(toCartProduct(p), source);
     if (result === 'limit') {
-      setMessage({
-        type: 'error',
-        text: source === 'scan'
+      setMessage(source === 'scan'
           ? 'Scan tidak ditambahkan: batas Qty atau jumlah baris keranjang tercapai.'
-          : 'Produk tidak ditambahkan: batas Qty atau jumlah baris keranjang tercapai.',
-      });
+          : 'Produk tidak ditambahkan: batas Qty atau jumlah baris keranjang tercapai.');
       return;
     }
     setText('');
     setOpen(false);
-    const action = result === 'incremented' ? 'Qty ditambah 1' : 'ditambahkan ke keranjang';
-    setMessage({ type: 'success', text: `“${p.name}” ${action}.${source === 'scan' && result === 'added' ? ' Masukkan jumlah di kolom Qty, lalu tekan Enter untuk scan berikutnya.' : ' Siap untuk scan berikutnya.'}` });
+    setMessage(null);
     inputRef.current?.focus();
   }
 
@@ -69,9 +65,9 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         setOpen(true);
-        setMessage({ type: 'error', text: `Tidak ada produk dengan barcode/kode persis “${code}”. Jika mencari nama atau SKU, pilih produk dari daftar.` });
+        setMessage(`Tidak ada produk dengan barcode/kode persis “${code}”. Jika mencari nama atau SKU, pilih produk dari daftar.`);
       } else {
-        setMessage({ type: 'error', text: e instanceof ApiError ? e.firstError() : 'Gagal mencari produk.' });
+        setMessage(e instanceof ApiError ? e.firstError() : 'Gagal mencari produk.');
       }
     } finally {
       setBusy(false);
@@ -97,23 +93,17 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
           if (e.key === 'Escape') setOpen(false);
         }}
       />
-      <div className="mt-1 flex min-h-5 items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
-          Klik kolom ini lalu scan. Scanner harus berfungsi sebagai keyboard dan mengirim Enter.
+      {busy && (
+        <p role="status" aria-live="polite" className="mt-1 text-right text-xs font-medium text-slate-600">
+          Mencari barcode…
         </p>
-        {busy && (
-          <p role="status" aria-live="polite" className="shrink-0 text-xs font-medium text-slate-600">
-            Mencari barcode…
-          </p>
-        )}
-      </div>
+      )}
       {message && (
         <p
-          role={message.type === 'success' ? 'status' : 'alert'}
-          aria-live={message.type === 'success' ? 'polite' : undefined}
-          className={`mt-1 text-sm ${message.type === 'success' ? 'text-emerald-800' : 'text-red-700'}`}
+          role="alert"
+          className="mt-1 text-sm text-red-700"
         >
-          {message.text}
+          {message}
         </p>
       )}
 
