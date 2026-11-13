@@ -159,6 +159,29 @@ class OpeningBalanceTest extends SeededTestCase
         $this->getJson('/api/inventory/movements?movement_type=bogus')->assertUnprocessable();
     }
 
+    public function test_expiry_monitoring_counts_batches_and_reports_the_worst_product_status(): void
+    {
+        $this->signIn('Admin');
+        $product = $this->makeProduct(['track_expiry' => 1]);
+        $nearExpiry = now('Asia/Jakarta')->addDays(10)->toDateString();
+        $expired = now('Asia/Jakarta')->subDays(2)->toDateString();
+
+        $this->postJson('/api/inventory/opening-balances', ['items' => [
+            ['product_id' => $product, 'qty' => 2, 'expiry_date' => $nearExpiry],
+            ['product_id' => $product, 'qty' => 3, 'expiry_date' => $expired],
+            ['product_id' => $product, 'qty' => 4],
+        ]])->assertCreated();
+
+        $this->getJson("/api/inventory/expiry-monitoring?product_ids[]={$product}")
+            ->assertOk()
+            ->assertJsonPath('data.warning_days', 30)
+            ->assertJsonPath('data.alert_counts.expired', 1)
+            ->assertJsonPath('data.alert_counts.near_expiry', 1)
+            ->assertJsonPath('data.alert_counts.total', 2)
+            ->assertJsonPath('data.products.0.product_id', $product)
+            ->assertJsonPath('data.products.0.expiry_status', 'expired');
+    }
+
     public function test_cashier_can_read_stock_but_unknown_product_is_404(): void
     {
         $this->signIn('Kasir');

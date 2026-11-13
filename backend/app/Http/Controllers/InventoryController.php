@@ -11,9 +11,7 @@ use Illuminate\Validation\Rule;
 
 class InventoryController extends Controller
 {
-    public function __construct(private InventoryService $inventory, private StoreContext $stores)
-    {
-    }
+    public function __construct(private InventoryService $inventory, private StoreContext $stores) {}
 
     public function productStock(Request $request, int $product): JsonResponse
     {
@@ -22,6 +20,19 @@ class InventoryController extends Controller
         abort_if($stock === null, 404, 'Produk tidak ditemukan.');
 
         return response()->json(['data' => $stock]);
+    }
+
+    public function expiryMonitoring(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'product_ids' => ['sometimes', 'array', 'max:100'],
+            'product_ids.*' => ['required', 'integer', 'min:1'],
+        ]);
+
+        return response()->json(['data' => $this->inventory->expiryMonitoring(
+            $this->stores->requireIdFor($request->user()),
+            array_values(array_unique(array_map('intval', $filters['product_ids'] ?? []))),
+        )]);
     }
 
     public function movements(Request $request): JsonResponse

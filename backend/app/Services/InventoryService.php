@@ -949,6 +949,96 @@ class InventoryService
     // ------------------------------------------------------------------ baca
 
     /**
+     * Ringkasan kedaluwarsa untuk banner global dan status per produk pada daftar master.
+     *
+     * @param  list<int>  $productIds  Opsional; membatasi rincian status produk yang dikembalikan
+     * @return array<string, mixed>
+     */
+    public function expiryMonitoring(int $storeId, array $productIds = []): array
+    {
+        $warnDays = $this->expiryWarningDays($storeId);
+        $today = Carbon::now('Asia/Jakarta')->startOfDay();
+        $todayDate = $today->toDateString();
+        $cutoff = $today->copy()->addDays($warnDays)->toDateString();
+
+        $alertCounts = DB::table('inventory_balances as bal')
+            ->join('products as p', 'p.id', '=', 'bal.product_id')
+            ->join('product_batches as pb', 'pb.id', '=', 'bal.batch_id')
+            ->where('p.store_id', $storeId)
+            ->where('p.status', 'active')
+            ->where('p.track_expiry', true)
+            ->where('bal.qty_sellable', '>', 0)
+            ->whereNotNull('pb.expiry_date')
+            ->where('pb.expiry_date', '<=', $cutoff)
+            ->selectRaw('COUNT(DISTINCT CASE WHEN pb.expiry_date < ? THEN pb.id END) as expired', [$todayDate])
+            ->selectRaw('COUNT(DISTINCT CASE WHEN pb.expiry_date >= ? THEN pb.id END) as near_expiry', [$todayDate])
+            ->first();
+
+        $products = [];
+        if ($productIds !== []) {
+            $productRows = DB::table('products')
+                ->where('store_id', $storeId)
+                ->whereIn('id', $productIds)
+                ->orderBy('id')
+                ->get(['id', 'track_expiry']);
+            $statusById = [];
+            $priority = [
+                'not_tracked' => 0,
+                'no_stock' => 1,
+                'ok' => 2,
+                'none' => 3,
+                'near_expiry' => 4,
+                'expired' => 5,
+            ];
+            $trackedIds = [];
+
+            foreach ($productRows as $product) {
+                $id = (int) $product->id;
+                $isTracked = (bool) $product->track_expiry;
+                $statusById[$id] = $isTracked ? 'no_stock' : 'not_tracked';
+                if ($isTracked) {
+                    $trackedIds[] = $id;
+                }
+            }
+
+            if ($trackedIds !== []) {
+                $stockRows = DB::table('inventory_balances as bal')
+                    ->join('products as p', 'p.id', '=', 'bal.product_id')
+                    ->leftJoin('product_batches as pb', 'pb.id', '=', 'bal.batch_id')
+                    ->where('p.store_id', $storeId)
+                    ->whereIn('p.id', $trackedIds)
+                    ->whereRaw('(bal.qty_sellable > 0 or bal.qty_quarantine > 0 or bal.qty_damaged > 0)')
+                    ->get(['p.id as product_id', 'pb.expiry_date']);
+
+                foreach ($stockRows as $row) {
+                    $id = (int) $row->product_id;
+                    $status = $this->expiryStatus($row->expiry_date, $today, $warnDays);
+                    if ($priority[$status] > $priority[$statusById[$id]]) {
+                        $statusById[$id] = $status;
+                    }
+                }
+            }
+
+            foreach ($statusById as $productId => $status) {
+                $products[] = ['product_id' => $productId, 'expiry_status' => $status];
+            }
+        }
+
+        $expiredCount = (int) ($alertCounts->expired ?? 0);
+        $nearExpiryCount = (int) ($alertCounts->near_expiry ?? 0);
+
+        return [
+            'warning_days' => $warnDays,
+            'alert_counts' => [
+                'expired' => $expiredCount,
+                'near_expiry' => $nearExpiryCount,
+                'total' => $expiredCount + $nearExpiryCount,
+            ],
+            'products' => $products,
+        ];
+    }
+
+    /**
      * Rincian stok satu produk per batch/posisi + total.
      *
      * @return array<string, mixed>|null

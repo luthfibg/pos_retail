@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { ExpiryAlertSnackbar } from '@/features/inventory/ExpiryAlertSnackbar';
 import { ChangePasswordDialog } from '@/features/users/ChangePasswordDialog';
 import { settingsApi } from '@/lib/api/endpoints';
 import { getVisibleNavGroups } from './nav';
@@ -108,6 +109,7 @@ export function AppLayout() {
         </div>
       </aside>
       <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+        {can('inventory.view') && <ExpiryAlertSnackbar />}
         {inventoryMenus.error && <div className="px-4 pt-4"><ErrorNotice error={inventoryMenus.error} /></div>}
         <Outlet />
       </main>

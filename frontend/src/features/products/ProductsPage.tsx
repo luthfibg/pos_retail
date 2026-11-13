@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { categoryApi, productApi } from '@/lib/api/endpoints';
+import { categoryApi, inventoryApi, productApi } from '@/lib/api/endpoints';
 import type { ProductStatus } from '@/lib/api/types';
 import { formatQty, formatRupiah } from '@/lib/format';
 import { useDebounce } from '@/hooks/useDebounce';
 import { StockBadge } from '@/components/ui/StockBadge';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
+import { ExpiryProductBadge } from '@/components/ui/ExpiryBadge';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { Product } from '@/lib/api/types';
 import { ProductFormDialog } from './ProductFormDialog';
@@ -49,6 +50,16 @@ export function ProductsPage() {
   });
 
   const rows = products.data?.data ?? [];
+  const productIds = rows.map((product) => product.id);
+  const expiryMonitoring = useQuery({
+    queryKey: ['inventory', 'expiry-monitoring', 'products', productIds],
+    queryFn: () => inventoryApi.expiryMonitoring(productIds),
+    enabled: productIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+  const expiryStatusByProduct = new Map(
+    (expiryMonitoring.data?.products ?? []).map((item) => [item.product_id, item.expiry_status]),
+  );
   const sharedSuppliers = sharedActiveSuppliers(selectedProducts);
 
   function canSelectForReturn(product: Product): boolean {
@@ -109,6 +120,7 @@ export function ProductsPage() {
       </div>
 
       <ErrorNotice error={products.error} />
+      <ErrorNotice error={expiryMonitoring.error} />
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-left text-sm">
@@ -122,6 +134,7 @@ export function ProductsPage() {
               {canViewCost && <th className="px-3 py-2 text-right">Harga Modal Satuan</th>}
               <th className="px-3 py-2 text-right">Harga jual</th>
               <th className="px-3 py-2 text-right">Stok</th>
+              <th className="px-3 py-2">Status kedaluwarsa</th>
               <th className="px-3 py-2 text-right">Isi ulang</th>
               <th className="px-3 py-2">Kondisi stok</th>
               <th className="px-3 py-2">Status</th>
@@ -129,48 +142,58 @@ export function ProductsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {rows.map((p) => (
-              <tr key={p.id}>
-                <td className="px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedProducts.some((selected) => selected.id === p.id)}
-                    disabled={!canSelectForReturn(p)}
-                    onChange={(event) => {
-                      setSelectedProducts((current) => event.target.checked
-                        ? [...current, p]
-                        : current.filter((selected) => selected.id !== p.id));
-                    }}
-                    title={!canSelectForReturn(p) ? 'Pilih produk yang memiliki supplier sama dengan pilihan saat ini.' : undefined}
-                    aria-label={`Pilih ${p.name} untuk retur`}
-                  />
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">
-                  {p.sku}
-                  <div className="text-slate-400">{p.barcode}</div>
-                </td>
-                <td className="px-3 py-2">{p.name}</td>
-                <td className="px-3 py-2 text-slate-600">{p.category_name ?? '—'}</td>
-                <td className="px-3 py-2 text-slate-600">{p.suppliers.map((supplier) => supplier.name).join(', ') || '—'}</td>
-                {canViewCost && <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.unit_cost)}</td>}
-                <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.sell_price)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.stock_sellable)} {p.unit_name}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.restock_quantity)} {p.unit_name}</td>
-                <td className="px-3 py-2"><StockBadge status={p.stock_status} /></td>
-                <td className="px-3 py-2 text-slate-600">{STATUS_LABEL[p.status]}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-right">
-                  <button type="button" onClick={() => setStockOf(p)} className="text-sm text-slate-700 underline">Stok</button>
-                  {canEdit && (
-                    <button type="button" onClick={() => setDialog({ product: p })} className="ml-3 text-sm text-slate-700 underline">Ubah</button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {rows.map((p) => {
+              const expiryStatus = expiryStatusByProduct.get(p.id);
+              return (
+                <tr key={p.id}>
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedProducts.some((selected) => selected.id === p.id)}
+                      disabled={!canSelectForReturn(p)}
+                      onChange={(event) => {
+                        setSelectedProducts((current) => event.target.checked
+                          ? [...current, p]
+                          : current.filter((selected) => selected.id !== p.id));
+                      }}
+                      title={!canSelectForReturn(p) ? 'Pilih produk yang memiliki supplier sama dengan pilihan saat ini.' : undefined}
+                      aria-label={`Pilih ${p.name} untuk retur`}
+                    />
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {p.sku}
+                    <div className="text-slate-400">{p.barcode}</div>
+                  </td>
+                  <td className="px-3 py-2">{p.name}</td>
+                  <td className="px-3 py-2 text-slate-600">{p.category_name ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600">{p.suppliers.map((supplier) => supplier.name).join(', ') || '—'}</td>
+                  {canViewCost && <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.unit_cost)}</td>}
+                  <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(p.sell_price)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.stock_sellable)} {p.unit_name}</td>
+                  <td className="px-3 py-2">
+                    {expiryMonitoring.isPending ? <span className="text-xs text-slate-500">Memuat…</span>
+                      : expiryMonitoring.isError ? <span className="text-xs text-red-700">Gagal dimuat</span>
+                        : expiryStatus
+                          ? <ExpiryProductBadge status={expiryStatus} />
+                          : <span className="text-xs text-slate-500">Tidak tersedia</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatQty(p.restock_quantity)} {p.unit_name}</td>
+                  <td className="px-3 py-2"><StockBadge status={p.stock_status} /></td>
+                  <td className="px-3 py-2 text-slate-600">{STATUS_LABEL[p.status]}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                    <button type="button" onClick={() => setStockOf(p)} className="text-sm text-slate-700 underline">Stok</button>
+                    {canEdit && (
+                      <button type="button" onClick={() => setDialog({ product: p })} className="ml-3 text-sm text-slate-700 underline">Ubah</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {!products.isLoading && rows.length === 0 && (
-              <tr><td colSpan={canViewCost ? 12 : 11} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
+              <tr><td colSpan={canViewCost ? 13 : 12} className="px-3 py-8 text-center text-slate-500">Tidak ada produk.</td></tr>
             )}
             {products.isLoading && (
-              <tr><td colSpan={canViewCost ? 12 : 11} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
+              <tr><td colSpan={canViewCost ? 13 : 12} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>
             )}
           </tbody>
         </table>

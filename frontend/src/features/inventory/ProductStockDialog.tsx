@@ -55,7 +55,8 @@ export function ProductStockDialog({ product, onClose }: { product: Product; onC
                     <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                       <tr>
                         <th className="px-3 py-2">Batch</th>
-                        <th className="px-3 py-2">Kadaluarsa</th>
+                        <th className="px-3 py-2">Kedaluwarsa</th>
+                        <th className="px-3 py-2">Status kedaluwarsa</th>
                         <th className="px-3 py-2 text-right">Layak jual</th>
                         <th className="px-3 py-2 text-right">Karantina</th>
                         <th className="px-3 py-2 text-right">Rusak</th>
@@ -70,10 +71,8 @@ export function ProductStockDialog({ product, onClose }: { product: Product; onC
                               {b.is_opening ? 'Stok eksisting' : 'Diterima'} · {formatDateTime(b.received_at)}
                             </div>
                           </td>
-                          <td className="px-3 py-2">
-                            {formatDate(b.expiry_date)}
-                            <div className="mt-0.5"><ExpiryBadge status={b.expiry_status} /></div>
-                          </td>
+                          <td className="px-3 py-2">{formatDate(b.expiry_date)}</td>
+                          <td className="px-3 py-2"><ExpiryBadge status={b.expiry_status} /></td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatQty(b.qty_sellable)}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatQty(b.qty_quarantine)}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatQty(b.qty_damaged)}</td>

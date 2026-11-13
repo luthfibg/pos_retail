@@ -717,6 +717,13 @@ export interface SupplierInput {
 }
 
 export type ExpiryStatus = 'none' | 'ok' | 'near_expiry' | 'expired';
+export type ExpiryProductStatus = ExpiryStatus | 'no_stock' | 'not_tracked';
+
+export interface InventoryExpiryMonitoring {
+  warning_days: number;
+  alert_counts: { expired: number; near_expiry: number; total: number };
+  products: Array<{ product_id: number; expiry_status: ExpiryProductStatus }>;
+}
 
 export interface StockTotals {
   qty_sellable: Decimal;

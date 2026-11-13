@@ -95,8 +95,8 @@ export function GoodsReceiptsPage() {
                   <tr>
                     <th className="px-3 py-2">Nomor PO</th>
                     <th className="px-3 py-2">Supplier</th>
-                    <th className="px-3 py-2">Tanggal diharapkan</th>
-                    <th className="px-3 py-2 text-right">Aksi</th>
+                    <th className="px-3 py-2">Tanggal terima barang</th>
+                    <th className="px-3 py-2 text-right"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -128,7 +128,7 @@ export function GoodsReceiptsPage() {
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-semibold">Terima</h2>
+            <h2 className="font-semibold">Data Penerimaan Barang</h2>
           </div>
           <form onSubmit={applyReceiptSearch} className="flex gap-2">
             <label className="sr-only" htmlFor="receipt-search">Cari nomor penerimaan</label>
@@ -148,7 +148,7 @@ export function GoodsReceiptsPage() {
                     <th className="px-3 py-2">PO / Supplier</th>
                     <th className="px-3 py-2">Nomor GR</th>
                     <th className="px-3 py-2">Nama Kasir</th>
-                    <th className="px-3 py-2">Aksi</th>
+                    <th className="px-3 py-2">Cek Detail</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

@@ -84,6 +84,7 @@ Troubleshooting exchange 401: backend menulis `Platform CLI login ticket issued.
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
 | GET | `/api/inventory/products/{product}/stock` | `inventory.view` | Stok satu produk per batch/posisi + total |
+| GET | `/api/inventory/expiry-monitoring` | `inventory.view` | Jumlah batch layak jual yang kedaluwarsa/akan kedaluwarsa; `product_ids[]` opsional untuk status per produk |
 | GET | `/api/inventory/movements` | `inventory.view` | Riwayat pergerakan stok (terbaru dulu) |
 | POST | `/api/inventory/opening-balances` | `inventory.adjust.approve` (Admin) | **Stok eksisting toko** (satu dokumen, banyak baris, atomik) |
 | GET | `/api/inventory/transfers` | `stock_transfer.create` | Daftar/filter dokumen transfer |
@@ -140,6 +141,8 @@ Kesalahan 422 menunjuk baris: `errors["items.1.product_id"]` (produk tidak ada /
 - `expiry_status`: `none` (tanpa tanggal) · `ok` · `near_expiry` (≤ ambang, default 30 hari) · `expired`. Gunakan untuk lencana warna **sekaligus teks** (jangan hanya warna).
 - Urutan array = urutan FEFO (yang akan dijual lebih dulu di atas). Kasir **tidak** memilih batch.
 - `unit_cost` (Harga Modal) sensitif secara bisnis; tampilkan hanya kepada pengguna berizin.
+
+`GET /api/inventory/expiry-monitoring` memakai ambang toko `expiry_warning_days` (default 30 hari). Tanpa filter produk, respons memberi jumlah batch layak jual yang sudah kedaluwarsa dan yang akan kedaluwarsa dalam ambang. Dengan `product_ids[]`, respons juga memberi status per produk; prioritas tampilan: expired → near_expiry → tanpa tanggal → ok → tanpa stok → tidak dilacak. Snackbar global menampilkan jumlah tersebut dan dapat ditutup sampai sesi aplikasi berakhir.
 
 ### GET `/api/inventory/movements`
 Query: `product_id`, `movement_type` (`opening_balance|receipt|putaway|transfer|sale|sale_void|customer_return|supplier_return_out|supplier_replacement_in|adjustment|write_off`), `date_from`, `date_to` (`YYYY-MM-DD`, tanggal WIB), `per_page` (1–100, default 25).
