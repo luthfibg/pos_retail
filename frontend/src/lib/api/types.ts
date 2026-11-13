@@ -752,6 +752,18 @@ export interface StockBatch {
   qty_damaged: Decimal;
 }
 
+export interface StockCardMovement {
+  occurred_at: string;
+  reference_no: string;
+  reference_type: 'goods_receipt' | 'supplier_return' | 'sale';
+  reference_id: number;
+  expiry_date: string | null;
+  good_in: Decimal;
+  damaged_in: Decimal;
+  return_out: Decimal;
+  sale_out: Decimal;
+}
+
 /** Urutan `batches` = urutan FEFO (yang dijual lebih dulu di atas). */
 export interface ProductStock {
   product_id: number;

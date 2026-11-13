@@ -1183,6 +1183,86 @@ class InventoryService
     }
 
     /**
+     * Stock-card history grouped by document and expiry date.
+     */
+    public function stockCardMovements(int $storeId, int $productId, int $perPage): ?LengthAwarePaginator
+    {
+        if (! DB::table('products')->where('store_id', $storeId)->where('id', $productId)->exists()) {
+            return null;
+        }
+
+        $receipts = DB::table('goods_receipts as gr')
+            ->join('goods_receipt_items as gri', 'gri.gr_id', '=', 'gr.id')
+            ->where('gr.store_id', $storeId)
+            ->where('gri.product_id', $productId)
+            ->where('gr.status', 'posted')
+            ->where(function ($query) {
+                $query->where('gri.qty_received', '>', 0)->orWhere('gri.qty_damaged', '>', 0);
+            })
+            ->selectRaw(
+                "gr.posted_at as occurred_at, gr.doc_number as reference_no, 'goods_receipt' as reference_type, ".
+                'gr.id as reference_id, gri.expiry_date, SUM(gri.qty_received) as good_in, '.
+                'SUM(gri.qty_damaged) as damaged_in, '.
+                'CAST(0 AS DECIMAL(18,3)) as return_out, CAST(0 AS DECIMAL(18,3)) as sale_out'
+            )
+            ->groupBy('gr.id', 'gr.doc_number', 'gr.posted_at', 'gri.expiry_date');
+
+        $returns = DB::table('inventory_movements as m')
+            ->join('supplier_returns as sr', function ($join) {
+                $join->on('sr.id', '=', 'm.ref_id')->where('m.ref_type', '=', 'supplier_return');
+            })
+            ->leftJoin('product_batches as pb', 'pb.id', '=', 'm.batch_id')
+            ->where('m.store_id', $storeId)
+            ->where('sr.store_id', $storeId)
+            ->where('m.product_id', $productId)
+            ->where('m.movement_type', 'supplier_return_out')
+            ->selectRaw(
+                "MAX(m.occurred_at) as occurred_at, sr.doc_number as reference_no, 'supplier_return' as reference_type, ".
+                'sr.id as reference_id, pb.expiry_date, '.
+                'CAST(0 AS DECIMAL(18,3)) as good_in, CAST(0 AS DECIMAL(18,3)) as damaged_in, '.
+                'SUM(m.qty) as return_out, CAST(0 AS DECIMAL(18,3)) as sale_out'
+            )
+            ->groupBy('sr.id', 'sr.doc_number', 'pb.expiry_date');
+
+        $sales = DB::table('inventory_movements as m')
+            ->join('sales as s', 's.id', '=', 'm.ref_id')
+            ->leftJoin('product_batches as pb', 'pb.id', '=', 'm.batch_id')
+            ->where('m.store_id', $storeId)
+            ->where('m.product_id', $productId)
+            ->where('m.ref_type', 'sale')
+            ->where('m.movement_type', 'sale')
+            ->where('s.store_id', $storeId)
+            ->where('s.status', 'posted')
+            ->selectRaw(
+                "MAX(m.occurred_at) as occurred_at, s.doc_number as reference_no, 'sale' as reference_type, ".
+                's.id as reference_id, pb.expiry_date, '.
+                'CAST(0 AS DECIMAL(18,3)) as good_in, CAST(0 AS DECIMAL(18,3)) as damaged_in, '.
+                'CAST(0 AS DECIMAL(18,3)) as return_out, SUM(m.qty) as sale_out'
+            )
+            ->groupBy('s.id', 's.doc_number', 'pb.expiry_date');
+
+        $events = $receipts->unionAll($returns)->unionAll($sales);
+
+        return DB::query()
+            ->fromSub($events, 'events')
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('reference_id')
+            ->orderBy('expiry_date')
+            ->paginate($perPage)
+            ->through(fn ($row) => [
+                'occurred_at' => $row->occurred_at,
+                'reference_no' => $row->reference_no,
+                'reference_type' => $row->reference_type,
+                'reference_id' => (int) $row->reference_id,
+                'expiry_date' => $row->expiry_date,
+                'good_in' => $row->good_in,
+                'damaged_in' => $row->damaged_in,
+                'return_out' => $row->return_out,
+                'sale_out' => $row->sale_out,
+            ]);
+    }
+
+    /**
      * Riwayat pergerakan stok (terbaru dulu).
      *
      * @param  array<string, mixed>  $filters  product_id, movement_type, date_from, date_to (tanggal WIB)

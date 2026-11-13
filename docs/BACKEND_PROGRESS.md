@@ -84,6 +84,7 @@ Troubleshooting exchange 401: backend menulis `Platform CLI login ticket issued.
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
 | GET | `/api/inventory/products/{product}/stock` | `inventory.view` | Stok satu produk per batch/posisi + total |
+| GET | `/api/inventory/products/{product}/stock-movements` | `inventory.view` | Riwayat masuk/keluar kartu stok per dokumen dan tanggal kedaluwarsa |
 | GET | `/api/inventory/expiry-monitoring` | `inventory.view` | Jumlah batch layak jual yang kedaluwarsa/akan kedaluwarsa; `product_ids[]` opsional untuk status per produk |
 | GET | `/api/inventory/fifo-monitoring` | `inventory.view` | Tipe pergerakan stok per produk dari umur batch penerimaan tertua yang masih memiliki stok layak jual |
 | GET | `/api/inventory/movements` | `inventory.view` | Riwayat pergerakan stok (terbaru dulu) |
@@ -142,6 +143,13 @@ Kesalahan 422 menunjuk baris: `errors["items.1.product_id"]` (produk tidak ada /
 - `expiry_status`: `none` (tanpa tanggal) · `ok` · `near_expiry` (≤ ambang, default 30 hari) · `expired`. Gunakan untuk lencana warna **sekaligus teks** (jangan hanya warna).
 - Urutan array = urutan FEFO (yang akan dijual lebih dulu di atas). Kasir **tidak** memilih batch.
 - `unit_cost` (Harga Modal) sensitif secara bisnis; tampilkan hanya kepada pengguna berizin.
+
+### GET `/api/inventory/products/{product}/stock-movements` — riwayat kartu stok
+
+Query `per_page` opsional (1–100, default 25). Respons berpaginasi; tiap baris menggabungkan satu dokumen per tanggal kedaluwarsa dengan `occurred_at`, `reference_no`, `reference_type`, `reference_id`, `expiry_date`, `good_in`, `damaged_in`, `return_out`, dan `sale_out`.
+- Penerimaan terposting memakai `goods_receipt_items.qty_received` sebagai barang bagus masuk dan `qty_damaged` sebagai barang rusak masuk; rusak yang langsung diretur tetap tercatat.
+- Retur keluar hanya mencakup retur ke supplier yang sudah diposting. Penjualan hanya mencakup transaksi berstatus `posted` (struk void tidak dihitung).
+- Mutasi selain penerimaan, retur supplier, dan penjualan tidak ditampilkan dalam tabel kartu stok.
 
 `GET /api/inventory/expiry-monitoring` memakai ambang toko `expiry_warning_days` (default 30 hari). Tanpa filter produk, respons memberi jumlah batch layak jual yang sudah kedaluwarsa dan yang akan kedaluwarsa dalam ambang. Dengan `product_ids[]`, respons juga memberi status per produk; prioritas tampilan: expired → near_expiry → tanpa tanggal → ok → tanpa stok → tidak dilacak. Snackbar global menampilkan jumlah tersebut dan dapat ditutup sampai sesi aplikasi berakhir.
 

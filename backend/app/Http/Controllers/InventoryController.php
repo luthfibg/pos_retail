@@ -22,6 +22,22 @@ class InventoryController extends Controller
         return response()->json(['data' => $stock]);
     }
 
+    public function stockCardMovements(Request $request, int $product): JsonResponse
+    {
+        $filters = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        $movements = $this->inventory->stockCardMovements(
+            $this->stores->requireIdFor($request->user()),
+            $product,
+            (int) ($filters['per_page'] ?? 25),
+        );
+
+        abort_if($movements === null, 404, 'Produk tidak ditemukan.');
+
+        return response()->json($movements);
+    }
+
     public function expiryMonitoring(Request $request): JsonResponse
     {
         $filters = $request->validate([

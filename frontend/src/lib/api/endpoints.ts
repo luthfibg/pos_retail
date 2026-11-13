@@ -1,7 +1,7 @@
 import { api, apiDownload } from './client';
 import type {
   Category, CategoryInput, CashDeposit, CashMovement, CashMovementType, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
-  FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
+  FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, StockCardMovement, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary, DeferredPurchaseRequisitionItem,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
   GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, InventoryExpiryMonitoring, InventoryFifoMonitoring, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
@@ -531,6 +531,10 @@ export const inventoryApi = {
     api<{ data: InventoryFifoMonitoring }>('/inventory/fifo-monitoring', {
       query: { 'product_ids[]': productIds },
     }).then((r) => r.data),
+  stockCardMovements: (productId: number, page = 1, perPage = 25) =>
+    api<Paginated<StockCardMovement>>(`/inventory/products/${productId}/stock-movements`, {
+      query: { page, per_page: perPage },
+    }),
   productStock: (productId: number) =>
     api<{ data: ProductStock }>(`/inventory/products/${productId}/stock`).then((r) => r.data),
   movements: (f: MovementFilters = {}) => api<Paginated<Movement>>('/inventory/movements', { query: { ...f } }),
