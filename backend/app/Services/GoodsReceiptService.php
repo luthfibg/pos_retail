@@ -124,8 +124,8 @@ class GoodsReceiptService
     // ------------------------------------------------------------------ tulis
 
     /**
-     * Membuat penerimaan. `complete_po: true` membuat satu GR final per PO, membuat retur otomatis untuk barang rusak,
-     * lalu menambah stok dalam transaksi yang sama.
+     * Membuat penerimaan. `complete_po: true` membuat satu GR final per PO dari jumlah bagus/rusak yang dikonfirmasi,
+     * menghitung sisa yang belum diterima, membuat retur otomatis untuk barang rusak, lalu menambah stok atomik.
      *
      * @param  array<string, mixed>  $data  po_id, complete_po?, receiving_location_id?, delivery_note_no?, invoice_no?, note?, items[] (po_item_id, qty_received, qty_damaged?, qty_short?, expiry_date?, note?)
      * @return array<string, mixed>
@@ -172,16 +172,15 @@ class GoodsReceiptService
 
                 foreach ($receiptItems as &$item) {
                     $poItem = $poItems->get((int) $item['po_item_id']);
-                    $short = Decimal::qty((string) ($item['qty_short'] ?? 0));
+                    $received = Decimal::qty((string) $item['qty_received']);
                     $damaged = Decimal::qty((string) ($item['qty_damaged'] ?? 0));
                     $remaining = Decimal::qty($poItem->qty_ordered) - Decimal::qty($poItem->qty_received);
-                    $received = $remaining - $short - $damaged;
-                    if ($short < 0 || $damaged < 0 || $received < 0) {
+                    $short = $remaining - $received - $damaged;
+                    if ($received < 0 || $damaged < 0 || $short < 0) {
                         throw ValidationException::withMessages([
-                            'items' => ["Jumlah rusak dan tidak dikirim melebihi jumlah PO untuk {$poItem->product_id}."],
+                            'items' => ["Jumlah barang bagus dan rusak melebihi sisa pesanan PO untuk {$poItem->product_id}."],
                         ]);
                     }
-                    $item['qty_received'] = Decimal::qtyString($received);
                     $item['qty_short'] = Decimal::qtyString($short);
                     $item['damage_disposition'] = $damaged > 0 ? 'quarantine' : null;
                 }

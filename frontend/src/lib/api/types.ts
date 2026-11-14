@@ -1594,7 +1594,6 @@ export interface GoodsReceiptItemInput {
   po_item_id: number;
   qty_received: Decimal;
   qty_damaged?: Decimal;
-  qty_short?: Decimal;
   damage_disposition?: 'direct_return' | 'quarantine' | null;
   expiry_date?: string | null;
   batch_code?: string | null;

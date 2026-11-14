@@ -24,7 +24,7 @@ class StoreGoodsReceiptRequest extends FormRequest
             'complete_po' => ['sometimes', 'boolean'],
             'items' => ['required', 'array', 'min:1', 'max:200'],
             'items.*.po_item_id' => ['required', 'integer', 'min:1'],
-            'items.*.qty_received' => ['required_unless:complete_po,true', 'numeric', 'min:0', 'max:99999', 'decimal:0,3'],
+            'items.*.qty_received' => ['required', 'numeric', 'min:0', 'max:99999', 'decimal:0,3'],
             'items.*.qty_damaged' => ['nullable', 'numeric', 'min:0', 'max:99999', 'decimal:0,3'],
             'items.*.qty_short' => ['nullable', 'numeric', 'min:0', 'max:99999', 'decimal:0,3'],
             'items.*.damage_disposition' => ['nullable', 'string', 'in:direct_return,quarantine'],

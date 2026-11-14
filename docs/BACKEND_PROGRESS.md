@@ -523,7 +523,7 @@ Ledger rekening dan tabel alokasi lama tetap disimpan sebagai riwayat database, 
 |---|---|---|---|
 | GET | `/api/goods-receipts` | `goods_receipt.create` | Daftar. Kasir: miliknya; Admin: semua. Query: `document_status`, `po_id`, `q`, `per_page`; respons tidak menampilkan status GR |
 | GET | `/api/goods-receipts/receiving-locations` | `goods_receipt.create` | Lokasi penerimaan aktif pada toko; gudang hanya ditampilkan saat `warehouse_enabled=true` |
-| POST | `/api/goods-receipts` | `goods_receipt.create` | `complete_po: true` menutup satu PO dalam satu GR, menghitung qty diterima otomatis, membuat Retur Barang untuk qty rusak, lalu memposting stok atomik. PO yang sudah memiliki GR aktif ditolak. |
+| POST | `/api/goods-receipts` | `goods_receipt.create` | `complete_po: true` menutup satu PO dalam satu GR berdasarkan konfirmasi jumlah barang bagus dan rusak; sisa yang tidak diterima dihitung server, retur dibuat untuk barang rusak, lalu stok diposting atomik. PO yang sudah memiliki GR aktif ditolak. |
 | GET | `/api/goods-receipts/{gr}` | `goods_receipt.create` | Detail + baris |
 | POST | `/api/goods-receipts/{gr}/post` | `goods_receipt.create` | **Posting**: stok bertambah, PO diperbarui (atomik) |
 | POST | `/api/goods-receipts/{gr}/cancel` | `goods_receipt.create` | Batalkan penerimaan **draft** |
@@ -533,17 +533,17 @@ Permintaan final:
 ```json
 { "po_id": 9, "complete_po": true, "post": true, "receiving_location_id": 3, "delivery_note_no": "SJ-001", "invoice_no": "INV-77", "note": null,
   "items": [
-    { "po_item_id": 31, "qty_damaged": "2", "qty_short": "1", "expiry_date": "2027-03-01", "note": null }
+    { "po_item_id": 31, "qty_received": "7", "qty_damaged": "2", "expiry_date": "2027-03-01", "note": null }
   ] }
 ```
-- Pada `complete_po: true`, setiap baris PO dikirim tepat sekali. `qty_received` dihitung server = sisa PO - `qty_damaged` - `qty_short`; tidak boleh negatif. Nilai yang tidak dikirim ditutup/dibatalkan, PO berstatus `received`, dan receipt status `partial` jika ada qty short. GR dibuat final dan diposting dalam transaksi yang sama.
+- Pada `complete_po: true`, setiap baris PO dikirim tepat sekali dan kasir wajib mengonfirmasi `qty_received` (barang bagus) serta `qty_damaged`. Jumlah keduanya tidak boleh melebihi sisa PO; `qty_short` dihitung server = sisa PO - `qty_received` - `qty_damaged`. PO berstatus `received`, dan receipt status `partial` jika ada qty short. GR dibuat final dan diposting dalam transaksi yang sama.
 - Satu PO hanya boleh memiliki satu penerimaan GR aktif. PO yang sudah memiliki GR non-cancelled tidak dapat diterima ulang; PO tersebut juga tidak ditampilkan dalam daftar receivable.
 - Untuk kompatibilitas dokumen lama, permintaan tanpa `complete_po` masih dapat membuat/posting GR dengan kontrak lama. Alur baru pada UI selalu memakai `complete_po: true`.
 - Produk `track_expiry` **wajib** `expiry_date` (untuk qty diterima); produk lain **tidak boleh**; tanggal yang sudah lewat ditolak (catat sebagai rusak).
 - Harga beli = harga di PO. `unit_cost` hanya boleh diubah pemegang `goods_receipt.verify_documents` (Kasir mengirim nilai berbeda → 403). Kasir **tidak** menerima `unit_cost`/`price_variance` pada respons (`null`).
 - `qty_damaged` otomatis dibuatkan dokumen Retur Barang berstatus Draft yang tertaut ke GR, dan masuk bucket karantina saat stok diposting. Dokumen retur dapat diajukan ke supplier setelah penerimaan tersimpan.
 - Respons `data` tidak mengirim status GR; memuat `id, doc_number ("GR-…"), po_id, po_doc_number, supplier_name, receiving_location_id, receiving_location_name, delivery_note_no, invoice_no, document_status (pending|verified), attachments_open, received_by_name, posted_at, verified_by_name, verified_at`, `items[]` (`po_item_id, product_id, sku, name, qty_ordered, qty_received, qty_damaged, qty_short, unit_cost, po_unit_price, price_variance, expiry_date, batch_code, shelf_position_id`). Pada GR final, `qty_short` adalah jumlah yang tidak dikirim; pada data GR legacy nilainya tetap sesuai snapshot kekurangan saat dibuat.
-- Efek posting final: batch baru + saldo + pergerakan `receipt` + pembaruan Harga Modal ke biaya masuk terbaru, qty PO diterima sesuai barang datang (baik maupun rusak), PO ditutup, dan qty tidak dikirim dibatalkan. Bila ada barang rusak, retur dan notifikasi `goods_receipt.damaged` dibuat.
+- Efek posting final: batch baru + saldo + pergerakan `receipt` + pembaruan Harga Modal ke biaya masuk terbaru, qty PO diterima sesuai jumlah aktual (baik maupun rusak), PO ditutup, dan selisih jumlah pesanan dengan barang aktual dicatat sebagai belum diterima. Bila ada barang rusak, retur dan notifikasi `goods_receipt.damaged` dibuat.
 - Bila lokasi tujuan bertipe gudang, lokasi tersebut harus aktif dan `warehouse_enabled=true`; aturan diperiksa saat membuat **dan** memposting draft. Posisi rak per item opsional, tetapi bila diisi harus berada pada rak aktif di lokasi penerimaan. Stok tanpa posisi dapat dipindahkan/di-putaway memakai alur transfer stok.
 - UI dapat mengambil pilihan lokasi lewat `GET /api/goods-receipts/receiving-locations`; endpoint hanya mengembalikan lokasi aktif milik toko dan menyembunyikan gudang saat konfigurasi nonaktif.
 

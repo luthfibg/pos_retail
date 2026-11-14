@@ -25,8 +25,8 @@ function emptyLine(poItem: PurchaseOrderItem, key = String(poItem.id)): GoodsRec
   return {
     key,
     poItemId: poItem.id,
+    qtyReceived: '',
     qtyDamaged: '',
-    qtyShort: '',
     expiryDate: '',
     note: '',
   };
@@ -291,14 +291,14 @@ function CreateGoodsReceiptDialog({
                 <div key={line.key} className="space-y-3 rounded-md border border-slate-200 p-3">
                   <div>
                     <div className="font-medium">{item.name}<span className="ml-2 font-mono text-xs text-slate-500">{item.sku}</span></div>
-                    <div className="text-xs text-slate-600">Jumlah PO: {formatQty(item.qty_remaining)} {item.unit_name}</div>
+                    <div className="text-xs text-slate-600">Sisa pesanan PO: {formatQty(item.qty_remaining)} {item.unit_name}</div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label={`Barang bagus (${item.unit_name})`} error={errors?.qtyReceived}>
+                      <LocalDecimalInput className={inputCls} kind="quantity" value={line.qtyReceived} onChange={(value) => updateLine(line.key, 'qtyReceived', value)} />
+                    </Field>
                     <Field label={`Barang rusak (${item.unit_name})`} error={errors?.qtyDamaged}>
                       <LocalDecimalInput className={inputCls} kind="quantity" value={line.qtyDamaged} onChange={(value) => updateLine(line.key, 'qtyDamaged', value)} />
-                    </Field>
-                    <Field label={`Tidak dikirim (${item.unit_name})`} error={errors?.qtyShort}>
-                      <LocalDecimalInput className={inputCls} kind="quantity" value={line.qtyShort} onChange={(value) => updateLine(line.key, 'qtyShort', value)} />
                     </Field>
                     <Field label="Tanggal kedaluwarsa" error={errors?.expiryDate}>
                       <input type="date" min={todayWib()} className={inputCls} value={line.expiryDate} onChange={(event) => updateLine(line.key, 'expiryDate', event.target.value)} disabled={expiryLoading || !expiryRequired} />
@@ -406,7 +406,7 @@ function GoodsReceiptDetailDialog({
           <div className="overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full min-w-[600px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr><th className="px-3 py-2">Barang</th><th className="px-3 py-2 text-right">Barang bagus</th><th className="px-3 py-2 text-right">Barang rusak</th><th className="px-3 py-2 text-right">Tidak dikirim</th><th className="px-3 py-2">Tanggal kedaluwarsa</th></tr>
+                <tr><th className="px-3 py-2">Barang</th><th className="px-3 py-2 text-right">Barang bagus</th><th className="px-3 py-2 text-right">Barang rusak</th><th className="px-3 py-2 text-right">Belum diterima</th><th className="px-3 py-2">Tanggal kedaluwarsa</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {receipt.items.map((item) => (

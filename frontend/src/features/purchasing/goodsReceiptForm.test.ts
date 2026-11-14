@@ -20,14 +20,14 @@ const poItems: PurchaseOrderItem[] = [
 const line: GoodsReceiptLineForm = {
   key: '31',
   poItemId: 31,
+  qtyReceived: '5',
   qtyDamaged: '1',
-  qtyShort: '2',
   expiryDate: '2027-01-01',
   note: '',
 };
 
 describe('validateGoodsReceiptLines', () => {
-  it('accepts valid damaged and undelivered quantities within the PO remainder', () => {
+  it('accepts explicit good and damaged quantities within the PO remainder', () => {
     expect(validateGoodsReceiptLines(poItems, [line], { 12: true }, '2026-10-27')).toEqual({});
   });
 
@@ -36,25 +36,24 @@ describe('validateGoodsReceiptLines', () => {
     expect(validateGoodsReceiptLines(poItems, [{ ...line, expiryDate: '2026-10-26' }], { 12: true }, '2026-10-27')['31']?.expiryDate).toBeTruthy();
   });
 
-  it('rejects damaged and undelivered totals over the remaining order without floating point arithmetic', () => {
+  it('rejects good and damaged totals over the remaining order without floating point arithmetic', () => {
     expect(validateGoodsReceiptLines(
       poItems,
-      [{ ...line, qtyDamaged: '6.999', qtyShort: '1.002' }],
+      [{ ...line, qtyReceived: '6.999', qtyDamaged: '1.002' }],
       { 12: true },
       '2026-10-27',
-    )['31']?.qtyDamaged).toBeTruthy();
+    )['31']?.qtyReceived).toBeTruthy();
   });
 
   it('requires at least some goods to be received', () => {
-    expect(validateGoodsReceiptLines(poItems, [{ ...line, qtyDamaged: '0', qtyShort: '8' }], { 12: true }, '2026-10-27')['31']?.qtyShort).toBeTruthy();
+    expect(validateGoodsReceiptLines(poItems, [{ ...line, qtyReceived: '0', qtyDamaged: '0' }], { 12: true }, '2026-10-27')['31']?.qtyReceived).toBeTruthy();
   });
 
-  it('calculates good quantity from PO remainder, damaged and undelivered amounts', () => {
+  it('sends cashier-confirmed good and damaged quantities without an undelivered input', () => {
     expect(buildGoodsReceiptItems(poItems, [line])).toEqual([{
       po_item_id: 31,
-      qty_received: '5.000',
+      qty_received: '5',
       qty_damaged: '1',
-      qty_short: '2',
       damage_disposition: 'quarantine',
       expiry_date: '2027-01-01',
       note: null,

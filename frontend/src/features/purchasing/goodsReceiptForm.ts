@@ -5,15 +5,15 @@ import { qtyToMilli } from '@/lib/money';
 export interface GoodsReceiptLineForm {
   key: string;
   poItemId: number;
+  qtyReceived: string;
   qtyDamaged: string;
-  qtyShort: string;
   expiryDate: string;
   note: string;
 }
 
 export interface GoodsReceiptLineErrors {
+  qtyReceived?: string;
   qtyDamaged?: string;
-  qtyShort?: string;
   expiryDate?: string;
 }
 
@@ -26,38 +26,37 @@ export function validateGoodsReceiptLines(
   today: string,
 ): GoodsReceiptLineErrorMap {
   const errors: GoodsReceiptLineErrorMap = {};
-  let hasReceivedQuantity = false;
+  let hasAnyReceivedQuantity = false;
 
   for (const line of lines) {
     const item = poItems.find((candidate) => candidate.id === line.poItemId);
     if (!item) continue;
 
+    const received = normalizeDecimal(line.qtyReceived);
     const damaged = normalizeDecimal(line.qtyDamaged);
-    const short = normalizeDecimal(line.qtyShort);
+    const receivedMilli = received ? qtyToMilli(received) : 0n;
     const damagedMilli = damaged ? qtyToMilli(damaged) : 0n;
-    const shortMilli = short ? qtyToMilli(short) : 0n;
     const lineErrors: GoodsReceiptLineErrors = {};
 
+    if (received && (receivedMilli === null || receivedMilli > 99_999_000n)) {
+      lineErrors.qtyReceived = 'Jumlah barang bagus tidak valid (maks. 99.999, 3 desimal).';
+    }
     if (damaged && (damagedMilli === null || damagedMilli > 99_999_000n)) {
       lineErrors.qtyDamaged = 'Jumlah rusak tidak valid (maks. 99.999, 3 desimal).';
     }
-    if (short && (shortMilli === null || shortMilli > 99_999_000n)) {
-      lineErrors.qtyShort = 'Jumlah tidak dikirim tidak valid (maks. 99.999, 3 desimal).';
-    }
-    if (damagedMilli === null || shortMilli === null) {
+    if (receivedMilli === null || damagedMilli === null) {
       errors[line.key] = lineErrors;
       continue;
     }
 
     const remaining = qtyToMilli(item.qty_remaining);
-    if (remaining === null || damagedMilli + shortMilli > remaining) {
-      lineErrors.qtyDamaged = 'Jumlah rusak dan tidak dikirim melebihi sisa pesanan.';
+    if (remaining === null || receivedMilli + damagedMilli > remaining) {
+      lineErrors.qtyReceived = 'Jumlah barang bagus dan rusak melebihi sisa pesanan PO.';
     }
 
-    const receivedMilli = remaining === null ? null : remaining - damagedMilli - shortMilli;
-    if (receivedMilli !== null && receivedMilli + damagedMilli > 0n) hasReceivedQuantity = true;
+    if (receivedMilli + damagedMilli > 0n) hasAnyReceivedQuantity = true;
 
-    const stockableQuantity = (receivedMilli !== null && receivedMilli > 0n) || damagedMilli > 0n;
+    const stockableQuantity = receivedMilli > 0n || damagedMilli > 0n;
     if (stockableQuantity && tracksExpiry[item.product_id]) {
       if (!line.expiryDate) lineErrors.expiryDate = 'Tanggal kedaluwarsa wajib diisi.';
       else if (line.expiryDate < today) lineErrors.expiryDate = 'Tanggal kedaluwarsa tidak boleh sudah lewat.';
@@ -68,8 +67,8 @@ export function validateGoodsReceiptLines(
     if (Object.keys(lineErrors).length > 0) errors[line.key] = lineErrors;
   }
 
-  if (!hasReceivedQuantity && Object.keys(errors).length === 0 && lines.length > 0) {
-    errors[lines[0]!.key] = { qtyShort: 'Tidak ada barang yang diterima; batalkan PO jika seluruh barang tidak dikirim.' };
+  if (!hasAnyReceivedQuantity && Object.keys(errors).length === 0 && lines.length > 0) {
+    errors[lines[0]!.key] = { qtyReceived: 'Isi jumlah barang bagus atau rusak yang benar-benar diterima.' };
   }
 
   return errors;
@@ -80,16 +79,13 @@ export function buildGoodsReceiptItems(poItems: PurchaseOrderItem[], lines: Good
     const item = poItems.find((candidate) => candidate.id === line.poItemId);
     if (!item) throw new Error('Barang penerimaan tidak ditemukan pada PO.');
     const remaining = qtyToMilli(item.qty_remaining);
+    const received = qtyToMilli(normalizeDecimal(line.qtyReceived)) ?? 0n;
     const damaged = qtyToMilli(normalizeDecimal(line.qtyDamaged)) ?? 0n;
-    const short = qtyToMilli(normalizeDecimal(line.qtyShort)) ?? 0n;
-    if (remaining === null || damaged + short > remaining) throw new Error('Jumlah barang rusak dan tidak dikirim tidak valid.');
-    const received = remaining - damaged - short;
-    const receivedQuantity = `${received / 1000n}.${String(received % 1000n).padStart(3, '0')}`;
+    if (remaining === null || received + damaged > remaining) throw new Error('Jumlah barang bagus dan rusak melebihi sisa pesanan PO.');
     return {
       po_item_id: line.poItemId,
-      qty_received: receivedQuantity,
+      qty_received: normalizeDecimal(line.qtyReceived) || '0',
       qty_damaged: normalizeDecimal(line.qtyDamaged) || '0',
-      qty_short: normalizeDecimal(line.qtyShort) || '0',
       damage_disposition: damaged > 0n ? 'quarantine' : null,
       expiry_date: line.expiryDate || null,
       note: line.note.trim() || null,
