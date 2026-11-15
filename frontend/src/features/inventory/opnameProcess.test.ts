@@ -50,6 +50,10 @@ describe('opnameProcess', () => {
 
     const rows = varianceRows(report);
     expect(rows.map((row) => [row.name, row.diff])).toEqual([['Gula', 1.5], ['Teh', -2]]);
+    expect(rows.map((row) => [row.category, row.systemQty, row.countedQty])).toEqual([
+      ['A / B', '0', '0'],
+      ['A', '0', '0'],
+    ]);
     expect(rows.map((row) => formatDiff(row.diff))).toEqual(['+1,5', '−2']);
     expect(varianceRows(undefined)).toEqual([]);
   });

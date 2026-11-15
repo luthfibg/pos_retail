@@ -4,14 +4,14 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { opnameApi } from '@/lib/api/endpoints';
-import type { OpnameItem } from '@/lib/api/types';
+import type { OpnameItem, OpnameReport } from '@/lib/api/types';
 import { canFinish, formatCount, formatDiff, newRequestId, parseCount, shortMessage, varianceRows } from './opnameProcess';
 
 const PER_PAGE = 50;
 const LIST_HREF = '/inventory/adjustments/opname';
 const HISTORY_HREF = '/inventory/adjustments/adjustment';
 
-type Dialog = 'finish' | 'cancel' | 'approve' | 'reject';
+type Dialog = 'finish' | 'cancel' | 'review';
 const fieldCls = 'min-h-11 w-full rounded-md border border-slate-300 px-3';
 
 export function OpnameProcessPage() {
@@ -30,6 +30,8 @@ export function OpnameProcessPage() {
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [password, setPassword] = useState('');
   const [reason, setReason] = useState('');
+  const [printRequested, setPrintRequested] = useState(false);
+  const [printJob, setPrintJob] = useState<{ report: OpnameReport; items: OpnameItem[] } | null>(null);
   const requestId = useRef('');
 
   useEffect(() => {
@@ -61,6 +63,29 @@ export function OpnameProcessPage() {
     enabled: data?.status === 'pending_approval',
     retry: false,
   });
+  const printItems = useQuery({
+    queryKey: ['opname', id, 'print-items'],
+    queryFn: async () => {
+      const firstPage = await opnameApi.items(id, { only_counted: true, page: 1, per_page: 200 });
+      const remainingPages = await Promise.all(
+        Array.from({ length: firstPage.last_page - 1 }, (_, index) =>
+          opnameApi.items(id, { only_counted: true, page: index + 2, per_page: 200 }),
+        ),
+      );
+      return [firstPage, ...remainingPages].flatMap((page) => page.data);
+    },
+    enabled: printRequested,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (printRequested && printItems.data && report.data) {
+      setPrintJob({ report: report.data, items: printItems.data });
+      setPrintRequested(false);
+    } else if (printRequested && printItems.isError && !printItems.isFetching) {
+      setPrintRequested(false);
+    }
+  }, [printRequested, printItems.data, printItems.isError, report.data]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['opname'] });
 
@@ -83,7 +108,6 @@ export function OpnameProcessPage() {
     finish.reset();
     cancel.reset();
     approve.reset();
-    reject.reset();
     setDialog(next);
   }
 
@@ -101,11 +125,7 @@ export function OpnameProcessPage() {
   });
   const approve = useMutation({
     mutationFn: () => opnameApi.approve(id, { client_request_id: requestId.current, owner_password: password }),
-    onSuccess: () => { void refresh(); navigate(HISTORY_HREF); },
-  });
-  const reject = useMutation({
-    mutationFn: () => opnameApi.reject(id, { client_request_id: requestId.current, owner_password: password, reason: reason.trim() }),
-    onSuccess: () => { setDialog(null); void refresh(); },
+    onSuccess: () => { setDialog(null); void refresh(); navigate(HISTORY_HREF); },
   });
 
   if (session.isLoading || !data) {
@@ -129,23 +149,23 @@ export function OpnameProcessPage() {
     if (quantity !== null) save.mutate({ item, quantity });
   }
 
-  const pending = finish.isPending || cancel.isPending || approve.isPending || reject.isPending;
-  const dialogError = finish.error ?? cancel.error ?? approve.error ?? reject.error;
-  const needsPassword = dialog === 'approve' || dialog === 'reject' || (dialog === 'finish' && isOwner);
+  const pending = finish.isPending || cancel.isPending || approve.isPending;
+  const dialogError = finish.error ?? cancel.error ?? approve.error;
+  const needsPassword = dialog === 'review' || (dialog === 'finish' && isOwner);
   const reasonOk = reason.trim().length >= 3;
   const confirmDisabled = pending
     || (needsPassword && password === '')
-    || ((dialog === 'cancel' || dialog === 'reject') && !reasonOk);
+    || (dialog === 'cancel' && !reasonOk);
 
   function confirm() {
     if (dialog === 'finish') finish.mutate();
     else if (dialog === 'cancel') cancel.mutate();
-    else if (dialog === 'approve') approve.mutate();
-    else if (dialog === 'reject') reject.mutate();
+    else if (dialog === 'review') approve.mutate();
   }
 
   return (
-    <div className="space-y-4">
+    <>
+    <div className="no-print space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link to={LIST_HREF} className="text-sm font-medium text-blue-700">‹ Opname</Link>
@@ -155,7 +175,7 @@ export function OpnameProcessPage() {
           <div className="flex gap-2">
             {can('opname.cancel') && <button type="button" onClick={() => open('cancel')} className="min-h-11 rounded-md border border-slate-300 px-4">Batal</button>}
             {can('opname.post') && (
-              <button type="button" disabled={!canFinish(counted, total)} onClick={() => open('finish')} className="min-h-11 rounded-md bg-slate-900 px-5 font-medium text-white disabled:opacity-40">Selesai</button>
+              <button type="button" disabled={!canFinish(counted, total)} onClick={() => open('finish')} className="min-h-11 rounded-md bg-slate-900 px-5 font-medium text-white disabled:opacity-40">Lanjutkan</button>
             )}
           </div>
         )}
@@ -242,21 +262,30 @@ export function OpnameProcessPage() {
       {data.status === 'pending_approval' && (
         <div className="space-y-3">
           <p className="font-medium">Menunggu persetujuan</p>
-          {variances.length > 0 && (
-            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
-              {variances.map((row) => (
-                <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-2">
-                  <span className="truncate">{row.name}</span>
-                  <span className={`font-medium tabular-nums ${row.diff < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{formatDiff(row.diff)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          {report.isPending && <p className="text-sm text-slate-500">Memuat hasil opname…</p>}
+          {report.isError && <p role="alert" className="text-sm text-red-700">{shortMessage(report.error, 'Gagal memuat hasil opname')}</p>}
           {can('opname.approve') && (
             <div className="flex gap-2">
-              <button type="button" onClick={() => open('approve')} className="min-h-11 rounded-md bg-slate-900 px-5 font-medium text-white">Setujui</button>
-              <button type="button" onClick={() => open('reject')} className="min-h-11 rounded-md border border-slate-300 px-5">Tolak</button>
+              <button
+                type="button"
+                disabled={!report.data || printItems.isFetching}
+                onClick={() => setPrintRequested(true)}
+                className="min-h-11 rounded-md border border-slate-300 px-5 disabled:opacity-50"
+              >
+                {printItems.isFetching ? 'Menyiapkan…' : 'Cetak'}
+              </button>
+              <button
+                type="button"
+                disabled={!report.data}
+                onClick={() => open('review')}
+                className="min-h-11 rounded-md bg-slate-900 px-5 font-medium text-white disabled:opacity-50"
+              >
+                Periksa
+              </button>
             </div>
+          )}
+          {printItems.isError && !printItems.isFetching && (
+            <p role="alert" className="text-sm text-red-700">{shortMessage(printItems.error, 'Gagal memuat hasil untuk dicetak')}</p>
           )}
         </div>
       )}
@@ -266,11 +295,43 @@ export function OpnameProcessPage() {
 
       {dialog && (
         <Modal
-          title={dialog === 'finish' ? 'Selesai?' : dialog === 'cancel' ? 'Batalkan opname?' : dialog === 'approve' ? 'Setujui?' : 'Tolak?'}
+          title={dialog === 'finish' ? 'Lanjutkan stok opname?' : dialog === 'cancel' ? 'Batalkan stok opname?' : 'Periksa Hasil Opname'}
           onClose={() => { if (!pending) setDialog(null); }}
         >
-          <div className="space-y-3 p-5">
-            {(dialog === 'cancel' || dialog === 'reject') && (
+          <div className="max-h-[65dvh] space-y-4 overflow-y-auto p-5">
+            {dialog === 'review' && report.data && (
+              <>
+                <dl className="grid grid-cols-2 gap-3 rounded-md bg-slate-50 p-3 text-sm">
+                  <div><dt className="text-slate-500">Produk dihitung</dt><dd className="font-medium">{report.data.totals?.products_counted ?? data.counted_products}/{report.data.totals?.products_total ?? data.total_products}</dd></div>
+                  <div><dt className="text-slate-500">Produk berselisih</dt><dd className="font-medium">{report.data.totals?.variance_products ?? variances.length}</dd></div>
+                  <div><dt className="text-slate-500">Total kurang</dt><dd className="font-medium">{formatCount(report.data.totals?.short_qty)}</dd></div>
+                  <div><dt className="text-slate-500">Total lebih</dt><dd className="font-medium">{formatCount(report.data.totals?.over_qty)}</dd></div>
+                </dl>
+                {variances.length > 0 ? (
+                  <div className="overflow-x-auto rounded-md border border-slate-200">
+                    <table className="w-full min-w-[620px] text-left text-sm">
+                      <thead className="bg-slate-50 text-xs text-slate-600">
+                        <tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2">Stok sistem</th><th className="px-3 py-2">Hasil hitung</th><th className="px-3 py-2">Selisih</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {variances.map((row) => (
+                          <tr key={row.id}>
+                            <td className="px-3 py-2">
+                              <div className="font-medium">{row.name}</div>
+                              <div className="text-xs text-slate-500">{row.category}{row.barcode ? ` · ${row.barcode}` : ''}</div>
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">{formatCount(row.systemQty)}</td>
+                            <td className="px-3 py-2 tabular-nums">{formatCount(row.countedQty)}</td>
+                            <td className={`px-3 py-2 font-medium tabular-nums ${row.diff < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{formatDiff(row.diff)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Tidak ada selisih stok.</p>}
+              </>
+            )}
+            {dialog === 'cancel' && (
               <input aria-label="Alasan" placeholder="Alasan" value={reason} onChange={(event) => setReason(event.target.value)} className={fieldCls} />
             )}
             {needsPassword && (
@@ -281,11 +342,78 @@ export function OpnameProcessPage() {
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
             <button type="button" disabled={pending} onClick={() => setDialog(null)} className="min-h-11 rounded-md border border-slate-300 px-4">Kembali</button>
             <button type="button" disabled={confirmDisabled} onClick={confirm} className="min-h-11 rounded-md bg-slate-900 px-5 font-medium text-white disabled:opacity-50">
-              {pending ? '…' : dialog === 'finish' ? 'Selesai' : dialog === 'cancel' ? 'Batalkan' : dialog === 'approve' ? 'Setujui' : 'Tolak'}
+              {pending ? '…' : dialog === 'finish' ? 'Selesai' : dialog === 'cancel' ? 'Batalkan' : 'Lanjutkan'}
             </button>
           </div>
         </Modal>
       )}
+    </div>
+    {printJob && <OpnamePrintSheet report={printJob.report} items={printJob.items} storeName={me?.store?.name ?? ''} onDone={() => setPrintJob(null)} />}
+    </>
+  );
+}
+
+function OpnamePrintSheet({ report, items, storeName, onDone }: { report: OpnameReport; items: OpnameItem[]; storeName: string; onDone: () => void }) {
+  const variances = new Map(varianceRows(report).map((row) => [row.id, row]));
+  const rows = items.map((item) => {
+    const variance = variances.get(item.id);
+    return {
+      id: item.id,
+      name: item.name,
+      barcode: item.barcode,
+      category: item.category_path.join(' / ') || variance?.category || '—',
+      systemQty: item.system_qty ?? variance?.systemQty ?? null,
+      countedQty: item.counted_qty,
+      diff: variance ? formatDiff(variance.diff) : '0',
+    };
+  });
+
+  useEffect(() => {
+    window.addEventListener('afterprint', onDone, { once: true });
+    const timer = window.setTimeout(() => window.print(), 80);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('afterprint', onDone);
+    };
+  }, [onDone]);
+
+  return (
+    <div className="print-only print-doc">
+      <article>
+        <header className="mb-4 flex items-start justify-between gap-6 border-b-2 border-black pb-3">
+          <div>
+            <div className="text-base font-bold">{storeName}</div>
+            <h1 className="text-xl font-bold tracking-wide">HASIL STOK OPNAME</h1>
+          </div>
+          <div className="text-right text-sm font-bold">{report.session.number}</div>
+        </header>
+        <dl className="mb-4 grid grid-cols-2 gap-2 text-sm">
+          <div><dt className="font-semibold">Produk dihitung</dt><dd>{report.totals?.products_counted ?? 0}/{report.totals?.products_total ?? 0}</dd></div>
+          <div><dt className="font-semibold">Produk berselisih</dt><dd>{report.totals?.variance_products ?? rows.length}</dd></div>
+          <div><dt className="font-semibold">Total kurang</dt><dd>{formatCount(report.totals?.short_qty)}</dd></div>
+          <div><dt className="font-semibold">Total lebih</dt><dd>{formatCount(report.totals?.over_qty)}</dd></div>
+        </dl>
+        {rows.length > 0 ? (
+          <table>
+            <thead>
+              <tr><th>No</th><th>Produk</th><th>Kategori</th><th>Barcode</th><th>Stok sistem</th><th>Hasil hitung</th><th>Selisih</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={row.id}>
+                  <td>{index + 1}</td>
+                  <td>{row.name}</td>
+                  <td>{row.category}</td>
+                  <td>{row.barcode || '—'}</td>
+                  <td className="text-right">{formatCount(row.systemQty)}</td>
+                  <td className="text-right">{formatCount(row.countedQty)}</td>
+                  <td className="text-right">{row.diff}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <p>Tidak ada selisih stok.</p>}
+      </article>
     </div>
   );
 }

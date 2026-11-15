@@ -39,6 +39,10 @@ export function shortMessage(error: unknown, fallback: string, max = 70): string
 export interface VarianceRow {
   id: number;
   name: string;
+  barcode: string;
+  category: string;
+  systemQty: string;
+  countedQty: string;
   /** Selisih bertanda: kurang = negatif, lebih = positif. */
   diff: number;
 }
@@ -46,15 +50,24 @@ export interface VarianceRow {
 /** Semua produk berselisih dari laporan, urut nama, tanpa duplikat. */
 export function varianceRows(report: OpnameReport | undefined): VarianceRow[] {
   const rows = new Map<number, VarianceRow>();
-  const visit = (node: OpnameReportNode) => {
+  const visit = (node: OpnameReportNode, parents: string[]) => {
+    const category = [...parents, node.name].join(' / ');
     for (const line of node.lines) {
       const size = Math.abs(Number(line.diff_qty));
       if (!Number.isFinite(size) || size === 0) continue;
-      rows.set(line.item_id, { id: line.item_id, name: line.name, diff: line.direction === 'short' ? -size : size });
+      rows.set(line.item_id, {
+        id: line.item_id,
+        name: line.name,
+        barcode: line.barcode,
+        category,
+        systemQty: line.system_qty,
+        countedQty: line.counted_qty,
+        diff: line.direction === 'short' ? -size : size,
+      });
     }
-    node.children.forEach(visit);
+    node.children.forEach((child) => visit(child, [...parents, node.name]));
   };
-  report?.categories?.forEach(visit);
+  report?.categories?.forEach((node) => visit(node, []));
   return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name, 'id'));
 }
 
