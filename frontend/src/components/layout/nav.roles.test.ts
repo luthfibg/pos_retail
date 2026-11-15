@@ -45,7 +45,7 @@ function menuFor(role: string): string[] {
 describe('menu per role (model standar retail)', () => {
   it('Kasir melihat menu operasional toko', () => {
     expect(menuFor('Kasir')).toEqual([
-      '/customers', '/dashboard', '/goods-receipts', '/inventory/adjustments/adjustment', '/inventory/movements',
+      '/customers', '/dashboard', '/goods-receipts', '/inventory/movements',
       '/pos', '/products', '/purchase-requisitions', '/sales', '/shift', '/supplier-returns',
     ]);
   });
@@ -97,11 +97,11 @@ function sidebarFor(permissions: string[] | 'all', isAdmin?: boolean, roles: str
 }
 
 describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
-  it('Kasir melihat Penerimaan Barang dan Retur Barang di dropdown Inventory', () => {
+  it('Kasir melihat Penerimaan Barang dan Retur Barang di dropdown Inventory tanpa Adjustment', () => {
     expect(sidebarFor(PERMISSIONS.Kasir ?? [], false, ['Kasir'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Penerimaan Barang, Stok Barang, Retur Barang, Adjustment, Pergerakan Stok',
+      'Inventory > Penerimaan Barang, Stok Barang, Retur Barang, Pergerakan Stok',
       'Penjualan > Kasir Jaga, Kasir, Penjualan',
       'Karyawan',
     ]);

@@ -60,7 +60,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/inventory/opening', label: 'Stok Eksisting Toko', permission: 'inventory.opening_balance' },
       { to: '/inventory/transfers', label: 'Transfer Stok', permission: 'stock_transfer.create' },
       { to: '/inventory/adjustments', label: 'Stok Opname', permission: 'opname.view', roles: ['Admin', 'Owner'] },
-      { to: '/inventory/adjustments/adjustment', label: 'Adjustment', roles: ['Kasir'] },
       { to: '/inventory/movements', label: 'Pergerakan Stok', permission: 'inventory.view' },
     ],
   },

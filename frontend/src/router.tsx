@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
-import { RequireAnyPermission, RequireAnyRole, RequireAuth, RequirePermission, RequirePlatformOperator } from '@/features/auth/guards';
+import { RequireAnyPermission, RequireAuth, RequirePermission, RequirePlatformOperator } from '@/features/auth/guards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
@@ -19,7 +19,7 @@ import { LEGACY_REDIRECTS, SETTINGS_PERMISSIONS } from '@/features/settings/sett
 const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module) => ({ default: module.ShiftPage })));
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
-const AdjustmentsPage = lazy(() => import('@/features/inventory/AdjustmentsPage').then((module) => ({ default: module.AdjustmentsPage })));
+const OpnameFinalHistoryPage = lazy(() => import('@/features/inventory/OpnameFinalHistoryPage').then((module) => ({ default: module.OpnameFinalHistoryPage })));
 const OpnamePage = lazy(() => import('@/features/inventory/OpnamePage').then((module) => ({ default: module.OpnamePage })));
 const OpnameProcessPage = lazy(() => import('@/features/inventory/OpnameProcessPage').then((module) => ({ default: module.OpnameProcessPage })));
 const TransfersPage = lazy(() => import('@/features/inventory/TransfersPage').then((module) => ({ default: module.TransfersPage })));
@@ -106,8 +106,8 @@ export const router = createBrowserRouter([
               { index: true, element: <AdjustmentOpnameRedirect /> },
               {
                 path: 'adjustment',
-                element: <RequireAnyRole roles={['Admin', 'Owner', 'Kasir']} />,
-                children: [{ index: true, element: <LazyPage><AdjustmentsPage /></LazyPage> }],
+                element: <RequirePermission permission="opname.view" />,
+                children: [{ index: true, element: <LazyPage><OpnameFinalHistoryPage /></LazyPage> }],
               },
               {
                 path: 'opname',

@@ -621,8 +621,13 @@ export interface OpnameItem {
   system_qty?: Decimal;
   system_good_qty?: Decimal;
   system_damaged_qty?: Decimal;
+  diff_qty?: Decimal | null;
   diff_good_qty?: Decimal | null;
   diff_damaged_qty?: Decimal | null;
+  reconciliation_action?: 'write_off' | 'correction' | null;
+  reconciliation_diff_qty?: Decimal | null;
+  reconciliation_diff_good_qty?: Decimal | null;
+  reconciliation_diff_damaged_qty?: Decimal | null;
   source_receipts?: OpnameReceiptSource[];
 }
 

@@ -263,6 +263,7 @@ export const opnameApi = {
     q?: string;
     only_uncounted?: boolean;
     only_counted?: boolean;
+    only_changes?: boolean;
     include_sources?: boolean;
     sort?: '-counted_at';
     exclude_item_ids?: number[];

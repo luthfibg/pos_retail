@@ -268,6 +268,7 @@ class OpnameSessionController extends Controller
             'q' => ['sometimes', 'nullable', 'string', 'min:2', 'max:120'],
             'only_uncounted' => ['sometimes', 'in:0,1,false,true'],
             'only_counted' => ['sometimes', 'in:0,1,false,true'],
+            'only_changes' => ['sometimes', 'in:0,1,false,true'],
             'include_sources' => ['sometimes', 'in:0,1,false,true'],
             'sort' => ['sometimes', 'in:-counted_at'],
             'exclude_item_ids' => ['sometimes', 'array', 'max:10'],
@@ -275,7 +276,7 @@ class OpnameSessionController extends Controller
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:200'],
         ]);
-        foreach (['only_uncounted', 'only_counted', 'include_sources'] as $booleanFilter) {
+        foreach (['only_uncounted', 'only_counted', 'only_changes', 'include_sources'] as $booleanFilter) {
             if (array_key_exists($booleanFilter, $filters)) {
                 $filters[$booleanFilter] = filter_var($filters[$booleanFilter], FILTER_VALIDATE_BOOLEAN);
             }

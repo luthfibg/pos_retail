@@ -221,6 +221,21 @@ class OpnameWorkflowTest extends SeededTestCase
         $this->assertSame(1, DB::table('inventory_movements')->where('ref_type', 'stock_opname')->where('ref_id', $sessionId)->count());
     }
 
+    public function test_final_history_items_include_legacy_variances_without_reconciliation_action(): void
+    {
+        $this->actAsAdmin();
+        $fixture = $this->countedProduct('5.000', '4');
+        DB::table('stock_opname_sessions')->where('id', $fixture['session_id'])->update(['status' => 'posted']);
+
+        $this->getJson("/api/stock-opname-sessions/{$fixture['session_id']}/items?only_counted=true&only_changes=true")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonFragment([
+                'id' => $fixture['item_id'],
+                'diff_qty' => '-1.000',
+            ]);
+    }
+
     public function test_owner_can_mix_write_off_and_correction_per_product(): void
     {
         $this->actAsAdmin();
@@ -329,6 +344,18 @@ class OpnameWorkflowTest extends SeededTestCase
         $this->getJson("/api/stock-opname-sessions/{$sessionId}/report")
             ->assertOk()->assertJsonPath('data.totals.variance_products', 1)
             ->assertJsonPath('data.categories.0.lines.0.reconciliation_action', 'write_off');
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?only_counted=true&only_changes=true")
+            ->assertOk()->assertJsonCount(3, 'data')
+            ->assertJsonFragment([
+                'id' => $writeOffItemId,
+                'reconciliation_action' => 'write_off',
+                'reconciliation_diff_qty' => '1.000',
+            ])
+            ->assertJsonFragment([
+                'id' => $correctionItemId,
+                'reconciliation_action' => 'correction',
+                'reconciliation_diff_qty' => '-4.000',
+            ]);
         $this->getJson("/api/inventory/products/{$writeOffProduct}/stock-movements")
             ->assertOk()->assertJsonPath('total', 1)
             ->assertJsonPath('data.0.reconciliation_action', 'write_off')

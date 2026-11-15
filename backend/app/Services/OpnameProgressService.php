@@ -234,6 +234,14 @@ class OpnameProgressService
         if (! empty($filters['only_counted'])) {
             $query->whereNotNull('i.counted_qty');
         }
+        if (! empty($filters['only_changes'])) {
+            $query->where(function ($builder) {
+                $builder->whereNotNull('i.reconciliation_action')
+                    ->orWhere('i.diff_qty', '<>', 0)
+                    ->orWhere('i.diff_good_qty', '<>', 0)
+                    ->orWhere('i.diff_damaged_qty', '<>', 0);
+            });
+        }
         if (! empty($filters['exclude_item_ids'])) {
             $query->whereNotIn('i.id', array_map('intval', $filters['exclude_item_ids']));
         }
@@ -276,6 +284,15 @@ class OpnameProgressService
                 if ($showConditionQty && ($item->diff_good_qty !== null || $item->diff_damaged_qty !== null)) {
                     $row['diff_good_qty'] = $item->diff_good_qty;
                     $row['diff_damaged_qty'] = $item->diff_damaged_qty;
+                }
+                if ($showConditionQty) {
+                    $row['diff_qty'] = $item->diff_qty;
+                    if ($item->reconciliation_action !== null) {
+                        $row['reconciliation_action'] = $item->reconciliation_action;
+                        $row['reconciliation_diff_qty'] = $item->reconciliation_diff_qty ?? $item->diff_qty;
+                        $row['reconciliation_diff_good_qty'] = $item->reconciliation_diff_good_qty ?? $item->diff_good_qty;
+                        $row['reconciliation_diff_damaged_qty'] = $item->reconciliation_diff_damaged_qty ?? $item->diff_damaged_qty;
+                    }
                 }
                 if (! empty($filters['include_sources'])) {
                     $row['source_receipts'] = $sourceMap[(int) $item->product_id] ?? [];
