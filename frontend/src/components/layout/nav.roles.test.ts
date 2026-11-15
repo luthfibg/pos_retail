@@ -129,7 +129,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
   it('Accounting', () => {
     expect(sidebarFor(PERMISSIONS.Accounting ?? [])).toEqual([
       'Dashboard',
-      'Inventory > Stok Barang, Adjustment & Opname, Pergerakan Stok',
+      'Inventory > Stok Barang, Stok Opname, Pergerakan Stok',
       'Keuangan > Laporan Keuangan, Laporan Kasir Jaga, Laporan Piutang',
     ]);
   });
@@ -138,7 +138,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Owner ?? [], undefined, ['Owner'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Stok Barang, Retur Barang, Adjustment & Opname, Pergerakan Stok',
+      'Inventory > Stok Barang, Retur Barang, Stok Opname, Pergerakan Stok',
       'Keuangan > Laporan Keuangan, Laporan Kasir Jaga',
       'Karyawan',
       'Pengaturan',
@@ -149,7 +149,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor('all', true, ['Admin'])).toEqual([
       'Dashboard',
       'Permintaan Pembelian',
-      'Inventory > Stok Barang, Retur Barang, Adjustment & Opname, Pergerakan Stok',
+      'Inventory > Stok Barang, Retur Barang, Stok Opname, Pergerakan Stok',
       'Penjualan',
       'Keuangan > Laporan Keuangan, Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
       'Data Master > Kategori, Supplier, Karyawan',
