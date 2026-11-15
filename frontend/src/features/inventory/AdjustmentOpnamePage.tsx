@@ -41,10 +41,11 @@ export function AdjustmentOpnamePage() {
 
   return (
     <div className="min-w-0 pb-24 md:pb-6">
-      <header className="px-4 pt-5 md:px-6 md:pt-6">
+      {/* Judul dan tab hanya untuk layar; tanpa no-print keduanya memenuhi halaman 1 hasil cetak. */}
+      <header className="no-print px-4 pt-5 md:px-6 md:pt-6">
         <h1 className="text-xl font-semibold">Stok Opname</h1>
       </header>
-      <div className="sticky top-0 z-20 mt-4 border-y border-slate-200 bg-white/95 px-4 backdrop-blur md:px-6">
+      <div className="no-print sticky top-0 z-20 mt-4 border-y border-slate-200 bg-white/95 px-4 backdrop-blur md:px-6">
         <nav role="tablist" aria-label="Stok Opname" onKeyDown={moveTab} className="flex w-full">
           {canOpname && (
             <NavLink

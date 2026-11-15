@@ -43,7 +43,8 @@ class OpnameWorkflowTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $itemId,
             'mode' => 'set',
-            'quantity' => (int) $countedQty,
+            'good_quantity' => (int) $countedQty,
+            'damaged_quantity' => 0,
             'client_request_id' => fake()->uuid(),
         ])->assertOk();
 
@@ -53,6 +54,18 @@ class OpnameWorkflowTest extends SeededTestCase
     private function owner(string $username = 'owner-uji'): User
     {
         return $this->makeUser('Owner', $username, 'password-owner-123');
+    }
+
+    /** @return array<int, array{item_id: int, action: string}> */
+    private function writeOffReconciliations(int $sessionId): array
+    {
+        return DB::table('stock_opname_items')->where('session_id', $sessionId)->get()
+            ->filter(fn ($item) => (float) ($item->diff_qty ?? 0) !== 0.0
+                || (float) ($item->diff_good_qty ?? 0) !== 0.0
+                || (float) ($item->diff_damaged_qty ?? 0) !== 0.0)
+            ->map(fn ($item) => ['item_id' => (int) $item->id, 'action' => 'write_off'])
+            ->values()
+            ->all();
     }
 
     public function test_report_hides_differences_until_complete_and_lists_only_variance_products(): void
@@ -82,7 +95,8 @@ class OpnameWorkflowTest extends SeededTestCase
             ->assertJsonMissingPath('categories');
         foreach ($items as $index => $item) {
             $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
-                'item_id' => $item->id, 'mode' => 'set', 'quantity' => (int) $fixtures[$index][1],
+                'item_id' => $item->id, 'mode' => 'set',
+                'good_quantity' => (int) $fixtures[$index][1], 'damaged_quantity' => 0,
                 'client_request_id' => fake()->uuid(),
             ])->assertOk();
         }
@@ -90,7 +104,8 @@ class OpnameWorkflowTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $revisedItem->id,
             'mode' => 'set',
-            'quantity' => 4,
+            'good_quantity' => 4,
+            'damaged_quantity' => 0,
             'client_request_id' => fake()->uuid(),
         ])->assertOk();
 
@@ -129,12 +144,15 @@ class OpnameWorkflowTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
             'client_request_id' => fake()->uuid(),
             'owner_password' => 'password-salah',
+            'reconciliations' => $this->writeOffReconciliations($sessionId),
         ])->assertUnprocessable()->assertJsonValidationErrors(['owner_password']);
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
             'client_request_id' => $approvalRequest, 'owner_password' => 'password-owner-123',
+            'reconciliations' => $this->writeOffReconciliations($sessionId),
         ])->assertOk()->assertJsonPath('data.status', 'posted');
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
             'client_request_id' => $approvalRequest, 'owner_password' => 'password-owner-123',
+            'reconciliations' => $this->writeOffReconciliations($sessionId),
         ])->assertOk()->assertJsonPath('data.status', 'posted');
 
         $this->assertSame(11.0, (float) DB::table('inventory_balances')->where('product_id', $fixture['product_id'])
@@ -178,7 +196,8 @@ class OpnameWorkflowTest extends SeededTestCase
             $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
                 'item_id' => $item->id,
                 'mode' => 'set',
-                'quantity' => $item->product_id === $varianceProduct ? 11 : 4,
+                'good_quantity' => $item->product_id === $varianceProduct ? 11 : 4,
+                'damaged_quantity' => 0,
                 'client_request_id' => fake()->uuid(),
             ])->assertOk();
         }
@@ -188,16 +207,161 @@ class OpnameWorkflowTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
             'client_request_id' => fake()->uuid(),
             'owner_password' => 'password-salah',
+            'reconciliations' => $this->writeOffReconciliations($sessionId),
         ])->assertUnprocessable()->assertJsonValidationErrors(['owner_password']);
 
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
             'client_request_id' => fake()->uuid(),
             'owner_password' => 'sandi-admin-123',
+            'reconciliations' => $this->writeOffReconciliations($sessionId),
         ])->assertOk()->assertJsonPath('data.status', 'posted');
 
         $this->assertSame($admin->id, (int) DB::table('stock_opname_sessions')->where('id', $sessionId)->value('approved_by'));
         $this->assertSame(1, DB::table('stock_opname_approvals')->where('session_id', $sessionId)->where('action', 'approved')->count());
         $this->assertSame(1, DB::table('inventory_movements')->where('ref_type', 'stock_opname')->where('ref_id', $sessionId)->count());
+    }
+
+    public function test_owner_can_mix_write_off_and_correction_per_product(): void
+    {
+        $this->actAsAdmin();
+        $categoryId = DB::table('categories')->insertGetId([
+            'store_id' => $this->storeId(),
+            'name' => 'Kategori Rekonsiliasi '.fake()->unique()->numerify('###'),
+            'is_active' => 1,
+        ]);
+        $writeOffProduct = $this->product(['category_id' => $categoryId, 'unit_cost' => '1000.0000']);
+        $correctionProduct = $this->product(['category_id' => $categoryId, 'unit_cost' => '1000.0000']);
+        $locationId = (int) DB::table('locations')->where('store_id', $this->storeId())
+            ->where('type', 'store_floor')->where('is_active', 1)->value('id');
+        foreach ([$writeOffProduct => '10.000', $correctionProduct => '20.000'] as $productId => $systemQty) {
+            DB::table('inventory_balances')->insert([
+                'product_id' => $productId,
+                'location_id' => $locationId,
+                'qty_sellable' => $systemQty,
+                'qty_quarantine' => '0.000',
+                'qty_damaged' => '0.000',
+            ]);
+        }
+        $sessionId = (int) $this->postJson('/api/stock-opname-sessions', [
+            'scope_type' => 'categories',
+            'category_ids' => [$categoryId],
+            'client_request_id' => fake()->uuid(),
+        ])->assertCreated()->json('data.id');
+        $items = DB::table('stock_opname_items')->where('session_id', $sessionId)->get()->keyBy('product_id');
+        foreach ([$writeOffProduct => 11, $correctionProduct => 16] as $productId => $quantity) {
+            $item = $items->get($productId);
+            $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
+                'item_id' => $item->id,
+                'mode' => 'set',
+                'good_quantity' => $quantity,
+                'damaged_quantity' => 0,
+                'client_request_id' => fake()->uuid(),
+            ])->assertOk();
+        }
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/submit", [
+            'client_request_id' => fake()->uuid(),
+        ])->assertOk()->assertJsonPath('data.status', 'pending_approval');
+
+        $writeOffItemId = (int) $items->get($writeOffProduct)->id;
+        $correctionItemId = (int) $items->get($correctionProduct)->id;
+        $reconciliations = [
+            ['item_id' => $writeOffItemId, 'action' => 'write_off'],
+            ['item_id' => $correctionItemId, 'action' => 'correction'],
+        ];
+        $owner = $this->owner('owner-reconciliation');
+        Sanctum::actingAs($owner, ['*']);
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
+            'client_request_id' => fake()->uuid(),
+            'owner_password' => 'password-owner-123',
+            'reconciliations' => [$reconciliations[0]],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['reconciliations']);
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
+            'client_request_id' => fake()->uuid(),
+            'owner_password' => 'password-salah',
+            'reconciliations' => $reconciliations,
+        ])->assertUnprocessable()->assertJsonValidationErrors(['owner_password']);
+        $this->assertSame(10.0, (float) DB::table('inventory_balances')->where('product_id', $writeOffProduct)->sum('qty_sellable'));
+        $this->assertSame(20.0, (float) DB::table('inventory_balances')->where('product_id', $correctionProduct)->sum('qty_sellable'));
+        $this->assertSame(0, DB::table('inventory_movements')->where('ref_type', 'stock_opname')->where('ref_id', $sessionId)->count());
+
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
+            'client_request_id' => fake()->uuid(),
+            'owner_password' => 'password-owner-123',
+            'reconciliations' => $reconciliations,
+        ])->assertOk()->assertJsonPath('data.status', 'posted');
+
+        $this->assertSame(11.0, (float) DB::table('inventory_balances')->where('product_id', $writeOffProduct)->sum('qty_sellable'));
+        $this->assertSame(20.0, (float) DB::table('inventory_balances')->where('product_id', $correctionProduct)->sum('qty_sellable'));
+        $this->assertSame(1, DB::table('inventory_movements')->where('ref_type', 'stock_opname')->where('ref_id', $sessionId)->count());
+        $this->assertDatabaseHas('stock_opname_items', [
+            'id' => $writeOffItemId,
+            'reconciliation_action' => 'write_off',
+            'counted_qty' => '11.000',
+            'diff_qty' => '1.000',
+        ]);
+        $this->assertDatabaseHas('stock_opname_items', [
+            'id' => $correctionItemId,
+            'reconciliation_action' => 'correction',
+            'counted_qty' => '20.000',
+            'diff_qty' => '0.000',
+            'diff_value' => '0.00',
+        ]);
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/report")
+            ->assertOk()->assertJsonPath('data.totals.variance_products', 1)
+            ->assertJsonPath('data.categories.0.lines.0.reconciliation_action', 'write_off');
+        $approval = DB::table('stock_opname_approvals')->where('session_id', $sessionId)->where('action', 'approved')->first();
+        $this->assertStringContainsString('"correction"', $approval->note);
+    }
+
+    public function test_condition_variances_are_not_netted_and_post_to_their_stock_buckets(): void
+    {
+        $this->actAsAdmin();
+        $productId = $this->product(['unit_cost' => '1000.0000']);
+        $locationId = (int) DB::table('locations')
+            ->where('store_id', $this->storeId())->where('type', 'store_floor')->where('is_active', 1)->value('id');
+        DB::table('inventory_balances')->insert([
+            'product_id' => $productId,
+            'location_id' => $locationId,
+            'qty_sellable' => '10.000',
+            'qty_quarantine' => '2.000',
+            'qty_damaged' => '3.000',
+        ]);
+        $sessionId = (int) $this->postJson('/api/stock-opname-sessions', [
+            'scope_type' => 'all',
+            'client_request_id' => fake()->uuid(),
+        ])->assertCreated()->json('data.id');
+        $item = DB::table('stock_opname_items')->where('session_id', $sessionId)->first();
+
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
+            'item_id' => $item->id,
+            'mode' => 'set',
+            'good_quantity' => 9,
+            'damaged_quantity' => 6,
+            'client_request_id' => fake()->uuid(),
+        ])->assertOk();
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/report")
+            ->assertOk()
+            ->assertJsonPath('data.clean', false)
+            ->assertJsonPath('data.totals.variance_products', 1)
+            ->assertJsonPath('data.totals.net_qty', '0.000')
+            ->assertJsonPath('data.categories.0.lines.0.diff_good_qty', '-1.000')
+            ->assertJsonPath('data.categories.0.lines.0.diff_damaged_qty', '1.000');
+
+        $owner = $this->owner('owner-condition-counting');
+        Sanctum::actingAs($owner, ['*']);
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/submit", [
+            'client_request_id' => fake()->uuid(),
+            'owner_password' => 'password-owner-123',
+        ])->assertOk()->assertJsonPath('data.status', 'posted');
+
+        $balances = DB::table('inventory_balances')->where('product_id', $productId)
+            ->selectRaw('SUM(qty_sellable) as good_qty')
+            ->selectRaw('SUM(qty_quarantine + qty_damaged) as damaged_qty')
+            ->first();
+        $this->assertSame('9.000', $balances->good_qty);
+        $this->assertSame('6.000', $balances->damaged_qty);
+        $this->assertSame(2, DB::table('inventory_movements')
+            ->where('ref_type', 'stock_opname')->where('ref_id', $sessionId)->count());
     }
 
     public function test_rejection_clears_frozen_values_and_returns_session_to_counting(): void
@@ -315,7 +479,8 @@ class OpnameWorkflowTest extends SeededTestCase
             $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
                 'item_id' => $item->id,
                 'mode' => 'set',
-                'quantity' => $index === 0 ? 11 : 9,
+                'good_quantity' => $index === 0 ? 11 : 9,
+                'damaged_quantity' => 0,
                 'client_request_id' => fake()->uuid(),
             ])->assertOk();
         }
@@ -414,7 +579,8 @@ class OpnameWorkflowTest extends SeededTestCase
             $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
                 'item_id' => $item->id,
                 'mode' => 'set',
-                'quantity' => $index === 0 ? 11 : 9,
+                'good_quantity' => $index === 0 ? 11 : 9,
+                'damaged_quantity' => 0,
                 'client_request_id' => fake()->uuid(),
             ])->assertOk();
         }

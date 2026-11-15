@@ -32,13 +32,20 @@ class OpnameReportBuilder
                 'i.id', 'i.product_id', 'i.category_id', 'i.product_name_snapshot',
                 'i.barcode_snapshot', 'i.category_name_snapshot', 'i.category_parent_name_snapshot',
                 'i.counted_qty', 'i.system_qty_at_count', 'i.diff_qty', 'i.unit_cost_snapshot',
-                'i.diff_value', 'i.revision_count', 'p.unit_cost',
+                'i.counted_good_qty', 'i.counted_damaged_qty',
+                'i.system_good_qty_at_count', 'i.system_damaged_qty_at_count',
+                'i.diff_good_qty', 'i.diff_damaged_qty',
+                'i.diff_value', 'i.revision_count', 'i.reconciliation_action', 'i.product_sku_snapshot', 'p.unit_cost',
             ]);
         $totalProducts = $items->count();
         $countedProducts = $items->whereNotNull('counted_qty')->count();
         if ($countedProducts !== $totalProducts) {
             return [
-                'session' => ['id' => (int) $session->id, 'status' => $session->status],
+                'session' => [
+                    'id' => (int) $session->id,
+                    'status' => $session->status,
+                    'condition_counting' => (bool) $session->condition_counting,
+                ],
                 'complete' => false,
                 'progress' => [
                     'products_counted' => $countedProducts,
@@ -79,7 +86,19 @@ class OpnameReportBuilder
             $diffUnits = $hasFrozenValues && $item->diff_qty !== null
                 ? Decimal::qty((string) $item->diff_qty)
                 : Decimal::qty((string) $item->counted_qty) - Decimal::qty((string) $item->system_qty_at_count);
-            if ($diffUnits === 0) {
+            $isSplit = $item->counted_good_qty !== null && $item->counted_damaged_qty !== null;
+            $diffGoodUnits = $isSplit
+                ? ($hasFrozenValues && $item->diff_good_qty !== null
+                    ? Decimal::qty((string) $item->diff_good_qty)
+                    : Decimal::qty((string) $item->counted_good_qty) - Decimal::qty((string) $item->system_good_qty_at_count))
+                : null;
+            $diffDamagedUnits = $isSplit
+                ? ($hasFrozenValues && $item->diff_damaged_qty !== null
+                    ? Decimal::qty((string) $item->diff_damaged_qty)
+                    : Decimal::qty((string) $item->counted_damaged_qty) - Decimal::qty((string) $item->system_damaged_qty_at_count))
+                : null;
+            $varianceUnits = $isSplit ? abs($diffGoodUnits) + abs($diffDamagedUnits) : abs($diffUnits);
+            if ($diffUnits === 0 && $varianceUnits === 0) {
                 continue;
             }
 
@@ -87,19 +106,20 @@ class OpnameReportBuilder
                 ? ($item->unit_cost_snapshot === null ? null : (string) $item->unit_cost_snapshot)
                 : ($item->unit_cost === null ? null : (string) $item->unit_cost);
             $costUnits = $unitCost === null ? 0 : Decimal::toUnits($unitCost, 4);
-            $valueUnits = $costUnits <= 0 ? null : intdiv(abs($diffUnits) * $costUnits + 50000, 100000);
+            $valueUnits = $costUnits <= 0 ? null : intdiv($varianceUnits * $costUnits + 50000, 100000);
+            $netValueUnits = $costUnits <= 0 || $diffUnits === 0 ? null : intdiv(abs($diffUnits) * $costUnits + 50000, 100000);
             $countsByCategory[$categoryId ?? 0]['variance_count']++;
             $totals['variance_products']++;
             if ($diffUnits < 0) {
                 $totals['short_qty'] += abs($diffUnits);
                 $totals['short_count']++;
                 $countsByCategory[$categoryId ?? 0]['short_qty'] += abs($diffUnits);
-                $totals['short_value'] += $valueUnits ?? 0;
+                $totals['short_value'] += $netValueUnits ?? 0;
             } else {
                 $totals['over_qty'] += $diffUnits;
                 $totals['over_count']++;
                 $countsByCategory[$categoryId ?? 0]['over_qty'] += $diffUnits;
-                $totals['over_value'] += $valueUnits ?? 0;
+                $totals['over_value'] += $netValueUnits ?? 0;
             }
             $totals['abs_value'] += $valueUnits ?? 0;
 
@@ -108,10 +128,18 @@ class OpnameReportBuilder
                 'product_id' => (int) $item->product_id,
                 'name' => $item->product_name_snapshot,
                 'barcode' => $item->barcode_snapshot,
+                'sku' => $item->product_sku_snapshot,
                 'system_qty' => (string) $item->system_qty_at_count,
                 'counted_qty' => (string) $item->counted_qty,
                 'diff_qty' => Decimal::qtyString($diffUnits),
+                'system_good_qty' => $isSplit ? (string) $item->system_good_qty_at_count : null,
+                'system_damaged_qty' => $isSplit ? (string) $item->system_damaged_qty_at_count : null,
+                'counted_good_qty' => $isSplit ? (string) $item->counted_good_qty : null,
+                'counted_damaged_qty' => $isSplit ? (string) $item->counted_damaged_qty : null,
+                'diff_good_qty' => $diffGoodUnits === null ? null : Decimal::qtyString($diffGoodUnits),
+                'diff_damaged_qty' => $diffDamagedUnits === null ? null : Decimal::qtyString($diffDamagedUnits),
                 'direction' => $diffUnits < 0 ? 'short' : 'over',
+                'reconciliation_action' => $item->reconciliation_action,
                 'revised' => max(0, (int) $countLogCounts->get($item->id, 0) - 1) > 0,
             ];
             if ($canViewValue) {
@@ -130,14 +158,28 @@ class OpnameReportBuilder
             $diffUnits = $hasFrozenValues && $item->diff_qty !== null
                 ? Decimal::qty((string) $item->diff_qty)
                 : Decimal::qty((string) $item->counted_qty) - Decimal::qty((string) $item->system_qty_at_count);
+            $isSplit = $item->counted_good_qty !== null && $item->counted_damaged_qty !== null;
+            $diffGoodUnits = $isSplit
+                ? ($hasFrozenValues && $item->diff_good_qty !== null
+                    ? Decimal::qty((string) $item->diff_good_qty)
+                    : Decimal::qty((string) $item->counted_good_qty) - Decimal::qty((string) $item->system_good_qty_at_count))
+                : null;
+            $diffDamagedUnits = $isSplit
+                ? ($hasFrozenValues && $item->diff_damaged_qty !== null
+                    ? Decimal::qty((string) $item->diff_damaged_qty)
+                    : Decimal::qty((string) $item->counted_damaged_qty) - Decimal::qty((string) $item->system_damaged_qty_at_count))
+                : null;
             $unitCost = $hasFrozenValues
                 ? ($item->unit_cost_snapshot === null ? null : (string) $item->unit_cost_snapshot)
                 : ($item->unit_cost === null ? null : (string) $item->unit_cost);
             $costUnits = $unitCost === null ? 0 : Decimal::toUnits($unitCost, 4);
+            $varianceUnits = $isSplit ? abs($diffGoodUnits) + abs($diffDamagedUnits) : abs($diffUnits);
             $snapshot['item_values'][(int) $item->id] = [
                 'diff_qty' => Decimal::qtyString($diffUnits),
+                'diff_good_qty' => $diffGoodUnits === null ? null : Decimal::qtyString($diffGoodUnits),
+                'diff_damaged_qty' => $diffDamagedUnits === null ? null : Decimal::qtyString($diffDamagedUnits),
                 'cost' => $costUnits <= 0 ? null : $unitCost,
-                'value' => $costUnits <= 0 ? null : intdiv(abs($diffUnits) * $costUnits + 50000, 100000),
+                'value' => $costUnits <= 0 ? null : intdiv($varianceUnits * $costUnits + 50000, 100000),
                 'revisions' => (int) $item->revision_count,
             ];
         }
@@ -152,6 +194,7 @@ class OpnameReportBuilder
                 'id' => (int) $session->id,
                 'number' => $session->number,
                 'status' => $session->status,
+                'condition_counting' => (bool) $session->condition_counting,
             ],
             'complete' => true,
             'provisional' => ! $hasFrozenValues,

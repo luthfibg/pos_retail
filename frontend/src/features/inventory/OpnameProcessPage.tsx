@@ -11,7 +11,8 @@ const PER_PAGE = 50;
 const LIST_HREF = '/inventory/adjustments/opname';
 const HISTORY_HREF = '/inventory/adjustments/adjustment';
 
-type Dialog = 'finish' | 'cancel' | 'review';
+type Dialog = 'finish' | 'cancel' | 'review' | 'authorize_reconciliation';
+type ReconciliationAction = 'write_off' | 'correction';
 const fieldCls = 'min-h-11 w-full rounded-md border border-slate-300 px-3';
 
 export function OpnameProcessPage() {
@@ -26,10 +27,13 @@ export function OpnameProcessPage() {
   const [term, setTerm] = useState('');
   const [page, setPage] = useState(1);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const [goodDrafts, setGoodDrafts] = useState<Record<number, string>>({});
+  const [damagedDrafts, setDamagedDrafts] = useState<Record<number, string>>({});
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [password, setPassword] = useState('');
   const [reason, setReason] = useState('');
+  const [reconciliationActions, setReconciliationActions] = useState<Record<number, ReconciliationAction | ''>>({});
   const [printRequested, setPrintRequested] = useState(false);
   const [printJob, setPrintJob] = useState<{ report: OpnameReport; items: OpnameItem[] } | null>(null);
   const requestId = useRef('');
@@ -66,10 +70,10 @@ export function OpnameProcessPage() {
   const printItems = useQuery({
     queryKey: ['opname', id, 'print-items'],
     queryFn: async () => {
-      const firstPage = await opnameApi.items(id, { only_counted: true, page: 1, per_page: 200 });
+      const firstPage = await opnameApi.items(id, { only_counted: true, include_sources: true, page: 1, per_page: 200 });
       const remainingPages = await Promise.all(
         Array.from({ length: firstPage.last_page - 1 }, (_, index) =>
-          opnameApi.items(id, { only_counted: true, page: index + 2, per_page: 200 }),
+          opnameApi.items(id, { only_counted: true, include_sources: true, page: index + 2, per_page: 200 }),
         ),
       );
       return [firstPage, ...remainingPages].flatMap((page) => page.data);
@@ -90,11 +94,16 @@ export function OpnameProcessPage() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['opname'] });
 
   const save = useMutation({
-    mutationFn: (input: { item: OpnameItem; quantity: number }) => opnameApi.storeCount(id, {
-      item_id: input.item.id, mode: 'set', quantity: input.quantity, client_request_id: newRequestId(),
-    }),
+    mutationFn: (input: { item: OpnameItem; quantity?: number; good_quantity?: number; damaged_quantity?: number }) => {
+      const { item, ...counts } = input;
+      return opnameApi.storeCount(id, {
+        item_id: item.id, mode: 'set', ...counts, client_request_id: newRequestId(),
+      });
+    },
     onSuccess: (_result, input) => {
       setDrafts((current) => { const next = { ...current }; delete next[input.item.id]; return next; });
+      setGoodDrafts((current) => { const next = { ...current }; delete next[input.item.id]; return next; });
+      setDamagedDrafts((current) => { const next = { ...current }; delete next[input.item.id]; return next; });
       setRowErrors((current) => { const next = { ...current }; delete next[input.item.id]; return next; });
       void refresh();
     },
@@ -105,6 +114,7 @@ export function OpnameProcessPage() {
     requestId.current = newRequestId();
     setPassword('');
     setReason('');
+    if (next === 'review') setReconciliationActions({});
     finish.reset();
     cancel.reset();
     approve.reset();
@@ -124,7 +134,8 @@ export function OpnameProcessPage() {
     onSuccess: () => { void refresh(); navigate(LIST_HREF); },
   });
   const approve = useMutation({
-    mutationFn: () => opnameApi.approve(id, { client_request_id: requestId.current, owner_password: password }),
+    mutationFn: (reconciliations: Array<{ item_id: number; action: ReconciliationAction }>) =>
+      opnameApi.approve(id, { client_request_id: requestId.current, owner_password: password, reconciliations }),
     onSuccess: () => { setDialog(null); void refresh(); navigate(HISTORY_HREF); },
   });
 
@@ -145,22 +156,40 @@ export function OpnameProcessPage() {
   const variances = varianceRows(report.data);
 
   function submit(item: OpnameItem) {
+    if (data?.condition_counting) {
+      const good_quantity = parseCount(goodDrafts[item.id] ?? formatCount(item.counted_good_qty));
+      const damaged_quantity = parseCount(damagedDrafts[item.id] ?? formatCount(item.counted_damaged_qty));
+      if (good_quantity !== null && damaged_quantity !== null) save.mutate({ item, good_quantity, damaged_quantity });
+      return;
+    }
+
     const quantity = parseCount(drafts[item.id] ?? formatCount(item.counted_qty));
     if (quantity !== null) save.mutate({ item, quantity });
   }
 
   const pending = finish.isPending || cancel.isPending || approve.isPending;
   const dialogError = finish.error ?? cancel.error ?? approve.error;
-  const needsPassword = dialog === 'review' || (dialog === 'finish' && isOwner);
+  const needsPassword = dialog === 'authorize_reconciliation' || (dialog === 'finish' && isOwner);
   const reasonOk = reason.trim().length >= 3;
   const confirmDisabled = pending
     || (needsPassword && password === '')
+    || (dialog === 'review' && variances.some((row) => !reconciliationActions[row.id]))
     || (dialog === 'cancel' && !reasonOk);
 
   function confirm() {
     if (dialog === 'finish') finish.mutate();
     else if (dialog === 'cancel') cancel.mutate();
-    else if (dialog === 'review') approve.mutate();
+    else if (dialog === 'review') {
+      setPassword('');
+      approve.reset();
+      setDialog('authorize_reconciliation');
+    } else if (dialog === 'authorize_reconciliation') {
+      const reconciliations = variances.flatMap((row) => {
+        const action = reconciliationActions[row.id];
+        return action ? [{ item_id: row.id, action }] : [];
+      });
+      approve.mutate(reconciliations);
+    }
   }
 
   return (
@@ -219,6 +248,17 @@ export function OpnameProcessPage() {
             {rows.map((item) => {
               const value = drafts[item.id] ?? formatCount(item.counted_qty);
               const unchanged = item.counted_qty !== null && value === formatCount(item.counted_qty);
+              const goodValue = goodDrafts[item.id] ?? formatCount(item.counted_good_qty);
+              const damagedValue = damagedDrafts[item.id] ?? formatCount(item.counted_damaged_qty);
+              const unchangedConditions = item.counted_good_qty !== null
+                && item.counted_damaged_qty !== null
+                && goodValue === formatCount(item.counted_good_qty)
+                && damagedValue === formatCount(item.counted_damaged_qty);
+              const invalidConditions = parseCount(goodValue) === null || parseCount(damagedValue) === null;
+              const unchangedInput = data.condition_counting ? unchangedConditions : unchanged;
+              const invalidInput = data.condition_counting
+                ? invalidConditions
+                : parseCount(value) === null;
               return (
                 <li key={item.id} className="border-b border-slate-100 py-3">
                   <div className="flex items-center gap-3">
@@ -226,21 +266,48 @@ export function OpnameProcessPage() {
                       <div className="truncate font-medium">{item.name}</div>
                       {item.barcode && <div className="truncate text-xs text-slate-500">{item.barcode}</div>}
                     </div>
-                    <input
-                      inputMode="decimal"
-                      aria-label={`Hitungan ${item.name}`}
-                      value={value}
-                      onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
-                      onKeyDown={(event) => { if (event.key === 'Enter') submit(item); }}
-                      className="min-h-11 w-24 rounded-md border border-slate-300 px-3 text-right tabular-nums"
-                    />
+                    {data.condition_counting ? (
+                      <>
+                        <label className="w-24 text-xs text-slate-600">
+                          Bagus
+                          <input
+                            inputMode="decimal"
+                            aria-label={`Hitungan barang bagus ${item.name}`}
+                            value={goodValue}
+                            onChange={(event) => setGoodDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
+                            onKeyDown={(event) => { if (event.key === 'Enter') submit(item); }}
+                            className="min-h-11 w-full rounded-md border border-slate-300 px-3 text-right text-base text-slate-900 tabular-nums"
+                          />
+                        </label>
+                        <label className="w-24 text-xs text-slate-600">
+                          Rusak
+                          <input
+                            inputMode="decimal"
+                            aria-label={`Hitungan barang rusak ${item.name}`}
+                            value={damagedValue}
+                            onChange={(event) => setDamagedDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
+                            onKeyDown={(event) => { if (event.key === 'Enter') submit(item); }}
+                            className="min-h-11 w-full rounded-md border border-slate-300 px-3 text-right text-base text-slate-900 tabular-nums"
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      <input
+                        inputMode="decimal"
+                        aria-label={`Hitungan ${item.name}`}
+                        value={value}
+                        onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
+                        onKeyDown={(event) => { if (event.key === 'Enter') submit(item); }}
+                        className="min-h-11 w-24 rounded-md border border-slate-300 px-3 text-right tabular-nums"
+                      />
+                    )}
                     <button
                       type="button"
-                      disabled={unchanged || parseCount(value) === null || (save.isPending && save.variables?.item.id === item.id)}
+                      disabled={unchangedInput || invalidInput || (save.isPending && save.variables?.item.id === item.id)}
                       onClick={() => submit(item)}
                       className="min-h-11 w-14 rounded-md bg-slate-900 text-sm font-medium text-white disabled:opacity-40"
                     >
-                      {item.counted_qty !== null && unchanged ? '✓' : 'OK'}
+                      {unchangedInput ? '✓' : 'OK'}
                     </button>
                   </div>
                   {rowErrors[item.id] && <p role="alert" className="mt-1 text-xs text-red-700">{rowErrors[item.id]}</p>}
@@ -295,7 +362,7 @@ export function OpnameProcessPage() {
 
       {dialog && (
         <Modal
-          title={dialog === 'finish' ? 'Lanjutkan stok opname?' : dialog === 'cancel' ? 'Batalkan stok opname?' : 'Periksa Hasil Opname'}
+          title={dialog === 'finish' ? 'Lanjutkan stok opname?' : dialog === 'cancel' ? 'Batalkan stok opname?' : dialog === 'authorize_reconciliation' ? 'Persetujuan Owner' : 'Periksa Hasil Opname'}
           onClose={() => { if (!pending) setDialog(null); }}
         >
           <div className="max-h-[65dvh] space-y-4 overflow-y-auto p-5">
@@ -311,7 +378,16 @@ export function OpnameProcessPage() {
                   <div className="overflow-x-auto rounded-md border border-slate-200">
                     <table className="w-full min-w-[620px] text-left text-sm">
                       <thead className="bg-slate-50 text-xs text-slate-600">
-                        <tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2">Stok sistem</th><th className="px-3 py-2">Hasil hitung</th><th className="px-3 py-2">Selisih</th></tr>
+                        {data.condition_counting ? (
+                          <tr>
+                            <th className="px-3 py-2">Produk</th>
+                            <th className="px-3 py-2">Sistem bagus</th><th className="px-3 py-2">Hitung bagus</th><th className="px-3 py-2">Selisih bagus</th>
+                            <th className="px-3 py-2">Sistem rusak</th><th className="px-3 py-2">Hitung rusak</th><th className="px-3 py-2">Selisih rusak</th>
+                            <th className="px-3 py-2">Rekonsiliasi</th>
+                          </tr>
+                        ) : (
+                          <tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2">Stok sistem</th><th className="px-3 py-2">Hasil hitung</th><th className="px-3 py-2">Selisih</th><th className="px-3 py-2">Rekonsiliasi</th></tr>
+                        )}
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {variances.map((row) => (
@@ -320,19 +396,55 @@ export function OpnameProcessPage() {
                               <div className="font-medium">{row.name}</div>
                               <div className="text-xs text-slate-500">{row.category}{row.barcode ? ` · ${row.barcode}` : ''}</div>
                             </td>
-                            <td className="px-3 py-2 tabular-nums">{formatCount(row.systemQty)}</td>
-                            <td className="px-3 py-2 tabular-nums">{formatCount(row.countedQty)}</td>
-                            <td className={`px-3 py-2 font-medium tabular-nums ${row.diff < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{formatDiff(row.diff)}</td>
+                            {data.condition_counting ? (
+                              <>
+                                <td className="px-3 py-2 tabular-nums">{formatCount(row.systemGoodQty)}</td>
+                                <td className="px-3 py-2 tabular-nums">{formatCount(row.countedGoodQty)}</td>
+                                <td className="px-3 py-2 font-medium tabular-nums">{formatDiff(row.diffGoodQty ?? 0)}</td>
+                                <td className="px-3 py-2 tabular-nums">{formatCount(row.systemDamagedQty)}</td>
+                                <td className="px-3 py-2 tabular-nums">{formatCount(row.countedDamagedQty)}</td>
+                                <td className="px-3 py-2 font-medium tabular-nums">{formatDiff(row.diffDamagedQty ?? 0)}</td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 py-2 tabular-nums">{formatCount(row.systemQty)}</td>
+                                <td className="px-3 py-2 tabular-nums">{formatCount(row.countedQty)}</td>
+                                <td className={`px-3 py-2 font-medium tabular-nums ${row.diff < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{formatDiff(row.diff)}</td>
+                              </>
+                            )}
+                            <td className="px-3 py-2">
+                              <select
+                                aria-label={`Rekonsiliasi ${row.name}`}
+                                value={reconciliationActions[row.id] ?? ''}
+                                onChange={(event) => {
+                                  const action = event.target.value;
+                                  if (action === '' || action === 'write_off' || action === 'correction') {
+                                    setReconciliationActions((current) => ({ ...current, [row.id]: action }));
+                                  }
+                                }}
+                                className="min-h-10 rounded-md border border-slate-300 px-2"
+                              >
+                                <option value="">Pilih tindakan</option>
+                                <option value="write_off">Pemutihan</option>
+                                <option value="correction">Koreksi stok</option>
+                              </select>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 ) : <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Tidak ada selisih stok.</p>}
+                <p className="text-xs text-slate-600">
+                  Pemutihan mengubah saldo stok sesuai hasil hitung. Koreksi stok menyamakan hasil hitung ke stok sistem tanpa mengubah saldo.
+                </p>
               </>
             )}
             {dialog === 'cancel' && (
               <input aria-label="Alasan" placeholder="Alasan" value={reason} onChange={(event) => setReason(event.target.value)} className={fieldCls} />
+            )}
+            {dialog === 'authorize_reconciliation' && (
+              <p className="text-sm text-slate-600">Masukkan password Owner untuk menyetujui rekonsiliasi stok yang dipilih.</p>
             )}
             {needsPassword && (
               <input type="password" autoComplete="current-password" aria-label="Password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className={fieldCls} />
@@ -342,7 +454,7 @@ export function OpnameProcessPage() {
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
             <button type="button" disabled={pending} onClick={() => setDialog(null)} className="min-h-11 rounded-md border border-slate-300 px-4">Kembali</button>
             <button type="button" disabled={confirmDisabled} onClick={confirm} className="min-h-11 rounded-md bg-slate-900 px-5 font-medium text-white disabled:opacity-50">
-              {pending ? '…' : dialog === 'finish' ? 'Selesai' : dialog === 'cancel' ? 'Batalkan' : 'Lanjutkan'}
+              {pending ? '…' : dialog === 'finish' ? 'Selesai' : dialog === 'cancel' ? 'Batalkan' : dialog === 'authorize_reconciliation' ? 'Setujui & Terapkan' : 'Lanjutkan'}
             </button>
           </div>
         </Modal>
@@ -355,30 +467,49 @@ export function OpnameProcessPage() {
 
 function OpnamePrintSheet({ report, items, storeName, onDone }: { report: OpnameReport; items: OpnameItem[]; storeName: string; onDone: () => void }) {
   const variances = new Map(varianceRows(report).map((row) => [row.id, row]));
-  const rows = items.map((item) => {
-    const variance = variances.get(item.id);
-    return {
-      id: item.id,
-      name: item.name,
-      barcode: item.barcode,
-      category: item.category_path.join(' / ') || variance?.category || '—',
-      systemQty: item.system_qty ?? variance?.systemQty ?? null,
-      countedQty: item.counted_qty,
-      diff: variance ? formatDiff(variance.diff) : '0',
-    };
+  const conditionCounting = report.session.condition_counting ?? items.some((item) => item.counted_good_qty != null);
+  const rows = items.flatMap((item) => {
+    const sources = item.source_receipts?.length ? item.source_receipts : [null];
+    return sources.map((source, index) => {
+      const variance = variances.get(item.id);
+      return {
+        id: item.id,
+        key: `${item.id}-${index}`,
+        name: item.name,
+        sku: item.sku,
+        barcode: item.barcode,
+        category: item.category_path.join(' / ') || variance?.category || '—',
+        systemQty: item.system_qty ?? variance?.systemQty ?? null,
+        countedQty: item.counted_qty,
+        diff: variance?.diff ?? 0,
+        systemGood: item.system_good_qty,
+        systemDamaged: item.system_damaged_qty,
+        countedGood: item.counted_good_qty,
+        countedDamaged: item.counted_damaged_qty,
+        diffGood: item.diff_good_qty ?? variance?.diffGoodQty,
+        diffDamaged: item.diff_damaged_qty ?? variance?.diffDamagedQty,
+        source,
+      };
+    });
   });
 
+  // onDone dibuat ulang pada setiap render induk; lewat ref agar efek cetak hanya berjalan sekali
+  // dan dialog cetak tidak terpicu ulang saat data di-refetch.
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; });
+
   useEffect(() => {
-    window.addEventListener('afterprint', onDone, { once: true });
+    const handleAfterPrint = () => onDoneRef.current();
+    window.addEventListener('afterprint', handleAfterPrint, { once: true });
     const timer = window.setTimeout(() => window.print(), 80);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener('afterprint', onDone);
+      window.removeEventListener('afterprint', handleAfterPrint);
     };
-  }, [onDone]);
+  }, []);
 
   return (
-    <div className="print-only print-doc">
+    <div className="print-only print-doc print-doc--landscape">
       <article>
         <header className="mb-4 flex items-start justify-between gap-6 border-b-2 border-black pb-3">
           <div>
@@ -394,20 +525,54 @@ function OpnamePrintSheet({ report, items, storeName, onDone }: { report: Opname
           <div><dt className="font-semibold">Total lebih</dt><dd>{formatCount(report.totals?.over_qty)}</dd></div>
         </dl>
         {rows.length > 0 ? (
-          <table>
+          <table className="text-[9px]">
             <thead>
-              <tr><th>No</th><th>Produk</th><th>Kategori</th><th>Barcode</th><th>Stok sistem</th><th>Hasil hitung</th><th>Selisih</th></tr>
+              {conditionCounting ? (
+                <tr>
+                  <th>No</th><th>Produk</th><th>SKU</th><th>Barcode</th>
+                  <th>Sistem bagus</th><th>Sistem rusak</th><th>Hitung bagus</th><th>Hitung rusak</th>
+                  <th>Selisih bagus</th><th>Selisih rusak</th>
+                  <th>No. PO</th><th>Tgl. PO</th><th>No. penerimaan</th><th>Tgl. penerimaan</th>
+                  <th>Sisa bagus</th><th>Sisa rusak</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th>No</th><th>Produk</th><th>SKU</th><th>Barcode</th>
+                  <th>Stok sistem</th><th>Hasil hitung</th><th>Selisih</th>
+                  <th>No. PO</th><th>Tgl. PO</th><th>No. penerimaan</th><th>Tgl. penerimaan</th>
+                  <th>Sisa bagus</th><th>Sisa rusak</th>
+                </tr>
+              )}
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr key={row.id}>
+                <tr key={row.key}>
                   <td>{index + 1}</td>
                   <td>{row.name}</td>
-                  <td>{row.category}</td>
+                  <td>{row.sku || '—'}</td>
                   <td>{row.barcode || '—'}</td>
-                  <td className="text-right">{formatCount(row.systemQty)}</td>
-                  <td className="text-right">{formatCount(row.countedQty)}</td>
-                  <td className="text-right">{row.diff}</td>
+                  {conditionCounting ? (
+                    <>
+                      <td className="text-right">{formatCount(row.systemGood)}</td>
+                      <td className="text-right">{formatCount(row.systemDamaged)}</td>
+                      <td className="text-right">{formatCount(row.countedGood)}</td>
+                      <td className="text-right">{formatCount(row.countedDamaged)}</td>
+                      <td className="text-right">{formatDiff(Number(row.diffGood ?? 0))}</td>
+                      <td className="text-right">{formatDiff(Number(row.diffDamaged ?? 0))}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="text-right">{formatCount(row.systemQty)}</td>
+                      <td className="text-right">{formatCount(row.countedQty)}</td>
+                      <td className="text-right">{formatDiff(row.diff)}</td>
+                    </>
+                  )}
+                  <td>{row.source?.po_number || '—'}</td>
+                  <td>{row.source?.po_date?.slice(0, 10) || '—'}</td>
+                  <td>{row.source?.receipt_number || '—'}</td>
+                  <td>{row.source?.receipt_date?.slice(0, 10) || '—'}</td>
+                  <td className="text-right">{formatCount(row.source?.good_qty)}</td>
+                  <td className="text-right">{formatCount(row.source?.damaged_qty)}</td>
                 </tr>
               ))}
             </tbody>

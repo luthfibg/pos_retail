@@ -268,13 +268,14 @@ class OpnameSessionController extends Controller
             'q' => ['sometimes', 'nullable', 'string', 'min:2', 'max:120'],
             'only_uncounted' => ['sometimes', 'in:0,1,false,true'],
             'only_counted' => ['sometimes', 'in:0,1,false,true'],
+            'include_sources' => ['sometimes', 'boolean'],
             'sort' => ['sometimes', 'in:-counted_at'],
             'exclude_item_ids' => ['sometimes', 'array', 'max:10'],
             'exclude_item_ids.*' => ['integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:200'],
         ]);
-        foreach (['only_uncounted', 'only_counted'] as $booleanFilter) {
+        foreach (['only_uncounted', 'only_counted', 'include_sources'] as $booleanFilter) {
             if (array_key_exists($booleanFilter, $filters)) {
                 $filters[$booleanFilter] = filter_var($filters[$booleanFilter], FILTER_VALIDATE_BOOLEAN);
             }
@@ -345,6 +346,15 @@ class OpnameSessionController extends Controller
                 $action = $operation['action'] ?? null;
                 $itemId = filter_var($operation['item_id'] ?? null, FILTER_VALIDATE_INT);
                 $quantity = filter_var($operation['quantity'] ?? null, FILTER_VALIDATE_INT);
+                $goodQuantity = $operation['good_quantity'] ?? null;
+                $damagedQuantity = $operation['damaged_quantity'] ?? null;
+                $hasConditionQuantities = $goodQuantity !== null
+                    && $damagedQuantity !== null
+                    && is_numeric($goodQuantity)
+                    && is_numeric($damagedQuantity);
+                $hasTotalQuantity = $quantity !== false
+                    && $quantity >= 0
+                    && $quantity <= 1000000;
                 $mode = $operation['mode'] ?? null;
                 $clientCreatedAt = $operation['client_created_at'] ?? null;
                 $validTimestamp = $clientCreatedAt === null || strtotime($clientCreatedAt) !== false;
@@ -354,10 +364,8 @@ class OpnameSessionController extends Controller
                     && $validTimestamp
                     && ($action === 'clear' || (
                         in_array($mode, ['set', 'add'], true)
-                        && $quantity !== false
-                        && $quantity >= 0
-                        && $quantity <= 1000000
-                        && ($mode !== 'add' || $quantity >= 1)
+                        && ($hasConditionQuantities || ($hasTotalQuantity && ($mode !== 'add' || $quantity >= 1)))
+                        && ($mode !== 'add' || $hasConditionQuantities || $quantity >= 1)
                     ));
                 if (! $validOperation) {
                     $results[] = $this->rejectedBatchResult(
@@ -388,7 +396,9 @@ class OpnameSessionController extends Controller
                         [
                             'item_id' => $itemId,
                             'mode' => $mode,
-                            'quantity' => $quantity,
+                            'quantity' => $hasTotalQuantity ? $quantity : null,
+                            'good_quantity' => $hasConditionQuantities ? $goodQuantity : null,
+                            'damaged_quantity' => $hasConditionQuantities ? $damagedQuantity : null,
                             'client_request_id' => $operation['client_request_id'],
                         ],
                         true,

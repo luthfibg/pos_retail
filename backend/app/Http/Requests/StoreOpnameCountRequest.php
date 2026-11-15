@@ -17,7 +17,9 @@ class StoreOpnameCountRequest extends FormRequest
         return [
             'item_id' => ['required', 'integer', 'min:1'],
             'mode' => ['required', 'in:set,add'],
-            'quantity' => ['required', 'integer', 'min:0', 'max:1000000', $this->input('mode') === 'add' ? 'min:1' : 'integer'],
+            'quantity' => ['required_without_all:good_quantity,damaged_quantity', 'nullable', 'integer', 'min:0', 'max:1000000', $this->input('mode') === 'add' ? 'min:1' : 'integer'],
+            'good_quantity' => ['required_with:damaged_quantity', 'numeric', 'min:0', 'max:1000000', 'decimal:0,3'],
+            'damaged_quantity' => ['required_with:good_quantity', 'numeric', 'min:0', 'max:1000000', 'decimal:0,3'],
             'client_request_id' => ['required', 'uuid'],
         ];
     }

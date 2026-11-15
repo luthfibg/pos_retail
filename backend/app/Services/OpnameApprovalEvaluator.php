@@ -9,7 +9,7 @@ class OpnameApprovalEvaluator
 {
     /**
      * @param  array<int, object>  $items
-     * @param  array{item_values: array<int, array{diff_qty: string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}  $snapshot
+     * @param  array{item_values: array<int, array{diff_qty: string, diff_good_qty: ?string, diff_damaged_qty: ?string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}  $snapshot
      * @param  array{per_product_threshold: int, per_session_threshold: int, require_first_opname: bool}  $thresholds
      * @return list<array<string, mixed>>
      */
@@ -18,7 +18,10 @@ class OpnameApprovalEvaluator
         $reasons = [];
         foreach ($items as $item) {
             $value = $snapshot['item_values'][(int) $item->id];
-            if (Decimal::qty($value['diff_qty']) === 0) {
+            $hasVariance = Decimal::qty($value['diff_qty']) !== 0
+                || Decimal::qty($value['diff_good_qty'] ?? '0.000') !== 0
+                || Decimal::qty($value['diff_damaged_qty'] ?? '0.000') !== 0;
+            if (! $hasVariance) {
                 continue;
             }
             if ($value['cost'] === null) {

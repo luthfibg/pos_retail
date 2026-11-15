@@ -123,6 +123,7 @@ class OpnameProgressService
                 'id' => (int) $session->id,
                 'number' => $session->number,
                 'status' => $session->status,
+                'condition_counting' => (bool) $session->condition_counting,
             ],
             'display' => ['reveals_system_qty' => $reveals],
             'summary' => [
@@ -133,6 +134,59 @@ class OpnameProgressService
         ];
 
         return $tree;
+    }
+
+    /**
+     * @param list<int> $productIds
+     * @return array<int, list<array<string, mixed>>>
+     */
+    private function receiptSources(int $storeId, array $productIds): array
+    {
+        if ($productIds === []) {
+            return [];
+        }
+
+        $rows = DB::table('inventory_balances as b')
+            ->join('products as p', 'p.id', '=', 'b.product_id')
+            ->leftJoin('product_batches as pb', 'pb.id', '=', 'b.batch_id')
+            ->leftJoin('goods_receipt_items as gri', 'gri.id', '=', 'pb.goods_receipt_item_id')
+            ->leftJoin('goods_receipts as gr', 'gr.id', '=', 'gri.gr_id')
+            ->leftJoin('purchase_orders as po', 'po.id', '=', 'gr.po_id')
+            ->where('p.store_id', $storeId)
+            ->whereIn('b.product_id', $productIds)
+            ->whereRaw('(b.qty_sellable + b.qty_quarantine + b.qty_damaged) > 0')
+            ->groupBy('b.product_id', 'b.batch_id', 'po.doc_number', 'po.order_date', 'gr.doc_number', 'gr.posted_at')
+            ->orderBy('b.product_id')->orderBy('po.order_date')->orderBy('gr.posted_at')
+            ->select([
+                'b.product_id',
+                'b.batch_id',
+                'po.doc_number as po_number',
+                'po.order_date as po_date',
+                'gr.doc_number as receipt_number',
+                'gr.posted_at as receipt_date',
+            ])
+            ->selectRaw('SUM(b.qty_sellable) as good_qty')
+            ->selectRaw('SUM(b.qty_damaged + b.qty_quarantine) as damaged_qty')
+            ->get()
+            ->map(fn (object $row) => [
+                'product_id' => (int) $row->product_id,
+                'batch_id' => $row->batch_id === null ? null : (int) $row->batch_id,
+                'po_number' => $row->po_number,
+                'po_date' => $row->po_date,
+                'receipt_number' => $row->receipt_number,
+                'receipt_date' => $row->receipt_date,
+                'good_qty' => (string) $row->good_qty,
+                'damaged_qty' => (string) $row->damaged_qty,
+            ]);
+
+        $sources = [];
+        foreach ($rows as $row) {
+            $productId = $row['product_id'];
+            unset($row['product_id']);
+            $sources[$productId][] = $row;
+        }
+
+        return $sources;
     }
 
     /**
@@ -191,27 +245,44 @@ class OpnameProgressService
             ? $query->orderByDesc('i.counted_at')->orderByDesc('i.id')
             : $query->orderBy('i.product_name_snapshot')->orderBy('i.id');
 
-        $page = $query
-            ->paginate($perPage)->through(function (object $item) use ($reveals, $staleCategoryIds, $categoryMap) {
+        $page = $query->paginate($perPage);
+        $sourceMap = ! empty($filters['include_sources'])
+            ? $this->receiptSources($storeId, $page->getCollection()->pluck('product_id')->map(fn ($id) => (int) $id)->all())
+            : [];
+        $showConditionQty = $reveals || in_array($session->status, ['pending_approval', 'posted'], true);
+
+        return $page->through(function (object $item) use ($reveals, $showConditionQty, $staleCategoryIds, $categoryMap, $sourceMap, $filters) {
                 $row = [
                     'id' => (int) $item->id,
                     'product_id' => (int) $item->product_id,
                     'category_id' => $item->category_id === null ? null : (int) $item->category_id,
                     'name' => $item->product_name_snapshot,
+                    'sku' => $item->product_sku_snapshot,
                     'barcode' => $item->barcode_snapshot,
                     'category_path' => $this->categoryPath($item, $staleCategoryIds, $categoryMap),
                     'status' => $this->displayPolicy->itemStatus($item, $reveals),
                     'counted_qty' => $item->counted_qty,
+                    'counted_good_qty' => $item->counted_good_qty,
+                    'counted_damaged_qty' => $item->counted_damaged_qty,
                     'counted_at' => $item->counted_at,
                 ];
                 if ($reveals) {
                     $row['system_qty'] = $item->system_qty_at_count ?? $item->system_qty_at_start;
                 }
+                if ($showConditionQty) {
+                    $row['system_good_qty'] = $item->system_good_qty_at_count;
+                    $row['system_damaged_qty'] = $item->system_damaged_qty_at_count;
+                }
+                if ($showConditionQty && ($item->diff_good_qty !== null || $item->diff_damaged_qty !== null)) {
+                    $row['diff_good_qty'] = $item->diff_good_qty;
+                    $row['diff_damaged_qty'] = $item->diff_damaged_qty;
+                }
+                if (! empty($filters['include_sources'])) {
+                    $row['source_receipts'] = $sourceMap[(int) $item->product_id] ?? [];
+                }
 
                 return $row;
             });
-
-        return $page;
     }
 
     /** @return array<string, mixed>|null */
@@ -293,7 +364,10 @@ class OpnameProgressService
             ->orderBy('id')
             ->offset(($page - 1) * $perPage)
             ->limit($perPage)
-            ->get(['id', 'product_id', 'product_name_snapshot', 'barcode_snapshot', 'category_id', 'counted_qty']);
+            ->get([
+                'id', 'product_id', 'product_name_snapshot', 'product_sku_snapshot',
+                'barcode_snapshot', 'category_id', 'counted_qty', 'counted_good_qty', 'counted_damaged_qty',
+            ]);
         $latestItemUpdate = DB::table('stock_opname_items')->where('session_id', $sessionId)->max('updated_at');
         $latestLogId = DB::table('stock_opname_count_logs')->where('session_id', $sessionId)->max('id') ?? 0;
         $version = hash('sha256', implode('|', [
@@ -311,16 +385,24 @@ class OpnameProgressService
             ])->all();
 
         return [
-            'session' => ['id' => (int) $session->id, 'number' => $session->number, 'status' => $session->status],
+            'session' => [
+                'id' => (int) $session->id,
+                'number' => $session->number,
+                'status' => $session->status,
+                'condition_counting' => (bool) $session->condition_counting,
+            ],
             'version' => $version,
             'categories' => $categories,
             'items' => $rows->map(fn (object $item) => [
                 'item_id' => (int) $item->id,
                 'product_id' => (int) $item->product_id,
                 'name' => $item->product_name_snapshot,
+                'sku' => $item->product_sku_snapshot,
                 'barcode' => $item->barcode_snapshot,
                 'category_id' => $item->category_id === null ? null : (int) $item->category_id,
                 'counted_qty' => $item->counted_qty === null ? null : (int) $item->counted_qty,
+                'counted_good_qty' => $item->counted_good_qty,
+                'counted_damaged_qty' => $item->counted_damaged_qty,
             ])->all(),
             'page' => $page,
             'total_pages' => $totalPages,
@@ -348,10 +430,18 @@ class OpnameProgressService
                 'category_path' => $this->categoryPath($item, $staleCategoryIds, $categoryMap),
                 'status' => $this->displayPolicy->itemStatus($item, $reveals),
                 'counted_qty' => $item->counted_qty,
+                'counted_good_qty' => $item->counted_good_qty,
+                'counted_damaged_qty' => $item->counted_damaged_qty,
                 'counted_at' => $item->counted_at,
             ];
             if ($reveals) {
                 $presented['system_qty'] = $item->system_qty_at_count ?? $item->system_qty_at_start;
+            }
+            if ($reveals && ($item->system_good_qty_at_count !== null || $item->system_damaged_qty_at_count !== null)) {
+                $presented['system_good_qty'] = $item->system_good_qty_at_count;
+                $presented['system_damaged_qty'] = $item->system_damaged_qty_at_count;
+                $presented['diff_good_qty'] = $item->diff_good_qty;
+                $presented['diff_damaged_qty'] = $item->diff_damaged_qty;
             }
 
             return $presented;
@@ -367,7 +457,7 @@ class OpnameProgressService
             ->selectRaw('category_id, category_name_snapshot, category_parent_name_snapshot')
             ->selectRaw('COUNT(*) as product_count')
             ->selectRaw('SUM(CASE WHEN counted_qty IS NOT NULL THEN 1 ELSE 0 END) as counted_count')
-            ->selectRaw('SUM(CASE WHEN counted_qty IS NOT NULL AND COALESCE(system_qty_at_count, system_qty_at_start) <> counted_qty THEN 1 ELSE 0 END) as variance_count')
+            ->selectRaw('SUM(CASE WHEN counted_qty IS NOT NULL AND (CASE WHEN diff_good_qty IS NOT NULL OR diff_damaged_qty IS NOT NULL THEN COALESCE(diff_good_qty, 0) <> 0 OR COALESCE(diff_damaged_qty, 0) <> 0 ELSE COALESCE(system_qty_at_count, system_qty_at_start) <> counted_qty END) THEN 1 ELSE 0 END) as variance_count')
             ->get()->all();
     }
 
@@ -409,7 +499,7 @@ class OpnameProgressService
     private function session(int $storeId, int $sessionId): ?object
     {
         return DB::table('stock_opname_sessions')
-            ->where('store_id', $storeId)->where('id', $sessionId)->first(['id', 'number', 'status']);
+            ->where('store_id', $storeId)->where('id', $sessionId)->first(['id', 'number', 'status', 'condition_counting']);
     }
 
     /** @return list<int> */

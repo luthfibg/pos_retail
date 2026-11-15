@@ -263,6 +263,7 @@ export const opnameApi = {
     q?: string;
     only_uncounted?: boolean;
     only_counted?: boolean;
+    include_sources?: boolean;
     sort?: '-counted_at';
     exclude_item_ids?: number[];
     page?: number;
@@ -280,7 +281,14 @@ export const opnameApi = {
     api<{ data: OpnameItem[] }>(`/stock-opname-sessions/${id}/lookup`, { query: { q, mode } }).then((r) => r.data),
   counts: (id: number, limit = 10) =>
     api<{ data: OpnameCountLog[] }>(`/stock-opname-sessions/${id}/counts`, { query: { limit } }).then((r) => r.data),
-  storeCount: (id: number, input: { item_id: number; mode: OpnameCountMode; quantity: number; client_request_id: string }) =>
+  storeCount: (id: number, input: {
+    item_id: number;
+    mode: OpnameCountMode;
+    quantity?: number;
+    good_quantity?: number;
+    damaged_quantity?: number;
+    client_request_id: string;
+  }) =>
     api<OpnameCountResult>(`/stock-opname-sessions/${id}/counts`, { method: 'POST', body: input }),
   clearCount: (id: number, itemId: number, client_request_id: string) =>
     api<OpnameCountResult>(`/stock-opname-sessions/${id}/counts/${itemId}/clear`, {
@@ -293,6 +301,8 @@ export const opnameApi = {
     item_id: number;
     mode?: OpnameCountMode;
     quantity?: number;
+    good_quantity?: number;
+    damaged_quantity?: number;
     client_created_at: string;
   }>) => api<OpnameBatchCountResult>(`/stock-opname-sessions/${id}/counts/batch`, {
     method: 'POST',
@@ -321,7 +331,11 @@ export const opnameApi = {
     }).then((r) => r.data),
   submit: (id: number, input: { client_request_id: string; owner_password?: string }) =>
     api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/submit`, { method: 'POST', body: input }).then((r) => r.data),
-  approve: (id: number, input: { client_request_id: string; owner_password: string }) =>
+  approve: (id: number, input: {
+    client_request_id: string;
+    owner_password: string;
+    reconciliations: Array<{ item_id: number; action: 'write_off' | 'correction' }>;
+  }) =>
     api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/approve`, { method: 'POST', body: input }).then((r) => r.data),
   reject: (id: number, input: { client_request_id: string; owner_password: string; reason: string }) =>
     api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/reject`, { method: 'POST', body: input }).then((r) => r.data),

@@ -449,6 +449,7 @@ export interface OpnameSessionSummary {
   scope_type: OpnameScopeType;
   scope_summary: string;
   status: OpnameSessionStatus;
+  condition_counting?: boolean;
   total_products: number;
   counted_products: number;
   started_at: string;
@@ -525,9 +526,17 @@ export interface OpnameReportLine {
   product_id: number;
   name: string;
   barcode: string;
+  sku?: string | null;
   system_qty: Decimal;
   counted_qty: Decimal;
   diff_qty: Decimal;
+  system_good_qty?: Decimal | null;
+  system_damaged_qty?: Decimal | null;
+  counted_good_qty?: Decimal | null;
+  counted_damaged_qty?: Decimal | null;
+  diff_good_qty?: Decimal | null;
+  diff_damaged_qty?: Decimal | null;
+  reconciliation_action?: 'write_off' | 'correction' | null;
   direction: 'short' | 'over';
   value?: Decimal | null;
   cost_missing?: boolean;
@@ -546,7 +555,7 @@ export interface OpnameReportNode {
 }
 
 export interface OpnameReport {
-  session: { id: number; number?: string; status: OpnameSessionStatus };
+  session: { id: number; number?: string; status: OpnameSessionStatus; condition_counting?: boolean };
   complete: boolean;
   progress?: { products_counted: number; products_total: number };
   provisional?: boolean;
@@ -590,7 +599,7 @@ export interface OpnameProgressNode {
 }
 
 export interface OpnameProgressTree {
-  session: Pick<OpnameSessionSummary, 'id' | 'number' | 'status'>;
+  session: Pick<OpnameSessionSummary, 'id' | 'number' | 'status' | 'condition_counting'>;
   display: { reveals_system_qty: boolean };
   summary: { total_products: number; counted_products: number };
   nodes: OpnameProgressNode[];
@@ -601,12 +610,30 @@ export interface OpnameItem {
   product_id: number;
   category_id: number | null;
   name: string;
+  sku?: string | null;
   barcode: string;
   category_path: string[];
   status: OpnameItemStatus;
   counted_qty: Decimal | null;
+  counted_good_qty?: Decimal | null;
+  counted_damaged_qty?: Decimal | null;
   counted_at: string | null;
   system_qty?: Decimal;
+  system_good_qty?: Decimal;
+  system_damaged_qty?: Decimal;
+  diff_good_qty?: Decimal | null;
+  diff_damaged_qty?: Decimal | null;
+  source_receipts?: OpnameReceiptSource[];
+}
+
+export interface OpnameReceiptSource {
+  batch_id: number | null;
+  po_number: string | null;
+  po_date: string | null;
+  receipt_number: string | null;
+  receipt_date: string | null;
+  good_qty: Decimal;
+  damaged_qty: Decimal;
 }
 
 export type OpnameCountMode = 'set' | 'add';
@@ -622,16 +649,19 @@ export interface OpnameCountResult {
 }
 
 export interface OpnameOfflineIndex {
-  session: { id: number; number: string; status: 'in_progress' };
+  session: { id: number; number: string; status: 'in_progress'; condition_counting: boolean };
   version: string;
   categories: Array<{ id: number; name: string; parent_id: number | null }>;
   items: Array<{
     item_id: number;
     product_id: number;
     name: string;
+    sku: string | null;
     barcode: string;
     category_id: number | null;
     counted_qty: number | null;
+    counted_good_qty: Decimal | null;
+    counted_damaged_qty: Decimal | null;
   }>;
   page: number;
   total_pages: number;
@@ -652,8 +682,12 @@ export interface OpnameCountLog {
   log_id: number;
   item: { id: number; name: string; barcode: string };
   action: OpnameCountMode | 'clear';
-  input_qty: number | null;
-  counted_after: number | null;
+  input_qty: Decimal | null;
+  counted_after: Decimal | null;
+  input_good_qty?: Decimal | null;
+  input_damaged_qty?: Decimal | null;
+  counted_good_after?: Decimal | null;
+  counted_damaged_after?: Decimal | null;
   created_at: string;
   created_by: { id: number; name: string };
 }

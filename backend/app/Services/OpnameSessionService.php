@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\OpnameOverlapException;
 use App\Models\User;
 use App\Support\DocumentNumber;
+use App\Support\Decimal;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -59,6 +60,7 @@ class OpnameSessionService
                 'name' => $this->nullableTrim($data['name'] ?? null),
                 'scope_type' => $data['scope_type'],
                 'status' => 'in_progress',
+                'condition_counting' => true,
                 'notes' => $this->nullableTrim($data['notes'] ?? null),
                 'started_at' => $now,
                 'created_by' => $actor->id,
@@ -78,26 +80,40 @@ class OpnameSessionService
             $balances = DB::table('inventory_balances')
                 ->whereIn('product_id', $productIds)
                 ->groupBy('product_id')
-                ->selectRaw('product_id, SUM(qty_sellable + qty_quarantine + qty_damaged) as system_qty')
-                ->pluck('system_qty', 'product_id');
+                ->selectRaw('product_id, SUM(qty_sellable) as good_qty')
+                ->selectRaw('SUM(qty_quarantine + qty_damaged) as damaged_qty')
+                ->get()->keyBy('product_id');
 
             foreach ($products->chunk(500) as $chunk) {
-                $items = $chunk->map(fn (object $product) => [
-                    'session_id' => $sessionId,
-                    'product_id' => (int) $product->id,
-                    'category_id' => $product->category_id === null ? null : (int) $product->category_id,
-                    'product_name_snapshot' => $product->product_name,
-                    'barcode_snapshot' => $product->barcode,
-                    'category_name_snapshot' => $product->category_name,
-                    'category_parent_name_snapshot' => $product->parent_name,
-                    'system_qty_at_start' => $balances->get($product->id, '0.000'),
-                    'counted_qty' => null,
-                    'system_qty_at_count' => null,
-                    'counted_at' => null,
-                    'counted_by' => null,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ])->all();
+                $items = $chunk->map(function (object $product) use ($sessionId, $balances, $now) {
+                    $balance = $balances->get($product->id);
+                    $goodQty = Decimal::qty((string) ($balance->good_qty ?? '0.000'));
+                    $damagedQty = Decimal::qty((string) ($balance->damaged_qty ?? '0.000'));
+
+                    return [
+                        'session_id' => $sessionId,
+                        'product_id' => (int) $product->id,
+                        'category_id' => $product->category_id === null ? null : (int) $product->category_id,
+                        'product_name_snapshot' => $product->product_name,
+                        'product_sku_snapshot' => $product->sku,
+                        'barcode_snapshot' => $product->barcode,
+                        'category_name_snapshot' => $product->category_name,
+                        'category_parent_name_snapshot' => $product->parent_name,
+                        'system_qty_at_start' => Decimal::qtyString($goodQty + $damagedQty),
+                        'counted_qty' => null,
+                        'counted_good_qty' => null,
+                        'counted_damaged_qty' => null,
+                        'system_qty_at_count' => null,
+                        'system_good_qty_at_count' => null,
+                        'system_damaged_qty_at_count' => null,
+                        'diff_good_qty' => null,
+                        'diff_damaged_qty' => null,
+                        'counted_at' => null,
+                        'counted_by' => null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                })->all();
                 DB::table('stock_opname_items')->insert($items);
             }
 
@@ -303,7 +319,7 @@ class OpnameSessionService
             ->where('p.store_id', $storeId)->where('p.status', 'active')
             ->orderBy('p.id')
             ->select([
-                'p.id', 'p.category_id', 'p.name as product_name', 'p.barcode',
+                'p.id', 'p.category_id', 'p.name as product_name', 'p.sku', 'p.barcode',
                 'c.name as category_name', 'parent.name as parent_name',
             ]);
 
@@ -443,6 +459,7 @@ class OpnameSessionService
             ->where('s.store_id', $storeId)
             ->select([
                 's.id', 's.number', 's.name', 's.scope_type', 's.status', 's.notes',
+                's.condition_counting',
                 's.started_at', 's.cancelled_at', 's.cancel_reason',
                 's.submitted_at', 's.approval_required', 's.approval_reasons',
                 's.approved_at', 's.posted_at', 's.rejected_at', 's.reject_reason',
@@ -481,6 +498,7 @@ class OpnameSessionService
             'scope_type' => $row->scope_type,
             'scope_summary' => $scopeSummary,
             'status' => $row->status,
+            'condition_counting' => (bool) $row->condition_counting,
             'total_products' => (int) $row->total_products,
             'counted_products' => $countedProducts ?? 0,
             'started_at' => $row->started_at,

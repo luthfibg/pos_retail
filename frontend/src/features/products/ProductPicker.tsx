@@ -63,7 +63,7 @@ export function ProductPicker({
   function pick(product: ProductPickerResult) {
     onChange({
       id: product.id,
-      sku: 'sku' in product ? product.sku : '',
+      sku: 'sku' in product ? product.sku ?? '' : '',
       name: product.name,
       unit_name: 'unit_name' in product ? product.unit_name : '',
       track_expiry: 'track_expiry' in product ? product.track_expiry : false,

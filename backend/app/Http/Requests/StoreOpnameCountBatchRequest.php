@@ -22,6 +22,8 @@ class StoreOpnameCountBatchRequest extends FormRequest
             'operations.*.item_id' => ['nullable'],
             'operations.*.mode' => ['nullable', 'string', 'max:16'],
             'operations.*.quantity' => ['nullable'],
+            'operations.*.good_quantity' => ['nullable', 'numeric', 'min:0', 'max:1000000', 'decimal:0,3'],
+            'operations.*.damaged_quantity' => ['nullable', 'numeric', 'min:0', 'max:1000000', 'decimal:0,3'],
             'operations.*.client_created_at' => ['nullable', 'string', 'max:64'],
         ];
     }

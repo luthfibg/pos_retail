@@ -16,6 +16,9 @@ class ApproveOpnameSessionRequest extends FormRequest
         return [
             'client_request_id' => ['required', 'uuid'],
             'owner_password' => ['required', 'string', 'max:200'],
+            'reconciliations' => ['required', 'array'],
+            'reconciliations.*.item_id' => ['required', 'integer', 'min:1', 'distinct'],
+            'reconciliations.*.action' => ['required', 'in:write_off,correction'],
         ];
     }
 }

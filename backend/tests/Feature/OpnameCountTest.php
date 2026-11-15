@@ -46,7 +46,8 @@ class OpnameCountTest extends SeededTestCase
         $first = $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $itemId,
             'mode' => 'set',
-            'quantity' => 17,
+            'good_quantity' => 17,
+            'damaged_quantity' => 0,
             'client_request_id' => $requestId,
         ])->assertOk()
             ->assertJsonPath('item.counted_qty', '17.000')
@@ -59,7 +60,8 @@ class OpnameCountTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $itemId,
             'mode' => 'set',
-            'quantity' => 17,
+            'good_quantity' => 17,
+            'damaged_quantity' => 0,
             'client_request_id' => $requestId,
         ])->assertOk()->assertJsonPath('item.counted_qty', '17.000');
         $this->assertSame(1, DB::table('stock_opname_count_logs')->where('session_id', $sessionId)->count());
@@ -67,15 +69,24 @@ class OpnameCountTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $itemId,
             'mode' => 'set',
-            'quantity' => 20,
+            'good_quantity' => 20,
+            'damaged_quantity' => 0,
             'client_request_id' => fake()->uuid(),
         ])->assertOk()->assertJsonPath('item.counted_qty', '20.000');
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $itemId,
             'mode' => 'add',
-            'quantity' => 3,
+            'good_quantity' => 3,
+            'damaged_quantity' => 0,
             'client_request_id' => fake()->uuid(),
         ])->assertOk()->assertJsonPath('item.counted_qty', '23.000');
+        $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
+            'item_id' => $itemId,
+            'mode' => 'add',
+            'good_quantity' => 0,
+            'damaged_quantity' => 0,
+            'client_request_id' => fake()->uuid(),
+        ])->assertUnprocessable()->assertJsonValidationErrors(['good_quantity']);
 
         foreach ([-1, 1000001, 1.5, 'abc'] as $quantity) {
             $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
@@ -89,7 +100,8 @@ class OpnameCountTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $itemId,
             'mode' => 'set',
-            'quantity' => 0,
+            'good_quantity' => 0,
+            'damaged_quantity' => 0,
             'client_request_id' => fake()->uuid(),
         ])->assertOk()->assertJsonPath('item.counted_qty', '0.000');
 
@@ -145,7 +157,8 @@ class OpnameCountTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $itemId,
             'mode' => 'set',
-            'quantity' => 2,
+            'good_quantity' => 2,
+            'damaged_quantity' => 0,
             'client_request_id' => fake()->uuid(),
         ])->assertOk();
         $this->setSetting('opname.show_system_qty', true);
@@ -194,7 +207,8 @@ class OpnameCountTest extends SeededTestCase
             $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
                 'item_id' => $items[$productId]->id,
                 'mode' => 'set',
-                'quantity' => $productId === $first ? 12 : 17,
+                'good_quantity' => $productId === $first ? 12 : 17,
+                'damaged_quantity' => 0,
                 'client_request_id' => fake()->uuid(),
             ])->assertOk();
         }
@@ -247,7 +261,8 @@ class OpnameCountTest extends SeededTestCase
                 'action' => 'count',
                 'item_id' => $items[$firstProduct]->id,
                 'mode' => 'set',
-                'quantity' => 10,
+                'good_quantity' => 10,
+                'damaged_quantity' => 0,
                 'client_created_at' => $createdAt,
             ],
             [
@@ -255,7 +270,8 @@ class OpnameCountTest extends SeededTestCase
                 'action' => 'count',
                 'item_id' => $items[$firstProduct]->id,
                 'mode' => 'add',
-                'quantity' => 3,
+                'good_quantity' => 3,
+                'damaged_quantity' => 0,
                 'client_created_at' => $createdAt,
             ],
             [
@@ -311,7 +327,8 @@ class OpnameCountTest extends SeededTestCase
             'action' => 'count',
             'item_id' => $itemId,
             'mode' => 'set',
-            'quantity' => 8,
+            'good_quantity' => 8,
+            'damaged_quantity' => 0,
             'client_created_at' => now()->toIso8601String(),
         ]]])->assertOk();
 
@@ -346,6 +363,66 @@ class OpnameCountTest extends SeededTestCase
         ]]])->assertOk()
             ->assertJsonPath('results.0.error.code', 'session_not_in_progress')
             ->assertJsonPath('results.1.error.code', 'session_not_in_progress');
+    }
+
+    public function test_item_sources_include_po_and_receipt_dates_with_remaining_good_and_damaged_qty(): void
+    {
+        $admin = $this->actAsAdmin();
+        $productId = $this->product(['track_expiry' => true]);
+        $supplierId = $this->supplier();
+        $orderedQty = '10.000';
+        $prId = $this->pr($admin->id, [$productId => [$orderedQty, '2000.00']], 'converted');
+        $poId = $this->po($prId, $supplierId, [$productId => [$orderedQty, '2000.00']]);
+        DB::table('purchase_orders')->where('id', $poId)->update(['order_date' => '2026-10-25']);
+        $poItemId = $this->poItemId($poId, $productId);
+        $locationId = (int) DB::table('locations')
+            ->where('store_id', $this->storeId())->where('type', 'store_floor')->value('id');
+        $receiptId = DB::table('goods_receipts')->insertGetId([
+            'store_id' => $this->storeId(),
+            'doc_number' => 'GR-OPN-SOURCE-0001',
+            'po_id' => $poId,
+            'supplier_id' => $supplierId,
+            'receiving_location_id' => $locationId,
+            'status' => 'posted',
+            'document_status' => 'pending',
+            'received_by' => $admin->id,
+            'posted_at' => '2026-11-02 10:30:00.000',
+        ]);
+        $receiptItemId = DB::table('goods_receipt_items')->insertGetId([
+            'gr_id' => $receiptId,
+            'po_item_id' => $poItemId,
+            'product_id' => $productId,
+            'qty_ordered' => $orderedQty,
+            'qty_received' => '8.000',
+            'qty_damaged' => '2.000',
+            'qty_short' => '0.000',
+            'unit_cost' => '2000.00',
+            'damage_disposition' => 'quarantine',
+        ]);
+        $batchId = DB::table('product_batches')->insertGetId([
+            'product_id' => $productId,
+            'goods_receipt_item_id' => $receiptItemId,
+            'batch_code' => 'LOT-OPN-SOURCE',
+        ]);
+        DB::table('inventory_balances')->insert([
+            'product_id' => $productId,
+            'location_id' => $locationId,
+            'batch_id' => $batchId,
+            'qty_sellable' => '3.000',
+            'qty_quarantine' => '1.000',
+            'qty_damaged' => '2.000',
+        ]);
+        $sessionId = $this->startAll();
+
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?include_sources=1")
+            ->assertOk()
+            ->assertJsonPath('data.0.sku', DB::table('products')->where('id', $productId)->value('sku'))
+            ->assertJsonPath('data.0.source_receipts.0.po_number', DB::table('purchase_orders')->where('id', $poId)->value('doc_number'))
+            ->assertJsonPath('data.0.source_receipts.0.po_date', '2026-10-25')
+            ->assertJsonPath('data.0.source_receipts.0.receipt_number', 'GR-OPN-SOURCE-0001')
+            ->assertJsonPath('data.0.source_receipts.0.receipt_date', '2026-11-02 10:30:00.000')
+            ->assertJsonPath('data.0.source_receipts.0.good_qty', '3.000')
+            ->assertJsonPath('data.0.source_receipts.0.damaged_qty', '3.000');
     }
 
     public function test_count_batch_rejects_more_than_one_hundred_operations(): void

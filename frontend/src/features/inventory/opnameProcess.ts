@@ -43,8 +43,14 @@ export interface VarianceRow {
   category: string;
   systemQty: string;
   countedQty: string;
+  systemGoodQty: string | null;
+  systemDamagedQty: string | null;
+  countedGoodQty: string | null;
+  countedDamagedQty: string | null;
   /** Selisih bertanda: kurang = negatif, lebih = positif. */
   diff: number;
+  diffGoodQty: number | null;
+  diffDamagedQty: number | null;
 }
 
 /** Semua produk berselisih dari laporan, urut nama, tanpa duplikat. */
@@ -54,7 +60,11 @@ export function varianceRows(report: OpnameReport | undefined): VarianceRow[] {
     const category = [...parents, node.name].join(' / ');
     for (const line of node.lines) {
       const size = Math.abs(Number(line.diff_qty));
-      if (!Number.isFinite(size) || size === 0) continue;
+      const diffGoodQty = line.diff_good_qty == null ? null : Number(line.diff_good_qty);
+      const diffDamagedQty = line.diff_damaged_qty == null ? null : Number(line.diff_damaged_qty);
+      const conditionVariance = (diffGoodQty !== null && diffGoodQty !== 0)
+        || (diffDamagedQty !== null && diffDamagedQty !== 0);
+      if ((!Number.isFinite(size) || size === 0) && !conditionVariance) continue;
       rows.set(line.item_id, {
         id: line.item_id,
         name: line.name,
@@ -62,7 +72,13 @@ export function varianceRows(report: OpnameReport | undefined): VarianceRow[] {
         category,
         systemQty: line.system_qty,
         countedQty: line.counted_qty,
-        diff: line.direction === 'short' ? -size : size,
+        systemGoodQty: line.system_good_qty ?? null,
+        systemDamagedQty: line.system_damaged_qty ?? null,
+        countedGoodQty: line.counted_good_qty ?? null,
+        countedDamagedQty: line.counted_damaged_qty ?? null,
+        diff: size === 0 ? 0 : line.direction === 'short' ? -size : size,
+        diffGoodQty,
+        diffDamagedQty,
       });
     }
     node.children.forEach((child) => visit(child, [...parents, node.name]));

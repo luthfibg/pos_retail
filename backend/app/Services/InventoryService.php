@@ -9,6 +9,7 @@ use App\Support\DocumentNumber;
 use Carbon\Carbon;
 use Closure;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use LogicException;
@@ -92,7 +93,7 @@ class InventoryService
     /**
      * Apply a batch after one lock validation and write one movement per differing product.
      *
-     * @param  list<array{product_id: int, diff_qty: string, unit_cost: ?string}>  $lines
+     * @param  list<array{product_id: int, diff_qty: string, unit_cost: ?string, diff_good_qty?: ?string, diff_damaged_qty?: ?string}>  $lines
      * @return array<int, int> product id => movement id
      */
     public function postOpnameAdjustments(User $actor, int $storeId, int $sessionId, array $lines): array
@@ -117,9 +118,12 @@ class InventoryService
         $this->opnameLocks->assertUnlocked($storeId, $productIds, 'stock_opname', $sessionId);
         $balances = DB::table('inventory_balances')->whereIn('product_id', $productIds)
             ->orderBy('product_id')->orderBy('id')->lockForUpdate()
-            ->get(['id', 'product_id', 'qty_sellable', 'qty_quarantine', 'qty_damaged'])
+            ->get(['id', 'product_id', 'location_id', 'shelf_position_id', 'batch_id', 'qty_sellable', 'qty_quarantine', 'qty_damaged'])
             ->groupBy('product_id');
-        $hasIncrease = collect($lines)->contains(fn (array $line) => Decimal::qty($line['diff_qty']) > 0);
+        $hasIncrease = collect($lines)->contains(fn (array $line) => array_key_exists('diff_good_qty', $line)
+            ? Decimal::qty((string) ($line['diff_good_qty'] ?? '0.000')) > 0
+                || Decimal::qty((string) ($line['diff_damaged_qty'] ?? '0.000')) > 0
+            : Decimal::qty($line['diff_qty']) > 0);
         $locationId = $hasIncrease ? $this->sellingLocationId($storeId) : null;
         $movementIds = [];
         $now = $this->now();
@@ -129,9 +133,27 @@ class InventoryService
             $productId = (int) $line['product_id'];
             $units = Decimal::qty($line['diff_qty']);
             if ($units === 0) {
-                throw new LogicException('Selisih nol tidak dapat diposting.');
+                if (! array_key_exists('diff_good_qty', $line)) {
+                    throw new LogicException('Selisih nol tidak dapat diposting.');
+                }
             }
             $product = $products->get($productId);
+            if (array_key_exists('diff_good_qty', $line)) {
+                $movementIds[$productId] = $this->postConditionOpnameAdjustment(
+                    $actor,
+                    $storeId,
+                    $sessionId,
+                    $product,
+                    $balances->get($productId, collect()),
+                    $locationId,
+                    (string) ($line['diff_good_qty'] ?? '0.000'),
+                    (string) ($line['diff_damaged_qty'] ?? '0.000'),
+                    $line['unit_cost'],
+                    $now,
+                );
+
+                continue;
+            }
             if ($units > 0) {
                 $result = $this->stockIn(
                     storeId: $storeId,
@@ -197,6 +219,108 @@ class InventoryService
         }
 
         return $movementIds;
+    }
+
+    /**
+     * @param Collection<int, object> $balances
+     */
+    private function postConditionOpnameAdjustment(
+        User $actor,
+        int $storeId,
+        int $sessionId,
+        object $product,
+        Collection $balances,
+        ?int $locationId,
+        string $goodDiff,
+        string $damagedDiff,
+        ?string $unitCost,
+        string $now,
+    ): int {
+        $movementId = null;
+        foreach ([
+            ['bucket' => 'sellable', 'diff' => Decimal::qty($goodDiff), 'sources' => ['sellable']],
+            ['bucket' => 'damaged', 'diff' => Decimal::qty($damagedDiff), 'sources' => ['damaged', 'quarantine']],
+        ] as $condition) {
+            $diff = $condition['diff'];
+            if ($diff === 0) {
+                continue;
+            }
+            if ($diff > 0) {
+                if ($locationId === null) {
+                    throw new LogicException('Lokasi stok opname tidak tersedia untuk penambahan stok.');
+                }
+                $result = $this->stockIn(
+                    storeId: $storeId,
+                    product: $product,
+                    locationId: $locationId,
+                    positionId: null,
+                    qty: Decimal::qtyString($diff),
+                    unitCost: $unitCost,
+                    expiryDate: null,
+                    batchCode: null,
+                    goodsReceiptItemId: null,
+                    isOpening: false,
+                    type: 'adjustment',
+                    refType: 'stock_opname',
+                    refId: $sessionId,
+                    actorId: $actor->id,
+                    bucket: $condition['bucket'],
+                    updateProductCost: false,
+                );
+                $movementId = $result['movement_id'];
+
+                continue;
+            }
+
+            $remaining = abs($diff);
+            $available = 0;
+            foreach ($balances as $balance) {
+                foreach ($condition['sources'] as $sourceBucket) {
+                    $available += Decimal::qty((string) $balance->{'qty_'.$sourceBucket});
+                }
+            }
+            if ($available < $remaining) {
+                throw ValidationException::withMessages([
+                    'stock' => ['stock_changed_during_opname: stok tidak mencukupi pada kondisi barang yang dihitung.'],
+                ]);
+            }
+
+            foreach ($balances as $balance) {
+                foreach ($condition['sources'] as $sourceBucket) {
+                    $balanceUnits = Decimal::qty((string) $balance->{'qty_'.$sourceBucket});
+                    $take = min($remaining, $balanceUnits);
+                    if ($take <= 0) {
+                        continue;
+                    }
+                    $this->decreaseBalance((int) $balance->id, $sourceBucket, $take);
+                    $movementId = (int) DB::table('inventory_movements')->insertGetId([
+                        'store_id' => $storeId,
+                        'product_id' => (int) $product->id,
+                        'batch_id' => $balance->batch_id,
+                        'from_location_id' => (int) $balance->location_id,
+                        'from_position_id' => $balance->shelf_position_id,
+                        'from_bucket' => $sourceBucket,
+                        'qty' => Decimal::qtyString($take),
+                        'movement_type' => 'write_off',
+                        'unit_cost' => $unitCost,
+                        'ref_type' => 'stock_opname',
+                        'ref_id' => $sessionId,
+                        'occurred_at' => $now,
+                        'created_by' => $actor->id,
+                    ]);
+                    $remaining -= $take;
+                    if ($remaining === 0) {
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        if ($movementId === null) {
+            throw new LogicException('Selisih kondisi nol tidak dapat diposting.');
+        }
+
+        return $movementId;
     }
 
     /** @var array{store_id: int, product_ids: list<int>, transaction_level: int}|null */

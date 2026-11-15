@@ -57,7 +57,7 @@ class OpnameWorkflowService
             if ($session->status !== 'in_progress') {
                 throw $this->invalidStatus($session->status, 'Hanya sesi yang sedang berjalan yang dapat diajukan atau diposting.');
             }
-            $items = $this->completeItems($sessionId);
+            $items = $this->completeItems($sessionId, (bool) $session->condition_counting);
             $owner = $this->settings->isOwner($actor, $storeId);
             if ($owner) {
                 $this->confirmApprover($actor, $storeId, (string) ($data['owner_password'] ?? ''), 'opname.post');
@@ -157,9 +157,15 @@ class OpnameWorkflowService
                 throw $this->invalidStatus($session->status, 'Hanya sesi yang menunggu persetujuan yang dapat disetujui.');
             }
             $approver = $this->confirmApprover($actor, $storeId, (string) $data['owner_password'], 'opname.approve');
-            $items = $this->completeItems($sessionId);
+            $items = $this->completeItems($sessionId, (bool) $session->condition_counting);
             $snapshot = $this->frozenSnapshot($sessionId, $session, $items);
-            $this->assertStockUnchanged($storeId, $this->itemsWithDifferences($items, $snapshot));
+            $varianceItems = $this->itemsWithDifferences($items, $snapshot);
+            $actions = $this->validatedReconciliationActions($varianceItems, $data['reconciliations']);
+            $this->assertStockUnchanged($storeId, $varianceItems);
+            $this->applyReconciliations($sessionId, $items, $actions, (bool) $session->condition_counting);
+            $items = $this->completeItems($sessionId, (bool) $session->condition_counting);
+            $snapshot = $this->frozenSnapshot($sessionId, $session, $items);
+            $snapshot['totals'] = $this->totalsFromSnapshot($items, $snapshot);
             $now = $this->now();
             $adjustedProducts = $this->postDifferences($approver, $storeId, $sessionId, $items, $snapshot);
             DB::table('stock_opname_sessions')->where('id', $sessionId)->update([
@@ -168,12 +174,20 @@ class OpnameWorkflowService
                 'approved_by' => $approver->id,
                 'posted_at' => $now,
                 'posted_by' => $approver->id,
+                ...$snapshot['totals'],
                 'updated_at' => $now,
             ]);
             if ($adjustedProducts !== []) {
                 $this->inventory->synchronizeAutomaticPurchaseRequisitions($approver, $storeId, $adjustedProducts);
             }
-            $this->recordAction($sessionId, 'approved', $approver->id, $data['client_request_id'], null, $now);
+            $this->recordAction(
+                $sessionId,
+                'approved',
+                $approver->id,
+                $data['client_request_id'],
+                json_encode($actions, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                $now,
+            );
             $this->recordAction($sessionId, 'posted', $approver->id, $this->newRequestId(), null, $now);
             $this->notifications->resolveForEntity($storeId, 'stock_opname_approval_required', 'stock_opname_session', $sessionId);
             $this->notifications->notifyUser(
@@ -301,7 +315,7 @@ class OpnameWorkflowService
     }
 
     /** @return array<int, object> */
-    private function completeItems(int $sessionId): array
+    private function completeItems(int $sessionId, bool $conditionCounting): array
     {
         $items = DB::table('stock_opname_items as i')
             ->leftJoin('products as p', 'p.id', '=', 'i.product_id')
@@ -310,9 +324,13 @@ class OpnameWorkflowService
             ->lockForUpdate()
             ->get([
                 'i.id', 'i.product_id', 'i.counted_qty', 'i.system_qty_at_count',
+                'i.counted_good_qty', 'i.counted_damaged_qty',
+                'i.system_good_qty_at_count', 'i.system_damaged_qty_at_count',
+                'i.diff_good_qty', 'i.diff_damaged_qty',
                 'i.product_name_snapshot', 'i.revision_count', 'p.unit_cost',
             ])->all();
-        $uncounted = array_values(array_filter($items, fn ($item) => $item->counted_qty === null));
+        $uncounted = array_values(array_filter($items, fn ($item) => $item->counted_qty === null
+            || ($conditionCounting && ($item->counted_good_qty === null || $item->counted_damaged_qty === null))));
         if ($uncounted !== []) {
             throw new OpnameWorkflowException(
                 'Hitungan belum lengkap.',
@@ -327,41 +345,56 @@ class OpnameWorkflowService
 
     /**
      * @param  array<int, object>  $items
-     * @return array{item_values: array<int, array{diff_qty: string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}
+     * @return array{item_values: array<int, array{diff_qty: string, diff_good_qty: ?string, diff_damaged_qty: ?string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}
      */
     private function makeSnapshot(int $storeId, int $sessionId, array $items): array
     {
         $snapshot = ['item_values' => [], 'totals' => $this->emptyTotals()];
-        $this->assertStockUnchanged($storeId, $this->itemsWithDifferences($items));
+        $this->assertStockUnchanged($storeId, $items);
         $logs = DB::table('stock_opname_count_logs')
             ->where('session_id', $sessionId)
             ->groupBy('item_id')
             ->selectRaw('item_id, COUNT(*) as count')
             ->pluck('count', 'item_id');
         foreach ($items as $item) {
-            $diffUnits = Decimal::qty((string) $item->counted_qty) - Decimal::qty((string) $item->system_qty_at_count);
+            $isSplit = $item->counted_good_qty !== null && $item->counted_damaged_qty !== null;
+            $diffGoodUnits = $isSplit
+                ? Decimal::qty((string) $item->counted_good_qty) - Decimal::qty((string) $item->system_good_qty_at_count)
+                : null;
+            $diffDamagedUnits = $isSplit
+                ? Decimal::qty((string) $item->counted_damaged_qty) - Decimal::qty((string) $item->system_damaged_qty_at_count)
+                : null;
+            $diffUnits = $isSplit
+                ? $diffGoodUnits + $diffDamagedUnits
+                : Decimal::qty((string) $item->counted_qty) - Decimal::qty((string) $item->system_qty_at_count);
             $cost = $item->unit_cost === null ? null : (string) $item->unit_cost;
             $costUnits = $cost === null ? 0 : Decimal::toUnits($cost, 4);
-            $value = $costUnits === 0 || $diffUnits === 0
+            $varianceUnits = $isSplit ? abs($diffGoodUnits) + abs($diffDamagedUnits) : abs($diffUnits);
+            $value = $costUnits === 0 || $varianceUnits === 0
+                ? null
+                : intdiv($varianceUnits * $costUnits + 50000, 100000);
+            $netValue = $costUnits === 0 || $diffUnits === 0
                 ? null
                 : intdiv(abs($diffUnits) * $costUnits + 50000, 100000);
             $revisions = max(0, (int) $logs->get($item->id, 0) - 1);
             $snapshot['item_values'][(int) $item->id] = [
                 'diff_qty' => Decimal::qtyString($diffUnits),
+                'diff_good_qty' => $diffGoodUnits === null ? null : Decimal::qtyString($diffGoodUnits),
+                'diff_damaged_qty' => $diffDamagedUnits === null ? null : Decimal::qtyString($diffDamagedUnits),
                 'cost' => $costUnits <= 0 ? null : $cost,
                 'value' => $value,
                 'revisions' => $revisions,
             ];
-            if ($diffUnits === 0) {
+            if ($diffUnits === 0 && $varianceUnits === 0) {
                 continue;
             }
             $snapshot['totals']['variance_products']++;
             if ($diffUnits < 0) {
                 $snapshot['totals']['short_qty'] += abs($diffUnits);
-                $snapshot['totals']['short_value'] += $value ?? 0;
+                $snapshot['totals']['short_value'] += $netValue ?? 0;
             } else {
-                $snapshot['totals']['over_qty'] += $diffUnits;
-                $snapshot['totals']['over_value'] += $value ?? 0;
+                $snapshot['totals']['over_qty'] += max(0, $diffUnits);
+                $snapshot['totals']['over_value'] += $netValue ?? 0;
             }
             $snapshot['totals']['abs_value'] += $value ?? 0;
         }
@@ -376,7 +409,7 @@ class OpnameWorkflowService
 
     /**
      * @param  array<int, object>  $items
-     * @param  array{item_values: array<int, array{diff_qty: string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}|null  $snapshot
+     * @param  array{item_values: array<int, array{diff_qty: string, diff_good_qty: ?string, diff_damaged_qty: ?string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}|null  $snapshot
      */
     private function assertStockUnchanged(int $storeId, array $items): void
     {
@@ -392,10 +425,24 @@ class OpnameWorkflowService
             ->groupBy('product_id')
             ->selectRaw('product_id, SUM(qty_sellable + qty_quarantine + qty_damaged) as qty')
             ->pluck('qty', 'product_id');
+        $currentConditions = DB::table('inventory_balances')->whereIn('product_id', $ids)
+            ->groupBy('product_id')
+            ->selectRaw('product_id, SUM(qty_sellable) as good_qty')
+            ->selectRaw('SUM(qty_quarantine + qty_damaged) as damaged_qty')
+            ->get()->keyBy('product_id');
         $changed = [];
         foreach ($items as $item) {
             $expected = Decimal::qty((string) $item->system_qty_at_count);
-            if (Decimal::qty((string) $current->get($item->product_id, '0.000')) !== $expected) {
+            $changedQty = Decimal::qty((string) $current->get($item->product_id, '0.000')) !== $expected;
+            $conditionChanged = false;
+            if ($item->system_good_qty_at_count !== null && $item->system_damaged_qty_at_count !== null) {
+                $currentCondition = $currentConditions->get($item->product_id);
+                $conditionChanged = Decimal::qty((string) ($currentCondition->good_qty ?? '0.000'))
+                        !== Decimal::qty((string) $item->system_good_qty_at_count)
+                    || Decimal::qty((string) ($currentCondition->damaged_qty ?? '0.000'))
+                        !== Decimal::qty((string) $item->system_damaged_qty_at_count);
+            }
+            if ($changedQty || $conditionChanged) {
                 $changed[] = ['product_id' => (int) $item->product_id, 'product_name' => $item->product_name_snapshot];
             }
         }
@@ -411,17 +458,21 @@ class OpnameWorkflowService
 
     /**
      * @param  array<int, object>  $items
-     * @param  array{item_values: array<int, array{diff_qty: string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}  $snapshot
+     * @param  array{item_values: array<int, array{diff_qty: string, diff_good_qty: ?string, diff_damaged_qty: ?string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}  $snapshot
      */
     private function freezeItems(int $sessionId, array $items, array $snapshot): void
     {
         foreach ($items as $item) {
             $value = $snapshot['item_values'][(int) $item->id];
-            if (Decimal::qty($value['diff_qty']) === 0) {
+            if (Decimal::qty($value['diff_qty']) === 0
+                && Decimal::qty($value['diff_good_qty'] ?? '0.000') === 0
+                && Decimal::qty($value['diff_damaged_qty'] ?? '0.000') === 0) {
                 continue;
             }
             DB::table('stock_opname_items')->where('id', $item->id)->update([
                 'diff_qty' => $value['diff_qty'],
+                'diff_good_qty' => $value['diff_good_qty'],
+                'diff_damaged_qty' => $value['diff_damaged_qty'],
                 'unit_cost_snapshot' => $value['cost'],
                 'diff_value' => $value['value'] === null ? null : Decimal::moneyString($value['value']),
                 'revision_count' => $value['revisions'],
@@ -431,7 +482,7 @@ class OpnameWorkflowService
 
     /**
      * @param  array<int, object>  $items
-     * @param  array{item_values: array<int, array{diff_qty: string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}  $snapshot
+     * @param  array{item_values: array<int, array{diff_qty: string, diff_good_qty: ?string, diff_damaged_qty: ?string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}  $snapshot
      * @return list<int>
      */
     private function postDifferences(User $actor, int $storeId, int $sessionId, array $items, array $snapshot): array
@@ -439,13 +490,19 @@ class OpnameWorkflowService
         $lines = [];
         foreach ($items as $item) {
             $value = $snapshot['item_values'][(int) $item->id] ?? null;
-            if ($value === null || Decimal::qty($value['diff_qty']) === 0) {
+            if ($value === null || (
+                Decimal::qty($value['diff_qty']) === 0
+                && Decimal::qty($value['diff_good_qty'] ?? '0.000') === 0
+                && Decimal::qty($value['diff_damaged_qty'] ?? '0.000') === 0
+            )) {
                 continue;
             }
             $lines[] = [
                 'item_id' => (int) $item->id,
                 'product_id' => (int) $item->product_id,
                 'diff_qty' => $value['diff_qty'],
+                'diff_good_qty' => $value['diff_good_qty'],
+                'diff_damaged_qty' => $value['diff_damaged_qty'],
                 'unit_cost' => $value['cost'],
             ];
         }
@@ -457,11 +514,19 @@ class OpnameWorkflowService
             $actor,
             $storeId,
             $sessionId,
-            array_map(fn (array $line) => [
-                'product_id' => $line['product_id'],
-                'diff_qty' => $line['diff_qty'],
-                'unit_cost' => $line['unit_cost'],
-            ], $lines),
+            array_map(function (array $line) {
+                $postingLine = [
+                    'product_id' => $line['product_id'],
+                    'diff_qty' => $line['diff_qty'],
+                    'unit_cost' => $line['unit_cost'],
+                ];
+                if ($line['diff_good_qty'] !== null && $line['diff_damaged_qty'] !== null) {
+                    $postingLine['diff_good_qty'] = $line['diff_good_qty'];
+                    $postingLine['diff_damaged_qty'] = $line['diff_damaged_qty'];
+                }
+
+                return $postingLine;
+            }, $lines),
         );
         foreach ($lines as $line) {
             DB::table('stock_opname_items')->where('id', $line['item_id'])
@@ -471,20 +536,123 @@ class OpnameWorkflowService
         return array_column($lines, 'product_id');
     }
 
+    /**
+     * @param  array<int, object>  $varianceItems
+     * @param  array<int, array{item_id: int, action: string}>  $requested
+     * @return array<int, string>
+     */
+    private function validatedReconciliationActions(array $varianceItems, array $requested): array
+    {
+        $actions = [];
+        foreach ($requested as $reconciliation) {
+            $actions[(int) $reconciliation['item_id']] = $reconciliation['action'];
+        }
+        $varianceIds = array_map(fn ($item) => (int) $item->id, $varianceItems);
+        $providedIds = array_map('intval', array_keys($actions));
+        sort($varianceIds);
+        sort($providedIds);
+        if ($varianceIds !== $providedIds) {
+            throw ValidationException::withMessages([
+                'reconciliations' => 'Pilih tepat satu tindakan untuk setiap produk yang berselisih.',
+            ]);
+        }
+
+        return $actions;
+    }
+
+    /**
+     * @param  array<int, object>  $items
+     * @param  array<int, string>  $actions
+     */
+    private function applyReconciliations(int $sessionId, array $items, array $actions, bool $conditionCounting): void
+    {
+        foreach ($items as $item) {
+            $action = $actions[(int) $item->id] ?? null;
+            if ($action === null) {
+                continue;
+            }
+
+            $updates = ['reconciliation_action' => $action];
+            if ($action === 'correction') {
+                $updates += [
+                    'counted_qty' => $item->system_qty_at_count,
+                    'diff_qty' => '0.000',
+                    'diff_value' => '0.00',
+                ];
+                if ($conditionCounting) {
+                    $updates += [
+                        'counted_good_qty' => $item->system_good_qty_at_count,
+                        'counted_damaged_qty' => $item->system_damaged_qty_at_count,
+                        'diff_good_qty' => '0.000',
+                        'diff_damaged_qty' => '0.000',
+                    ];
+                }
+            }
+
+            DB::table('stock_opname_items')->where('session_id', $sessionId)->where('id', $item->id)->update($updates);
+        }
+    }
+
+    /**
+     * @param  array<int, object>  $items
+     * @param  array{item_values: array<int, array{diff_qty: string, diff_good_qty: ?string, diff_damaged_qty: ?string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}  $snapshot
+     * @return array<string, mixed>
+     */
+    private function totalsFromSnapshot(array $items, array $snapshot): array
+    {
+        $totals = $this->emptyTotals();
+        foreach ($items as $item) {
+            $value = $snapshot['item_values'][(int) $item->id] ?? null;
+            if ($value === null) {
+                continue;
+            }
+            $diffUnits = Decimal::qty($value['diff_qty']);
+            $diffGoodUnits = Decimal::qty($value['diff_good_qty'] ?? '0.000');
+            $diffDamagedUnits = Decimal::qty($value['diff_damaged_qty'] ?? '0.000');
+            if ($diffUnits === 0 && $diffGoodUnits === 0 && $diffDamagedUnits === 0) {
+                continue;
+            }
+
+            $totals['variance_products']++;
+            $costUnits = $value['cost'] === null ? 0 : Decimal::toUnits($value['cost'], 4);
+            $netValue = $costUnits <= 0 || $diffUnits === 0
+                ? 0
+                : intdiv(abs($diffUnits) * $costUnits + 50000, 100000);
+            if ($diffUnits < 0) {
+                $totals['short_qty'] += abs($diffUnits);
+                $totals['short_value'] += $netValue;
+            } else {
+                $totals['over_qty'] += max(0, $diffUnits);
+                $totals['over_value'] += $netValue;
+            }
+            $totals['abs_value'] += $value['value'] ?? 0;
+        }
+
+        $totals['short_qty'] = Decimal::qtyString($totals['short_qty']);
+        $totals['over_qty'] = Decimal::qtyString($totals['over_qty']);
+        $totals['short_value'] = Decimal::moneyString($totals['short_value']);
+        $totals['over_value'] = Decimal::moneyString($totals['over_value']);
+        $totals['abs_value'] = Decimal::moneyString($totals['abs_value']);
+
+        return $totals;
+    }
+
     /** @param array<int, object> $items
-     * @return array{item_values: array<int, array{diff_qty: string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}
+     * @return array{item_values: array<int, array{diff_qty: string, diff_good_qty: ?string, diff_damaged_qty: ?string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}
      */
     private function frozenSnapshot(int $sessionId, object $session, array $items): array
     {
         $values = [];
         foreach ($items as $item) {
             $row = DB::table('stock_opname_items')->where('id', $item->id)
-                ->first(['diff_qty', 'unit_cost_snapshot', 'diff_value', 'revision_count']);
+                ->first(['diff_qty', 'diff_good_qty', 'diff_damaged_qty', 'unit_cost_snapshot', 'diff_value', 'revision_count']);
             if ($row->diff_qty === null) {
                 continue;
             }
             $values[(int) $item->id] = [
                 'diff_qty' => (string) $row->diff_qty,
+                'diff_good_qty' => $row->diff_good_qty === null ? null : (string) $row->diff_good_qty,
+                'diff_damaged_qty' => $row->diff_damaged_qty === null ? null : (string) $row->diff_damaged_qty,
                 'cost' => $row->unit_cost_snapshot === null ? null : (string) $row->unit_cost_snapshot,
                 'value' => $row->diff_value === null ? null : Decimal::money((string) $row->diff_value),
                 'revisions' => (int) $row->revision_count,
@@ -533,17 +701,22 @@ class OpnameWorkflowService
 
     /**
      * @param  array<int, object>  $items
-     * @param  array{item_values: array<int, array{diff_qty: string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}|null  $snapshot
+     * @param  array{item_values: array<int, array{diff_qty: string, diff_good_qty: ?string, diff_damaged_qty: ?string, cost: ?string, value: ?int, revisions: int}>, totals: array<string, mixed>}|null  $snapshot
      * @return array<int, object>
      */
     private function itemsWithDifferences(array $items, ?array $snapshot = null): array
     {
         return array_values(array_filter($items, function ($item) use ($snapshot) {
-            $difference = $snapshot === null
-                ? Decimal::qty((string) $item->counted_qty) - Decimal::qty((string) $item->system_qty_at_count)
-                : Decimal::qty($snapshot['item_values'][(int) $item->id]['diff_qty'] ?? '0.000');
+            $value = $snapshot['item_values'][(int) $item->id] ?? null;
+            if ($value !== null) {
+                return Decimal::qty($value['diff_qty']) !== 0
+                    || Decimal::qty($value['diff_good_qty'] ?? '0.000') !== 0
+                    || Decimal::qty($value['diff_damaged_qty'] ?? '0.000') !== 0;
+            }
 
-            return $difference !== 0;
+            return Decimal::qty((string) $item->counted_qty) !== Decimal::qty((string) $item->system_qty_at_count)
+                || ($item->diff_good_qty !== null && Decimal::qty((string) $item->diff_good_qty) !== 0)
+                || ($item->diff_damaged_qty !== null && Decimal::qty((string) $item->diff_damaged_qty) !== 0);
         }));
     }
 

@@ -57,4 +57,27 @@ describe('opnameProcess', () => {
     expect(rows.map((row) => formatDiff(row.diff))).toEqual(['+1,5', '−2']);
     expect(varianceRows(undefined)).toEqual([]);
   });
+
+  it('tetap menampilkan selisih kondisi yang saling meniadakan pada total stok', () => {
+    const report = {
+      session: { id: 1, status: 'pending_approval' },
+      complete: true,
+      categories: [{
+        id: 1, name: 'A', products_counted: 1, variance_count: 1, short_qty: '0', over_qty: '0',
+        lines: [{
+          item_id: 3, product_id: 3, name: 'Barang', barcode: '', system_qty: '15', counted_qty: '15',
+          diff_qty: '0.000', diff_good_qty: '-1.000', diff_damaged_qty: '1.000',
+          direction: 'over', revised: false,
+        }],
+        children: [],
+      }],
+    } as OpnameReport;
+
+    expect(varianceRows(report)).toMatchObject([{
+      name: 'Barang',
+      diff: 0,
+      diffGoodQty: -1,
+      diffDamagedQty: 1,
+    }]);
+  });
 });

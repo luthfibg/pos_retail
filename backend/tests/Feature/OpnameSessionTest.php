@@ -457,7 +457,8 @@ class OpnameSessionTest extends SeededTestCase
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
             'item_id' => $item->id,
             'mode' => 'set',
-            'quantity' => 17,
+            'good_quantity' => 17,
+            'damaged_quantity' => 0,
             'client_request_id' => fake()->uuid(),
         ])->assertOk();
         $countElapsed = (hrtime(true) - $countStartedAt) / 1_000_000_000;
