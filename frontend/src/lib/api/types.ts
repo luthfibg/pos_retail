@@ -789,13 +789,16 @@ export interface StockBatch {
 export interface StockCardMovement {
   occurred_at: string;
   reference_no: string;
-  reference_type: 'goods_receipt' | 'supplier_return' | 'sale';
+  reference_type: 'goods_receipt' | 'supplier_return' | 'sale' | 'stock_opname';
   reference_id: number;
   expiry_date: string | null;
   good_in: Decimal;
   damaged_in: Decimal;
   return_out: Decimal;
   sale_out: Decimal;
+  reconciliation_action: 'write_off' | 'correction' | null;
+  reconciliation_in: Decimal;
+  reconciliation_out: Decimal;
 }
 
 /** Urutan `batches` = urutan FEFO (yang dijual lebih dulu di atas). */
@@ -832,6 +835,8 @@ export interface Movement {
   ref_type: string | null;
   ref_id: number | null;
   ref_label?: string | null;
+  reconciliation_action?: 'write_off' | 'correction' | null;
+  movement_direction?: 'in' | 'out' | 'move' | null;
   occurred_at: string; // UTC
   created_by: number | null;
   created_by_name: string | null;

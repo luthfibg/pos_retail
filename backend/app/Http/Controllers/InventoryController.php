@@ -75,7 +75,14 @@ class InventoryController extends Controller
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'include_opname_reconciliations' => ['sometimes', 'in:0,1,false,true'],
         ]);
+        if (array_key_exists('include_opname_reconciliations', $filters)) {
+            $filters['include_opname_reconciliations'] = filter_var(
+                $filters['include_opname_reconciliations'],
+                FILTER_VALIDATE_BOOLEAN,
+            );
+        }
 
         $storeId = $this->stores->requireIdFor($request->user());
 

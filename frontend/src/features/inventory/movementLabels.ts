@@ -14,6 +14,11 @@ export const MOVEMENT_LABEL: Record<MovementType, string> = {
   write_off: 'Penghapusan (write-off)',
 };
 
+export const RECONCILIATION_LABEL = {
+  write_off: 'Pemutihan',
+  correction: 'Koreksi stok',
+} as const;
+
 export const BUCKET_LABEL: Record<string, string> = {
   sellable: 'layak jual',
   quarantine: 'karantina',
@@ -25,7 +30,13 @@ export const bucketLabel = (b: string | null) => (b ? BUCKET_LABEL[b] ?? b : '')
 export type Direction = 'in' | 'out' | 'move';
 
 /** Ada to_bucket saja = masuk; from_bucket saja = keluar; keduanya = pindah. */
-export function directionOf(m: { from_bucket: string | null; to_bucket: string | null; movement_type?: string }): Direction {
+export function directionOf(m: {
+  from_bucket: string | null;
+  to_bucket: string | null;
+  movement_type?: string;
+  movement_direction?: Direction | null;
+}): Direction {
+  if (m.movement_direction) return m.movement_direction;
   if (m.from_bucket && m.to_bucket) return 'move';
   if (m.from_bucket) return 'out';
   if (m.movement_type === 'write_off') return 'out';

@@ -1431,7 +1431,9 @@ class InventoryService
                 "gr.posted_at as occurred_at, gr.doc_number as reference_no, 'goods_receipt' as reference_type, ".
                 'gr.id as reference_id, gri.expiry_date, SUM(gri.qty_received) as good_in, '.
                 'SUM(gri.qty_damaged) as damaged_in, '.
-                'CAST(0 AS DECIMAL(18,3)) as return_out, CAST(0 AS DECIMAL(18,3)) as sale_out'
+                'CAST(0 AS DECIMAL(18,3)) as return_out, CAST(0 AS DECIMAL(18,3)) as sale_out, '.
+                'NULL as reconciliation_action, CAST(0 AS DECIMAL(18,3)) as reconciliation_in, '.
+                'CAST(0 AS DECIMAL(18,3)) as reconciliation_out'
             )
             ->groupBy('gr.id', 'gr.doc_number', 'gr.posted_at', 'gri.expiry_date');
 
@@ -1448,7 +1450,9 @@ class InventoryService
                 "MAX(m.occurred_at) as occurred_at, sr.doc_number as reference_no, 'supplier_return' as reference_type, ".
                 'sr.id as reference_id, pb.expiry_date, '.
                 'CAST(0 AS DECIMAL(18,3)) as good_in, CAST(0 AS DECIMAL(18,3)) as damaged_in, '.
-                'SUM(m.qty) as return_out, CAST(0 AS DECIMAL(18,3)) as sale_out'
+                'SUM(m.qty) as return_out, CAST(0 AS DECIMAL(18,3)) as sale_out, '.
+                'NULL as reconciliation_action, CAST(0 AS DECIMAL(18,3)) as reconciliation_in, '.
+                'CAST(0 AS DECIMAL(18,3)) as reconciliation_out'
             )
             ->groupBy('sr.id', 'sr.doc_number', 'pb.expiry_date');
 
@@ -1465,11 +1469,38 @@ class InventoryService
                 "MAX(m.occurred_at) as occurred_at, s.doc_number as reference_no, 'sale' as reference_type, ".
                 's.id as reference_id, pb.expiry_date, '.
                 'CAST(0 AS DECIMAL(18,3)) as good_in, CAST(0 AS DECIMAL(18,3)) as damaged_in, '.
-                'CAST(0 AS DECIMAL(18,3)) as return_out, SUM(m.qty) as sale_out'
+                'CAST(0 AS DECIMAL(18,3)) as return_out, SUM(m.qty) as sale_out, '.
+                'NULL as reconciliation_action, CAST(0 AS DECIMAL(18,3)) as reconciliation_in, '.
+                'CAST(0 AS DECIMAL(18,3)) as reconciliation_out'
             )
             ->groupBy('s.id', 's.doc_number', 'pb.expiry_date');
 
-        $events = $receipts->unionAll($returns)->unionAll($sales);
+        $totalDiff = "CASE WHEN i.reconciliation_action = 'correction' THEN COALESCE(i.reconciliation_diff_qty, i.diff_qty) ELSE i.diff_qty END";
+        $goodDiff = "CASE WHEN i.reconciliation_action = 'correction' THEN i.reconciliation_diff_good_qty ELSE i.diff_good_qty END";
+        $damagedDiff = "CASE WHEN i.reconciliation_action = 'correction' THEN i.reconciliation_diff_damaged_qty ELSE i.diff_damaged_qty END";
+        $isSplit = "({$goodDiff} IS NOT NULL OR {$damagedDiff} IS NOT NULL)";
+        $reconciliationIn = "CASE WHEN {$isSplit} THEN ".
+            "(CASE WHEN {$goodDiff} > 0 THEN {$goodDiff} ELSE 0 END + CASE WHEN {$damagedDiff} > 0 THEN {$damagedDiff} ELSE 0 END) ".
+            "ELSE CASE WHEN {$totalDiff} > 0 THEN {$totalDiff} ELSE 0 END END";
+        $reconciliationOut = "CASE WHEN {$isSplit} THEN ".
+            "(CASE WHEN {$goodDiff} < 0 THEN -({$goodDiff}) ELSE 0 END + CASE WHEN {$damagedDiff} < 0 THEN -({$damagedDiff}) ELSE 0 END) ".
+            "ELSE CASE WHEN {$totalDiff} < 0 THEN -({$totalDiff}) ELSE 0 END END";
+        $opnameReconciliations = DB::table('stock_opname_items as i')
+            ->join('stock_opname_sessions as os', 'os.id', '=', 'i.session_id')
+            ->where('os.store_id', $storeId)
+            ->where('os.status', 'posted')
+            ->where('i.product_id', $productId)
+            ->whereNotNull('i.reconciliation_action')
+            ->selectRaw(
+                "os.posted_at as occurred_at, os.number as reference_no, 'stock_opname' as reference_type, ".
+                'os.id as reference_id, NULL as expiry_date, '.
+                'CAST(0 AS DECIMAL(18,3)) as good_in, CAST(0 AS DECIMAL(18,3)) as damaged_in, '.
+                'CAST(0 AS DECIMAL(18,3)) as return_out, CAST(0 AS DECIMAL(18,3)) as sale_out, '.
+                "i.reconciliation_action, {$reconciliationIn} as reconciliation_in, ".
+                "{$reconciliationOut} as reconciliation_out"
+            );
+
+        $events = $receipts->unionAll($returns)->unionAll($sales)->unionAll($opnameReconciliations);
 
         return DB::query()
             ->fromSub($events, 'events')
@@ -1487,6 +1518,9 @@ class InventoryService
                 'damaged_in' => $row->damaged_in,
                 'return_out' => $row->return_out,
                 'sale_out' => $row->sale_out,
+                'reconciliation_action' => $row->reconciliation_action,
+                'reconciliation_in' => $row->reconciliation_in,
+                'reconciliation_out' => $row->reconciliation_out,
             ]);
     }
 
@@ -1497,25 +1531,73 @@ class InventoryService
      */
     public function movements(int $storeId, array $filters, int $perPage): LengthAwarePaginator
     {
-        $query = DB::table('inventory_movements as m')
+        $inventoryMovements = DB::table('inventory_movements as m')
             ->join('products as p', 'p.id', '=', 'm.product_id')
             ->leftJoin('product_batches as pb', 'pb.id', '=', 'm.batch_id')
             ->leftJoin('users as u', 'u.id', '=', 'm.created_by')
             ->leftJoin('stock_opname_sessions as os', function ($join) {
                 $join->on('os.id', '=', 'm.ref_id')->where('m.ref_type', '=', 'stock_opname');
             })
+            ->leftJoin('stock_opname_items as oi', function ($join) {
+                $join->on('oi.session_id', '=', 'm.ref_id')
+                    ->on('oi.product_id', '=', 'm.product_id')
+                    ->where('m.ref_type', '=', 'stock_opname');
+            })
             ->where('m.store_id', $storeId)
-            ->orderByDesc('m.occurred_at')
-            ->orderByDesc('m.id')
             ->select([
-                'm.id', 'm.product_id', 'p.sku', 'p.name as product_name', 'm.batch_id', 'pb.batch_code', 'pb.expiry_date',
+                'm.id', 'm.product_id', 'p.sku', 'p.name as product_name',
+                'm.batch_id', 'pb.batch_code', 'pb.expiry_date',
                 'm.movement_type', 'm.qty', 'm.unit_cost',
                 'm.from_location_id', 'm.from_position_id', 'm.from_bucket',
                 'm.to_location_id', 'm.to_position_id', 'm.to_bucket',
                 'm.ref_type', 'm.ref_id', 'm.occurred_at', 'm.created_by', 'u.name as created_by_name',
-                'os.number as opname_number',
+                'os.number as opname_number', 'oi.reconciliation_action',
             ]);
 
+        $inventoryMovements->selectRaw('NULL as movement_direction');
+        $events = $inventoryMovements;
+        if (! empty($filters['include_opname_reconciliations'])) {
+            $totalDiff = "CASE WHEN i.reconciliation_action = 'correction' THEN COALESCE(i.reconciliation_diff_qty, i.diff_qty) ELSE i.diff_qty END";
+            $goodDiff = "CASE WHEN i.reconciliation_action = 'correction' THEN i.reconciliation_diff_good_qty ELSE i.diff_good_qty END";
+            $damagedDiff = "CASE WHEN i.reconciliation_action = 'correction' THEN i.reconciliation_diff_damaged_qty ELSE i.diff_damaged_qty END";
+            $isSplit = "({$goodDiff} IS NOT NULL OR {$damagedDiff} IS NOT NULL)";
+            $incomingQty = "CASE WHEN {$isSplit} THEN ".
+                "(CASE WHEN {$goodDiff} > 0 THEN {$goodDiff} ELSE 0 END + CASE WHEN {$damagedDiff} > 0 THEN {$damagedDiff} ELSE 0 END) ".
+                "ELSE CASE WHEN {$totalDiff} > 0 THEN {$totalDiff} ELSE 0 END END";
+            $outgoingQty = "CASE WHEN {$isSplit} THEN ".
+                "(CASE WHEN {$goodDiff} < 0 THEN -({$goodDiff}) ELSE 0 END + CASE WHEN {$damagedDiff} < 0 THEN -({$damagedDiff}) ELSE 0 END) ".
+                "ELSE CASE WHEN {$totalDiff} < 0 THEN -({$totalDiff}) ELSE 0 END END";
+            $correctionEvents = function (string $direction, string $quantity) use ($storeId) {
+                $idOffset = $direction === 'out' ? 1 : 0;
+
+                return DB::table('stock_opname_items as i')
+                    ->join('stock_opname_sessions as os', 'os.id', '=', 'i.session_id')
+                    ->join('products as p', 'p.id', '=', 'i.product_id')
+                    ->leftJoin('users as u', 'u.id', '=', 'os.posted_by')
+                    ->where('os.store_id', $storeId)
+                    ->where('os.status', 'posted')
+                    ->where('i.reconciliation_action', 'correction')
+                    ->whereRaw("({$quantity}) > 0")
+                    ->selectRaw(
+                        '-((i.id * 2) + ?) as id, i.product_id, p.sku, p.name as product_name, '.
+                        "NULL as batch_id, NULL as batch_code, NULL as expiry_date, 'adjustment' as movement_type, ".
+                        "{$quantity} as qty, i.unit_cost_snapshot as unit_cost, ".
+                        'NULL as from_location_id, NULL as from_position_id, NULL as from_bucket, '.
+                        'NULL as to_location_id, NULL as to_position_id, NULL as to_bucket, '.
+                        "'stock_opname' as ref_type, os.id as ref_id, os.posted_at as occurred_at, ".
+                        'os.posted_by as created_by, u.name as created_by_name, os.number as opname_number, '.
+                        "'correction' as reconciliation_action, '{$direction}' as movement_direction",
+                        [$idOffset],
+                    );
+            };
+            $events = $events
+                ->unionAll($correctionEvents('in', $incomingQty))
+                ->unionAll($correctionEvents('out', $outgoingQty));
+        }
+
+        $query = DB::query()->fromSub($events, 'm')
+            ->orderByDesc('m.occurred_at')
+            ->orderByDesc('m.id');
         if (! empty($filters['product_id'])) {
             $query->where('m.product_id', (int) $filters['product_id']);
         }
@@ -1548,10 +1630,14 @@ class InventoryService
                 'to_bucket' => $row->to_bucket,
                 'ref_type' => $row->ref_type,
                 'ref_id' => (int) $row->ref_id,
-                'ref_label' => $row->opname_number === null ? "{$row->ref_type} #{$row->ref_id}" : 'Opname '.$row->opname_number,
+                'ref_label' => $row->opname_number === null
+                    ? "{$row->ref_type} #{$row->ref_id}"
+                    : 'Opname '.$row->opname_number,
                 'occurred_at' => $row->occurred_at,
                 'created_by' => $row->created_by === null ? null : (int) $row->created_by,
                 'created_by_name' => $row->created_by_name,
+                'reconciliation_action' => $row->reconciliation_action,
+                'movement_direction' => $row->movement_direction,
             ];
         });
     }

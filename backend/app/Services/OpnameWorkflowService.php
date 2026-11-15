@@ -324,6 +324,7 @@ class OpnameWorkflowService
             ->lockForUpdate()
             ->get([
                 'i.id', 'i.product_id', 'i.counted_qty', 'i.system_qty_at_count',
+                'i.diff_qty',
                 'i.counted_good_qty', 'i.counted_damaged_qty',
                 'i.system_good_qty_at_count', 'i.system_damaged_qty_at_count',
                 'i.diff_good_qty', 'i.diff_damaged_qty',
@@ -530,7 +531,10 @@ class OpnameWorkflowService
         );
         foreach ($lines as $line) {
             DB::table('stock_opname_items')->where('id', $line['item_id'])
-                ->update(['stock_movement_id' => $movements[$line['product_id']]]);
+                ->update([
+                    'stock_movement_id' => $movements[$line['product_id']],
+                    'reconciliation_action' => DB::raw("COALESCE(reconciliation_action, 'write_off')"),
+                ]);
         }
 
         return array_column($lines, 'product_id');
@@ -576,6 +580,7 @@ class OpnameWorkflowService
             if ($action === 'correction') {
                 $updates += [
                     'counted_qty' => $item->system_qty_at_count,
+                    'reconciliation_diff_qty' => $item->diff_qty,
                     'diff_qty' => '0.000',
                     'diff_value' => '0.00',
                 ];
@@ -583,6 +588,8 @@ class OpnameWorkflowService
                     $updates += [
                         'counted_good_qty' => $item->system_good_qty_at_count,
                         'counted_damaged_qty' => $item->system_damaged_qty_at_count,
+                        'reconciliation_diff_good_qty' => $item->diff_good_qty,
+                        'reconciliation_diff_damaged_qty' => $item->diff_damaged_qty,
                         'diff_good_qty' => '0.000',
                         'diff_damaged_qty' => '0.000',
                     ];

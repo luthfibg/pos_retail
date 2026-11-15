@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { formatDate, formatDateTime, formatQty, formatRupiah } from '@/lib/format';
+import { RECONCILIATION_LABEL } from './movementLabels';
 
 export function ProductStockDialog({ product, onClose }: { product: Product; onClose: () => void }) {
   const { can } = useAuth();
@@ -62,12 +63,16 @@ export function ProductStockDialog({ product, onClose }: { product: Product; onC
                         <th className="px-3 py-2" rowSpan={2}>Kedaluwarsa</th>
                         <th className="px-3 py-2 text-center" colSpan={2}>Masuk</th>
                         <th className="px-3 py-2 text-center" colSpan={2}>Keluar</th>
+                        <th className="px-3 py-2 text-center" colSpan={3}>Rekonsiliasi opname</th>
                       </tr>
                       <tr>
                         <th className="px-3 py-2 text-right">Barang bagus</th>
                         <th className="px-3 py-2 text-right">Barang rusak</th>
                         <th className="px-3 py-2 text-right">Retur</th>
                         <th className="px-3 py-2 text-right">Penjualan</th>
+                        <th className="px-3 py-2">Tindakan</th>
+                        <th className="px-3 py-2 text-right">Masuk</th>
+                        <th className="px-3 py-2 text-right">Keluar</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -79,6 +84,17 @@ export function ProductStockDialog({ product, onClose }: { product: Product; onC
                           <td className="px-3 py-2 text-right tabular-nums">{formatQty(movement.damaged_in)}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatQty(movement.return_out)}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatQty(movement.sale_out)}</td>
+                          <td className="px-3 py-2">
+                            {movement.reconciliation_action
+                              ? RECONCILIATION_LABEL[movement.reconciliation_action]
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {movement.reconciliation_action ? formatQty(movement.reconciliation_in) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {movement.reconciliation_action ? formatQty(movement.reconciliation_out) : '—'}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

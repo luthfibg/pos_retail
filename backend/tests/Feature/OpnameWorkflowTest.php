@@ -231,9 +231,14 @@ class OpnameWorkflowTest extends SeededTestCase
         ]);
         $writeOffProduct = $this->product(['category_id' => $categoryId, 'unit_cost' => '1000.0000']);
         $correctionProduct = $this->product(['category_id' => $categoryId, 'unit_cost' => '1000.0000']);
+        $correctionOverProduct = $this->product(['category_id' => $categoryId, 'unit_cost' => '1000.0000']);
         $locationId = (int) DB::table('locations')->where('store_id', $this->storeId())
             ->where('type', 'store_floor')->where('is_active', 1)->value('id');
-        foreach ([$writeOffProduct => '10.000', $correctionProduct => '20.000'] as $productId => $systemQty) {
+        foreach ([
+            $writeOffProduct => '10.000',
+            $correctionProduct => '20.000',
+            $correctionOverProduct => '8.000',
+        ] as $productId => $systemQty) {
             DB::table('inventory_balances')->insert([
                 'product_id' => $productId,
                 'location_id' => $locationId,
@@ -248,7 +253,11 @@ class OpnameWorkflowTest extends SeededTestCase
             'client_request_id' => fake()->uuid(),
         ])->assertCreated()->json('data.id');
         $items = DB::table('stock_opname_items')->where('session_id', $sessionId)->get()->keyBy('product_id');
-        foreach ([$writeOffProduct => 11, $correctionProduct => 16] as $productId => $quantity) {
+        foreach ([
+            $writeOffProduct => 11,
+            $correctionProduct => 16,
+            $correctionOverProduct => 10,
+        ] as $productId => $quantity) {
             $item = $items->get($productId);
             $this->postJson("/api/stock-opname-sessions/{$sessionId}/counts", [
                 'item_id' => $item->id,
@@ -264,9 +273,11 @@ class OpnameWorkflowTest extends SeededTestCase
 
         $writeOffItemId = (int) $items->get($writeOffProduct)->id;
         $correctionItemId = (int) $items->get($correctionProduct)->id;
+        $correctionOverItemId = (int) $items->get($correctionOverProduct)->id;
         $reconciliations = [
             ['item_id' => $writeOffItemId, 'action' => 'write_off'],
             ['item_id' => $correctionItemId, 'action' => 'correction'],
+            ['item_id' => $correctionOverItemId, 'action' => 'correction'],
         ];
         $owner = $this->owner('owner-reconciliation');
         Sanctum::actingAs($owner, ['*']);
@@ -282,6 +293,7 @@ class OpnameWorkflowTest extends SeededTestCase
         ])->assertUnprocessable()->assertJsonValidationErrors(['owner_password']);
         $this->assertSame(10.0, (float) DB::table('inventory_balances')->where('product_id', $writeOffProduct)->sum('qty_sellable'));
         $this->assertSame(20.0, (float) DB::table('inventory_balances')->where('product_id', $correctionProduct)->sum('qty_sellable'));
+        $this->assertSame(8.0, (float) DB::table('inventory_balances')->where('product_id', $correctionOverProduct)->sum('qty_sellable'));
         $this->assertSame(0, DB::table('inventory_movements')->where('ref_type', 'stock_opname')->where('ref_id', $sessionId)->count());
 
         $this->postJson("/api/stock-opname-sessions/{$sessionId}/approve", [
@@ -292,6 +304,7 @@ class OpnameWorkflowTest extends SeededTestCase
 
         $this->assertSame(11.0, (float) DB::table('inventory_balances')->where('product_id', $writeOffProduct)->sum('qty_sellable'));
         $this->assertSame(20.0, (float) DB::table('inventory_balances')->where('product_id', $correctionProduct)->sum('qty_sellable'));
+        $this->assertSame(8.0, (float) DB::table('inventory_balances')->where('product_id', $correctionOverProduct)->sum('qty_sellable'));
         $this->assertSame(1, DB::table('inventory_movements')->where('ref_type', 'stock_opname')->where('ref_id', $sessionId)->count());
         $this->assertDatabaseHas('stock_opname_items', [
             'id' => $writeOffItemId,
@@ -305,10 +318,38 @@ class OpnameWorkflowTest extends SeededTestCase
             'counted_qty' => '20.000',
             'diff_qty' => '0.000',
             'diff_value' => '0.00',
+            'reconciliation_diff_qty' => '-4.000',
+        ]);
+        $this->assertDatabaseHas('stock_opname_items', [
+            'id' => $correctionOverItemId,
+            'reconciliation_action' => 'correction',
+            'counted_qty' => '8.000',
+            'reconciliation_diff_qty' => '2.000',
         ]);
         $this->getJson("/api/stock-opname-sessions/{$sessionId}/report")
             ->assertOk()->assertJsonPath('data.totals.variance_products', 1)
             ->assertJsonPath('data.categories.0.lines.0.reconciliation_action', 'write_off');
+        $this->getJson("/api/inventory/products/{$writeOffProduct}/stock-movements")
+            ->assertOk()->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.reconciliation_action', 'write_off')
+            ->assertJsonPath('data.0.reconciliation_in', '1.000')
+            ->assertJsonPath('data.0.reconciliation_out', '0.000');
+        $this->getJson("/api/inventory/products/{$correctionProduct}/stock-movements")
+            ->assertOk()->assertJsonPath('data.0.reconciliation_action', 'correction')
+            ->assertJsonPath('data.0.reconciliation_out', '4.000');
+        $this->getJson("/api/inventory/products/{$correctionOverProduct}/stock-movements")
+            ->assertOk()->assertJsonPath('data.0.reconciliation_action', 'correction')
+            ->assertJsonPath('data.0.reconciliation_in', '2.000');
+        $this->getJson("/api/inventory/movements?product_id={$writeOffProduct}&include_opname_reconciliations=true")
+            ->assertOk()->assertJsonPath('data.0.reconciliation_action', 'write_off');
+        $this->getJson("/api/inventory/movements?product_id={$correctionProduct}&include_opname_reconciliations=true")
+            ->assertOk()->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.reconciliation_action', 'correction')
+            ->assertJsonPath('data.0.movement_direction', 'out')
+            ->assertJsonPath('data.0.qty', '4.000');
+        $this->getJson("/api/inventory/movements?product_id={$correctionOverProduct}&include_opname_reconciliations=true")
+            ->assertOk()->assertJsonPath('data.0.movement_direction', 'in')
+            ->assertJsonPath('data.0.qty', '2.000');
         $approval = DB::table('stock_opname_approvals')->where('session_id', $sessionId)->where('action', 'approved')->first();
         $this->assertStringContainsString('"correction"', $approval->note);
     }

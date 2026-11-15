@@ -9,7 +9,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { inputCls } from '@/components/ui/Field';
 import { ProductPicker } from '@/features/products/ProductPicker';
 import { formatDate, formatDateTime, formatQty, formatRupiah } from '@/lib/format';
-import { MOVEMENT_LABEL, bucketLabel, directionOf } from './movementLabels';
+import { MOVEMENT_LABEL, RECONCILIATION_LABEL, bucketLabel, directionOf } from './movementLabels';
 
 const DIRECTION_TEXT = { in: 'Masuk', out: 'Keluar', move: 'Pindah' } as const;
 const DIRECTION_CLS = {
@@ -47,6 +47,7 @@ export function MovementsPage() {
         movement_type: type || undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
+        include_opname_reconciliations: true,
         page,
       }),
     enabled: !rangeInvalid,
@@ -125,8 +126,11 @@ export function MovementsPage() {
                 <tr key={m.id}>
                   <td className="whitespace-nowrap px-3 py-2">{formatDateTime(m.occurred_at)}</td>
                   <td className="px-3 py-2">
-                    {MOVEMENT_LABEL[m.movement_type] ?? m.movement_type}
+                    {m.reconciliation_action
+                      ? `Rekonsiliasi: ${RECONCILIATION_LABEL[m.reconciliation_action]}`
+                      : MOVEMENT_LABEL[m.movement_type] ?? m.movement_type}
                     {m.ref_type && m.ref_id !== null && <div className="text-xs text-slate-400">{m.ref_label ?? `${m.ref_type} #${m.ref_id}`}</div>}
+                    {m.reconciliation_action === 'correction' && <div className="text-xs text-slate-500">Tanpa perubahan saldo</div>}
                   </td>
                   <td className="px-3 py-2">
                     {m.product_name}
@@ -137,7 +141,11 @@ export function MovementsPage() {
                     {m.expiry_date && <div className="text-xs text-slate-400">Exp {formatDate(m.expiry_date)}</div>}
                   </td>
                   <td className={`px-3 py-2 ${DIRECTION_CLS[dir]}`}>
-                    <span className="font-medium">{DIRECTION_TEXT[dir]}</span>
+                    <span className="font-medium">
+                      {m.reconciliation_action === 'correction'
+                        ? dir === 'in' ? 'Selisih lebih' : 'Selisih kurang'
+                        : DIRECTION_TEXT[dir]}
+                    </span>
                     <div className="text-xs">
                       {dir === 'in' && bucketLabel(m.to_bucket)}
                       {dir === 'out' && bucketLabel(m.from_bucket)}

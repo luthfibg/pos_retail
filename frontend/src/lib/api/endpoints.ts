@@ -500,6 +500,7 @@ export interface MovementFilters {
   movement_type?: MovementType;
   date_from?: string; // YYYY-MM-DD (WIB)
   date_to?: string;
+  include_opname_reconciliations?: boolean;
   page?: number;
   per_page?: number;
 }

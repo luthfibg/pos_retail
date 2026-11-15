@@ -454,7 +454,7 @@ export function OpnameProcessPage() {
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
             <button type="button" disabled={pending} onClick={() => setDialog(null)} className="min-h-11 rounded-md border border-slate-300 px-4">Kembali</button>
             <button type="button" disabled={confirmDisabled} onClick={confirm} className="min-h-11 rounded-md bg-slate-900 px-5 font-medium text-white disabled:opacity-50">
-              {pending ? '…' : dialog === 'finish' ? 'Selesai' : dialog === 'cancel' ? 'Batalkan' : dialog === 'authorize_reconciliation' ? 'Setujui & Terapkan' : 'Lanjutkan'}
+              {pending ? '…' : dialog === 'finish' ? 'Selesai' : dialog === 'cancel' ? 'Batalkan' : dialog === 'authorize_reconciliation' ? 'Setujui' : 'Lanjutkan'}
             </button>
           </div>
         </Modal>
