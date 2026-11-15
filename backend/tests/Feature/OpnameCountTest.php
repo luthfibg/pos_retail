@@ -414,7 +414,7 @@ class OpnameCountTest extends SeededTestCase
         ]);
         $sessionId = $this->startAll();
 
-        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?include_sources=1")
+        $this->getJson("/api/stock-opname-sessions/{$sessionId}/items?include_sources=true")
             ->assertOk()
             ->assertJsonPath('data.0.sku', DB::table('products')->where('id', $productId)->value('sku'))
             ->assertJsonPath('data.0.source_receipts.0.po_number', DB::table('purchase_orders')->where('id', $poId)->value('doc_number'))

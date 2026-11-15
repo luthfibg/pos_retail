@@ -268,7 +268,7 @@ class OpnameSessionController extends Controller
             'q' => ['sometimes', 'nullable', 'string', 'min:2', 'max:120'],
             'only_uncounted' => ['sometimes', 'in:0,1,false,true'],
             'only_counted' => ['sometimes', 'in:0,1,false,true'],
-            'include_sources' => ['sometimes', 'boolean'],
+            'include_sources' => ['sometimes', 'in:0,1,false,true'],
             'sort' => ['sometimes', 'in:-counted_at'],
             'exclude_item_ids' => ['sometimes', 'array', 'max:10'],
             'exclude_item_ids.*' => ['integer', 'min:1'],
