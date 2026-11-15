@@ -14,13 +14,11 @@ import {
   supplierReturnApi,
 } from '@/lib/api/endpoints';
 import type {
-  ApprovalAuthMode,
   ProductSupplier,
   SupplierReturn,
-  SupplierReturnStatus,
 } from '@/lib/api/types';
-import { formatDate, formatDateTime, formatQty, formatRupiah } from '@/lib/format';
-import { availableReturnQty, buildSupplierReturnInput, buildSupplierReturnItems, validateSupplierReturn, type SupplierReturnLine } from './supplierReturnForm';
+import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
+import { availableReturnQty, buildSupplierReturnInput, validateSupplierReturn, type SupplierReturnLine } from './supplierReturnForm';
 import { sharedActiveSuppliers } from '@/features/products/productForm';
 
 type InitialReturnProduct = ProductOption & { suppliers: ProductSupplier[] };
@@ -28,24 +26,9 @@ type InitialReturnDraft = {
   qty: string;
 };
 
-const STATUS_LABEL: Record<SupplierReturnStatus, string> = {
-  draft: 'Draft',
-  submitted: 'Menunggu keputusan supplier',
-  accepted: 'Disetujui supplier',
-  rejected: 'Ditolak supplier',
-  replacement_received: 'Barang pengganti diterima',
-  written_off: 'Sudah write-off',
-  cancelled: 'Dibatalkan',
-};
-function sumQty(left: string | null, right: string | null): string {
-  return (Number(left ?? 0) + Number(right ?? 0)).toFixed(3);
-}
-const RETURN_STATUSES = Object.keys(STATUS_LABEL) as SupplierReturnStatus[];
-
 export function SupplierReturnsPage() {
   const { can } = useAuth();
   const canCreate = can('supplier_return.create');
-  const canWriteOff = can('inventory.adjust.approve');
   const [searchParams, setSearchParams] = useSearchParams();
   const [initialProductIds] = useState(() => [...new Set(
     (searchParams.get('products') ?? '')
@@ -55,11 +38,13 @@ export function SupplierReturnsPage() {
   )]);
   const [queryInput, setQueryInput] = useState('');
   const [queryText, setQueryText] = useState('');
-  const [status, setStatus] = useState<SupplierReturnStatus | ''>('');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(() => canCreate && searchParams.get('create') === '1'
     && initialProductIds.length > 0);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(() => {
+    const id = Number(searchParams.get('return_id'));
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  });
 
   const initialProductQueries = useQueries({
     queries: initialProductIds.map((id) => ({
@@ -87,15 +72,16 @@ export function SupplierReturnsPage() {
   useEffect(() => {
     if ((initialProductIds.length > 0
       && (searchParams.has('create') || searchParams.has('products')))
-      || searchParams.has('gr_id')) {
+      || searchParams.has('gr_id')
+      || searchParams.has('return_id')) {
       setSearchParams({}, { replace: true });
     }
   }, [initialProductIds.length, searchParams, setSearchParams]);
 
   const returns = useQuery({
-    queryKey: ['supplier-returns', { queryText, status }],
+    queryKey: ['supplier-returns', { queryText }],
     queryFn: async () => {
-      const filters = { q: queryText || undefined, status: status || undefined, per_page: 100 };
+      const filters = { q: queryText || undefined, per_page: 100 };
       const firstPage = await supplierReturnApi.list({ ...filters, page: 1 });
       const otherPages = await Promise.all(Array.from(
         { length: firstPage.last_page - 1 },
@@ -136,12 +122,6 @@ export function SupplierReturnsPage() {
           <Field label="Nomor dokumen">
             <input className={`${inputCls} w-52`} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="RET-…" />
           </Field>
-          <Field label="Status">
-            <select className={`${inputCls} w-56`} value={status} onChange={(event) => { setStatus(event.target.value as SupplierReturnStatus | ''); setPage(1); }}>
-              <option value="">Semua status</option>
-              {RETURN_STATUSES.map((value) => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
-            </select>
-          </Field>
           <button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm">Terapkan</button>
         </form>
 
@@ -151,30 +131,23 @@ export function SupplierReturnsPage() {
         {returns.data && returnItems.length > 0 && (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[650px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-3 py-2">Nomor retur</th>
                     <th className="px-3 py-2">Supplier</th>
-                    <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Pemohon</th>
                     <th className="px-3 py-2">Dibuat</th>
-                    {canWriteOff && <th className="px-3 py-2 text-right">Nilai rugi</th>}
                     <th className="px-3 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {pageItems.map((item) => (
                     <tr key={item.id}>
-                      <td className="px-3 py-2 font-mono font-medium">
-                        {item.doc_number}
-                        {item.is_auto_generated && item.status === 'draft' && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 font-sans text-xs font-medium text-blue-800">Retur baru</span>}
-                      </td>
+                      <td className="px-3 py-2 font-mono font-medium">{item.doc_number}</td>
                       <td className="px-3 py-2">{item.supplier_name}</td>
-                      <td className="px-3 py-2">{STATUS_LABEL[item.status]}</td>
                       <td className="px-3 py-2">{item.requested_by_name}</td>
                       <td className="px-3 py-2">{formatDateTime(item.created_at)}</td>
-                      {canWriteOff && <td className="px-3 py-2 text-right">{item.loss_amount ? formatRupiah(item.loss_amount) : '—'}</td>}
                       <td className="px-3 py-2 text-right">
                         <button type="button" onClick={() => setSelectedId(item.id)} className="font-medium text-blue-700 hover:underline">Detail</button>
                       </td>
@@ -215,10 +188,7 @@ export function SupplierReturnsPage() {
       {selectedId !== null && (
         <SupplierReturnDetailDialog
           returnId={selectedId}
-          canCreate={canCreate}
-          canWriteOff={canWriteOff}
           onClose={() => setSelectedId(null)}
-          onChanged={() => { void returns.refetch(); }}
         />
       )}
     </>
@@ -249,7 +219,6 @@ function SupplierReturnCreateDialog({
   const [supplierId, setSupplierId] = useState<number | null>(null);
   const [initialDrafts, setInitialDrafts] = useState<Record<number, InitialReturnDraft>>({});
   const [initialSupplierApplied, setInitialSupplierApplied] = useState(false);
-  const [mergeReturnId, setMergeReturnId] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<{ general?: string; rows: Record<number, string> }>({ rows: {} });
 
@@ -265,25 +234,6 @@ function SupplierReturnCreateDialog({
     qty: initialDrafts[selectedProduct.id]?.qty ?? '',
     available: initialStockQueries[index]?.data ? availableReturnQty(initialStockQueries[index]!.data!) : '0.000',
   }));
-  const mergeCandidates = useQuery({
-    queryKey: ['supplier-returns', 'merge-candidates', supplierId],
-    queryFn: async () => {
-      const filters = {
-        return_type: 'outgoing' as const,
-        status: 'draft' as const,
-        supplier_id: supplierId!,
-        per_page: 100,
-      };
-      const firstPage = await supplierReturnApi.list({ ...filters, page: 1 });
-      const otherPages = await Promise.all(Array.from(
-        { length: firstPage.last_page - 1 },
-        (_, index) => supplierReturnApi.list({ ...filters, page: index + 2 }),
-      ));
-
-      return [...firstPage.data, ...otherPages.flatMap((page) => page.data)];
-    },
-    enabled: supplierId !== null && hasInitialSelection,
-  });
   const validation = validateSupplierReturn(supplierId, outgoingRows, note);
   const outgoingReady = supplierId !== null
     && outgoingRows.length > 0
@@ -298,10 +248,6 @@ function SupplierReturnCreateDialog({
     }
   }, [initialProductSuppliers, initialProductsLoading, initialSupplierApplied]);
 
-  useEffect(() => {
-    setMergeReturnId(null);
-  }, [supplierId]);
-
   const create = useMutation({
     mutationFn: () => {
       const selectedSupplier = supplierId;
@@ -313,23 +259,9 @@ function SupplierReturnCreateDialog({
         queryClient.invalidateQueries({ queryKey: ['supplier-returns'] }),
         queryClient.invalidateQueries({ queryKey: ['inventory'] }),
         queryClient.invalidateQueries({ queryKey: ['products'] }),
+        queryClient.invalidateQueries({ queryKey: ['purchase-requisitions'] }),
       ]);
       onCreated(created);
-    },
-  });
-
-  const merge = useMutation({
-    mutationFn: () => {
-      if (mergeReturnId === null || supplierId === null) throw new Error('Pilih draft retur yang akan digabung.');
-      return supplierReturnApi.merge(mergeReturnId, buildSupplierReturnItems(outgoingRows));
-    },
-    onSuccess: async (updated) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['supplier-returns'] }),
-        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
-        queryClient.invalidateQueries({ queryKey: ['products'] }),
-      ]);
-      onCreated(updated);
     },
   });
 
@@ -350,12 +282,12 @@ function SupplierReturnCreateDialog({
     if (outgoingReady) create.mutate();
   }
 
-  const close = () => { if (!create.isPending && !merge.isPending) onClose(); };
+  const close = () => { if (!create.isPending) onClose(); };
 
   return (
     <Modal title="Buat Retur Barang" onClose={close}>
       <form onSubmit={submit} className="space-y-4 p-5">
-        <ErrorNotice error={initialProductsError ?? mergeCandidates.error ?? create.error ?? merge.error} />
+        <ErrorNotice error={initialProductsError ?? create.error} />
         {errors.general && <p role="alert" className="text-sm text-red-700">{errors.general}</p>}
         {initialProductsIncomplete && !initialProductsLoading && !initialProductsError && (
           <p role="alert" className="text-sm text-red-700">Data produk retur tidak lengkap. Kembali ke master produk dan pilih ulang.</p>
@@ -420,20 +352,6 @@ function SupplierReturnCreateDialog({
                 </section>
               );
             })}
-            {mergeCandidates.data && mergeCandidates.data.length > 0 && (
-              <Field label="Gabungkan ke draft retur yang sudah ada">
-                <select
-                  className={inputCls}
-                  value={mergeReturnId ?? ''}
-                  onChange={(event) => setMergeReturnId(event.target.value ? Number(event.target.value) : null)}
-                >
-                  <option value="">Pilih draft retur</option>
-                  {mergeCandidates.data.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>{candidate.doc_number} · {formatDateTime(candidate.created_at)}</option>
-                  ))}
-                </select>
-              </Field>
-            )}
           </div>
         )}
         {hasInitialSelection && (
@@ -441,25 +359,16 @@ function SupplierReturnCreateDialog({
             <Field label="Catatan" hint="Maksimal 500 karakter">
               <textarea className={inputCls} rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
             </Field>
+            <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-900">Retur akan langsung mengurangi stok dan membuat PR otomatis sesuai jumlah retur.</p>
             <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
-              <button type="button" onClick={close} disabled={create.isPending || merge.isPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
+                <button type="button" onClick={close} disabled={create.isPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
               <button
                 type="submit"
-                disabled={!outgoingReady || create.isPending || merge.isPending || initialProductsLoading || Boolean(initialProductsError) || initialProductsIncomplete || initialProductSuppliers.length === 0}
+                  disabled={!outgoingReady || create.isPending || initialProductsLoading || Boolean(initialProductsError) || initialProductsIncomplete || initialProductSuppliers.length === 0}
                 className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
-                {create.isPending ? 'Menyimpan…' : 'Simpan Draft Baru'}
-              </button>
-              {mergeCandidates.data && mergeCandidates.data.length > 0 && (
-                <button
-                  type="button"
-                  disabled={!outgoingReady || mergeReturnId === null || merge.isPending || create.isPending || initialProductsLoading || Boolean(initialProductsError) || initialProductsIncomplete}
-                  onClick={() => merge.mutate()}
-                  className="rounded-md border border-blue-700 px-3 py-2 text-sm font-medium text-blue-700 disabled:opacity-50"
-                >
-                  {merge.isPending ? 'Menggabungkan…' : 'Gabungkan retur'}
+                  {create.isPending ? 'Memproses…' : 'Buat Retur'}
                 </button>
-              )}
             </div>
           </>
         )}
@@ -468,371 +377,73 @@ function SupplierReturnCreateDialog({
   );
 }
 
-type DetailAction = 'decision' | 'replacement' | 'writeoff' | null;
-
-function SupplierReturnDetailDialog({
-  returnId,
-  canCreate,
-  canWriteOff,
-  onClose,
-  onChanged,
-}: {
-  returnId: number;
-  canCreate: boolean;
-  canWriteOff: boolean;
-  onClose: () => void;
-  onChanged: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
+function SupplierReturnDetailDialog({ returnId, onClose }: { returnId: number; onClose: () => void }) {
   const { me } = useAuth();
-  const [action, setAction] = useState<DetailAction>(null);
-  const [decision, setDecision] = useState<'accept' | 'reject'>('accept');
-  const [decisionNote, setDecisionNote] = useState('');
-  const [replacementForm, setReplacementForm] = useState<Record<number, { expiryDate: string; batchCode: string }>>({});
-  const [approverUsername, setApproverUsername] = useState('');
-  const [approverPassword, setApproverPassword] = useState('');
-  const [approverKey, setApproverKey] = useState('');
-  const [writeOffNote, setWriteOffNote] = useState('');
-  const approvalMode: ApprovalAuthMode = me?.approval_auth_mode ?? 'password';
-
   const detail = useQuery({
     queryKey: ['supplier-return', returnId],
     queryFn: () => supplierReturnApi.get(returnId),
   });
-  const productDetails = useQueries({
-    queries: (detail.data?.items ?? []).map((item) => ({
-      queryKey: ['products', 'detail', item.product_id],
-      queryFn: () => productApi.get(item.product_id),
-      enabled: action === 'replacement',
-    })),
-  });
-
-  const refresh = async (updated: SupplierReturn) => {
-    queryClient.setQueryData(['supplier-return', returnId], updated);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['supplier-returns'] }),
-      queryClient.invalidateQueries({ queryKey: ['inventory'] }),
-      queryClient.invalidateQueries({ queryKey: ['products'] }),
-    ]);
-    setAction(null);
-    setApproverPassword('');
-    setApproverKey('');
-    onChanged();
-  };
-  const submitReturn = useMutation({ mutationFn: () => supplierReturnApi.submit(returnId), onSuccess: refresh });
-  const cancelReturn = useMutation({
-    mutationFn: () => supplierReturnApi.cancel(returnId, decisionNote.trim() || undefined),
-    onSuccess: refresh,
-  });
-  const decide = useMutation({
-    mutationFn: () => supplierReturnApi.supplierDecision(returnId, decision, decisionNote.trim() || undefined),
-    onSuccess: refresh,
-  });
-  const receiveReplacement = useMutation({
-    mutationFn: (current: SupplierReturn) => supplierReturnApi.receiveReplacement(returnId, current.items.map((item) => {
-      const values = replacementForm[item.id] ?? { expiryDate: item.expiry_date ?? '', batchCode: '' };
-      return {
-        return_item_id: item.id,
-        ...(values.expiryDate ? { expiry_date: values.expiryDate } : {}),
-        ...(values.batchCode.trim() ? { batch_code: values.batchCode.trim() } : {}),
-      };
-    })),
-    onSuccess: async (updated) => {
-      await refresh(updated);
-      const nextReceipt = updated.replacement_goods_receipts?.[0];
-      navigate(nextReceipt ? `/goods-receipts?gr_id=${nextReceipt.id}` : '/goods-receipts');
-    },
-  });
-  const writeOff = useMutation({
-    mutationFn: () => supplierReturnApi.writeOff(returnId, {
-      approver_username: approverUsername.trim(),
-      ...(approvalMode !== 'key' ? { approver_password: approverPassword } : {}),
-      ...(approvalMode !== 'password' ? { approver_key: approverKey } : {}),
-      note: writeOffNote.trim() || undefined,
-    }),
-    onSuccess: (updated) => {
-      setApproverUsername('');
-      setWriteOffNote('');
-      return refresh(updated);
-    },
-    onSettled: () => {
-      setApproverPassword('');
-      setApproverKey('');
-    },
-  });
-
-  function replaceValue(itemId: number, patch: Partial<{ expiryDate: string; batchCode: string }>) {
-    setReplacementForm((current) => ({
-      ...current,
-      [itemId]: {
-        ...current[itemId],
-        expiryDate: current[itemId]?.expiryDate ?? '',
-        batchCode: current[itemId]?.batchCode ?? '',
-        ...patch,
-      },
-    }));
-  }
-  const close = () => {
-    if ([submitReturn, cancelReturn, decide, receiveReplacement, writeOff].some((mutation) => mutation.isPending)) return;
-    onClose();
-  };
-  const anyPending = submitReturn.isPending || cancelReturn.isPending || decide.isPending || receiveReplacement.isPending || writeOff.isPending;
-  const actionError = submitReturn.error ?? cancelReturn.error ?? decide.error ?? receiveReplacement.error ?? writeOff.error;
   const returnDoc = detail.data;
-  const needsPassword = approvalMode !== 'key';
-  const needsKey = approvalMode !== 'password';
-  const reauthReady = approverUsername.trim().length > 0
-    && (!needsPassword || approverPassword.length > 0)
-    && (!needsKey || approverKey.length > 0);
-  const replacementReady = returnDoc?.items.every((item, index) => {
-    const trackExpiry = productDetails[index]?.data?.track_expiry ?? item.expiry_date !== null;
-    const values = replacementForm[item.id] ?? { expiryDate: '', batchCode: '' };
-    return !trackExpiry || values.expiryDate !== '';
-  }) ?? false;
+
+  if (!returnDoc) {
+    return (
+      <Modal title="Detail retur supplier" onClose={onClose}>
+        <div className="space-y-4 p-5">
+          <ErrorNotice error={detail.error} />
+          {detail.isLoading && <p className="text-sm text-slate-500">Memuat detail retur…</p>}
+          <div className="flex justify-end border-t border-slate-100 pt-3">
+            <button type="button" onClick={onClose} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Tutup</button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <>
-      <Modal title={returnDoc ? `Retur ${returnDoc.doc_number}` : 'Detail retur supplier'} onClose={close}>
-      <div className="space-y-4 p-5">
-        <ErrorNotice error={detail.error ?? actionError} />
-        {detail.isLoading && <p className="text-sm text-slate-500">Memuat detail retur…</p>}
-        {returnDoc && (
-          <>
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <p><span className="text-slate-500">Supplier:</span> {returnDoc.supplier_name}</p>
-              <p><span className="text-slate-500">Status:</span> {STATUS_LABEL[returnDoc.status]}</p>
-              {returnDoc.is_auto_generated && returnDoc.status === 'draft' && <p><span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Retur baru</span></p>}
-              {returnDoc.goods_receipt_doc_number && <p><span className="text-slate-500">GR asal:</span> {returnDoc.goods_receipt_doc_number}</p>}
-              {returnDoc.invoice_no && <p><span className="text-slate-500">Faktur supplier:</span> {returnDoc.invoice_no}</p>}
-              <p><span className="text-slate-500">Pemohon:</span> {returnDoc.requested_by_name}</p>
-              <p><span className="text-slate-500">Dibuat:</span> {formatDateTime(returnDoc.created_at)}</p>
-              {returnDoc.submitted_at && <p><span className="text-slate-500">Diajukan:</span> {formatDateTime(returnDoc.submitted_at)}</p>}
-              {returnDoc.decided_by_name && <p><span className="text-slate-500">Diputus oleh:</span> {returnDoc.decided_by_name}</p>}
-              {returnDoc.decided_at && <p><span className="text-slate-500">Waktu keputusan:</span> {formatDateTime(returnDoc.decided_at)}</p>}
-              {canWriteOff && returnDoc.loss_amount && <p><span className="text-slate-500">Nilai rugi HPP:</span> {formatRupiah(returnDoc.loss_amount)}</p>}
-              {returnDoc.approved_by_name && <p><span className="text-slate-500">Write-off disetujui:</span> {returnDoc.approved_by_name}</p>}
-            </div>
-            {(returnDoc.note || returnDoc.decision_note) && (
-              <div className="space-y-1 rounded-md bg-slate-50 p-3 text-sm">
-                {returnDoc.note && <p><span className="font-medium">Catatan:</span> {returnDoc.note}</p>}
-                {returnDoc.decision_note && <p><span className="font-medium">Catatan keputusan supplier:</span> {returnDoc.decision_note}</p>}
-              </div>
-            )}
-            <div className="overflow-x-auto rounded-md border border-slate-200">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Produk</th>
-                    <th className="px-3 py-2">PO asal / lokasi / batch</th>
-                    <th className="px-3 py-2">Rincian barang</th>
-                    <th className="px-3 py-2 text-right">Jumlah retur</th>
-                    <th className="px-3 py-2 text-right">Harga Modal</th>
-                    <th className="px-3 py-2">Barang pengganti</th>
+      <Modal title={`Retur ${returnDoc.doc_number}`} onClose={onClose}>
+        <div className="space-y-4 p-5">
+          <ErrorNotice error={detail.error} />
+          <div className="grid gap-2 text-sm sm:grid-cols-2">
+            <p><span className="text-slate-500">Supplier:</span> {returnDoc.supplier_name}</p>
+            {returnDoc.goods_receipt_doc_number && <p><span className="text-slate-500">GR asal:</span> {returnDoc.goods_receipt_doc_number}</p>}
+            {returnDoc.invoice_no && <p><span className="text-slate-500">Faktur supplier:</span> {returnDoc.invoice_no}</p>}
+            <p><span className="text-slate-500">Pemohon:</span> {returnDoc.requested_by_name}</p>
+            <p><span className="text-slate-500">Dibuat:</span> {formatDateTime(returnDoc.created_at)}</p>
+          </div>
+          {returnDoc.note && <p className="rounded-md bg-slate-50 p-3 text-sm">Catatan: {returnDoc.note}</p>}
+          <div className="overflow-x-auto rounded-md border border-slate-200">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Produk</th>
+                  <th className="px-3 py-2">PO asal / lokasi / batch</th>
+                  <th className="px-3 py-2 text-right">Jumlah retur</th>
+                  <th className="px-3 py-2 text-right">Harga Satuan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {returnDoc.items.map((item) => (
+                  <tr key={item.id}>
+                    <td className="px-3 py-2">{item.product_name}<span className="block font-mono text-xs text-slate-500">{item.sku}</span></td>
+                    <td className="px-3 py-2">{item.source_po_doc_number ?? 'PO tidak tercatat'}<span className="block text-xs text-slate-500">{item.location_name} · {item.batch_code ?? 'Tanpa batch'}{item.shelf_position ? ` · ${item.shelf_position}` : ''}</span></td>
+                    <td className="px-3 py-2 text-right">{formatQty(item.qty)} {item.unit_name}</td>
+                    <td className="px-3 py-2 text-right">{item.unit_cost ? formatRupiah(item.unit_cost) : '—'}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {returnDoc.items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="px-3 py-2">{item.product_name}<span className="block font-mono text-xs text-slate-500">{item.sku}</span></td>
-                      <td className="px-3 py-2">{item.source_po_doc_number ?? 'PO tidak tercatat'}<span className="block text-xs text-slate-500">{item.location_name} · {item.batch_code ?? 'Tanpa batch'}{item.shelf_position ? ` · ${item.shelf_position}` : ''}</span></td>
-                      <td className="px-3 py-2">{item.goods_receipt_item_id !== null
-                        ? <>Total datang {formatQty(sumQty(item.qty_received_safe, item.qty_damaged_at_receipt))}<span className="block text-xs text-slate-500">Aman {formatQty(item.qty_received_safe ?? '0')} · Rusak {formatQty(item.qty_damaged_at_receipt ?? item.qty)}</span><span className="block text-xs text-slate-500">{item.disposition === 'quarantine' ? 'Masuk karantina' : 'Dikembalikan ke supplier'}</span></>
-                        : item.source_bucket === 'sellable' ? 'Sellable' : 'Rusak'}</td>
-                      <td className="px-3 py-2 text-right">{formatQty(item.qty)} {item.unit_name}</td>
-                      <td className="px-3 py-2 text-right">{item.unit_cost ? formatRupiah(item.unit_cost) : '—'}</td>
-                      <td className="px-3 py-2">{item.replacement_batch_code ?? '—'}{item.replacement_expiry_date ? ` · ${formatDate(item.replacement_expiry_date)}` : ''}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-              <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak retur</button>
-              {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'draft' && (
-                returnDoc.is_auto_generated ? (
-                  <>
-                    <button type="button" disabled={anyPending} onClick={() => {
-                      setDecision('accept');
-                      setDecisionNote('');
-                      setAction('decision');
-                    }} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">Supplier menerima retur</button>
-                    <button type="button" disabled={anyPending} onClick={() => {
-                      setDecision('reject');
-                      setDecisionNote('');
-                      setAction('decision');
-                    }} className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-60">Supplier menolak retur</button>
-                  </>
-                ) : (
-                  <button type="button" disabled={anyPending} onClick={() => {
-                    if (window.confirm('Tandai retur ini sudah dicetak dan dikirim ke supplier?')) submitReturn.mutate();
-                  }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-                    {submitReturn.isPending ? 'Menyimpan…' : 'Ajukan retur ke supplier'}
-                  </button>
-                )
-              )}
-              {returnDoc.return_type === 'incoming' && canCreate && returnDoc.status === 'submitted' && (
-                <>
-                  <button type="button" disabled={anyPending} onClick={() => {
-                    setDecision('accept');
-                    setDecisionNote('');
-                    setAction('decision');
-                  }} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">Retur diterima</button>
-                  <button type="button" disabled={anyPending} onClick={() => {
-                    setDecision('reject');
-                    setDecisionNote('');
-                    setAction('decision');
-                  }} className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-60">Retur ditolak</button>
-                </>
-              )}
-              </div>
-            {canCreate && returnDoc.return_type === 'outgoing' && returnDoc.status === 'draft' && (
-              <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-                <button type="button" disabled={anyPending} onClick={() => {
-                  if (window.confirm('Ajukan retur ke supplier? Stok pada lokasi/batch terkait akan dipindahkan ke karantina.')) submitReturn.mutate();
-                }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-                  {submitReturn.isPending ? 'Mengajukan…' : 'Ajukan ke supplier'}
-                </button>
-                <button type="button" disabled={anyPending} onClick={() => setAction('decision')} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batalkan Draft</button>
-              </div>
-            )}
-            {canCreate && returnDoc.return_type === 'outgoing' && returnDoc.status === 'submitted' && (
-              <div className="border-t border-slate-100 pt-3">
-                <button type="button" onClick={() => { setAction('decision'); setDecision('accept'); }} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Catat keputusan supplier</button>
-              </div>
-            )}
-            {canCreate && returnDoc.return_type === 'outgoing' && returnDoc.status === 'accepted' && (
-              <div className="border-t border-slate-100 pt-3">
-                <button type="button" onClick={() => setAction('replacement')} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Terima barang pengganti</button>
-              </div>
-            )}
-            {canWriteOff && returnDoc.return_type === 'outgoing' && returnDoc.status === 'rejected' && (
-              <div className="border-t border-slate-100 pt-3">
-                <button type="button" onClick={() => setAction('writeoff')} className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white">Setujui write-off</button>
-              </div>
-            )}
-            {action === 'decision' && (
-              <div className="space-y-3 rounded-md border border-slate-200 p-3">
-                {returnDoc.status === 'draft'
-                && !(returnDoc.return_type === 'incoming' && returnDoc.is_auto_generated) ? (
-                  <>
-                    <h3 className="text-sm font-semibold">Batalkan draft retur</h3>
-                    <Field label="Alasan (opsional)"><textarea className={inputCls} rows={2} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} /></Field>
-                    <button type="button" disabled={anyPending} onClick={() => {
-                      if (window.confirm('Batalkan Draft retur ini?')) cancelReturn.mutate();
-                    }} className="rounded-md bg-red-700 px-3 py-2 text-sm text-white disabled:opacity-60">Konfirmasi pembatalan</button>
-                  </>
-                ) : returnDoc.return_type === 'incoming' ? (
-                  <>
-                    <h3 className="text-sm font-semibold">{decision === 'accept' ? 'Konfirmasi retur diterima' : 'Konfirmasi retur ditolak'}</h3>
-                    <p className="text-xs text-slate-600">
-                      {decision === 'accept'
-                        ? 'Barang pengganti akan langsung menambah stok. Barang rusak di karantina akan dikeluarkan; penerimaan PO tidak berubah.'
-                        : 'Nilai rugi dihitung dari HPP dikali jumlah retur. Barang yang masih di karantina tidak akan dihapus dari stok.'}
-                    </p>
-                    <Field label={decision === 'reject' ? 'Alasan penolakan (wajib)' : 'Catatan (opsional)'}>
-                      <textarea className={inputCls} rows={2} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} />
-                    </Field>
-                    <button type="button" disabled={anyPending || (decision === 'reject' && !decisionNote.trim())} onClick={() => {
-                      if (window.confirm(decision === 'accept'
-                        ? 'Konfirmasi barang pengganti diterima dan tambahkan ke stok?'
-                        : 'Catat penolakan supplier dan simpan nilai kerugian?')) decide.mutate();
-                    }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-                      {decide.isPending ? 'Menyimpan…' : 'Simpan keputusan'}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="text-sm font-semibold">Catat keputusan supplier</h3>
-                    <Field label="Keputusan">
-                      <select className={inputCls} value={decision} onChange={(event) => setDecision(event.target.value as 'accept' | 'reject')}>
-                        <option value="accept">Supplier menerima retur</option>
-                        <option value="reject">Supplier menolak retur</option>
-                      </select>
-                    </Field>
-                    <Field label={decision === 'reject' ? 'Alasan penolakan (wajib)' : 'Catatan (opsional)'}>
-                      <textarea className={inputCls} rows={2} maxLength={500} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} />
-                    </Field>
-                    <button type="button" disabled={anyPending || (decision === 'reject' && !decisionNote.trim())} onClick={() => {
-                      if (window.confirm(decision === 'accept' ? 'Supplier menerima retur dan stok karantina akan keluar?' : 'Catat penolakan supplier? Barang akan tetap dikarantina sampai write-off disetujui.')) decide.mutate();
-                    }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">Simpan keputusan</button>
-                  </>
-                )}
-                <button type="button" onClick={() => setAction(null)} disabled={anyPending} className="ml-2 text-sm text-slate-600 underline">Tutup</button>
-              </div>
-            )}
-            {action === 'replacement' && (
-              <div className="space-y-3 rounded-md border border-slate-200 p-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Penerimaan barang pengganti</h3>
-                  <p className="text-xs text-slate-600">Buat GR draft per PO asal. Stok baru bertambah setelah GR diposting.</p>
-                </div>
-                {returnDoc.items.map((item, index) => {
-                  const trackExpiry = productDetails[index]?.data?.track_expiry ?? item.expiry_date !== null;
-                  const values = replacementForm[item.id] ?? { expiryDate: '', batchCode: '' };
-                  return (
-                    <div key={item.id} className="grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-2">
-                      <div className="sm:col-span-2">
-                        <p className="text-sm font-medium">{item.product_name} · {formatQty(item.qty)} {item.unit_name}</p>
-                        <p className="text-xs text-slate-500">{item.location_name} · qty penerimaan sama dengan qty retur</p>
-                      </div>
-                      <Field label={trackExpiry ? 'Kedaluwarsa (wajib)' : 'Kedaluwarsa (opsional)'}>
-                        <input className={inputCls} type="date" required={trackExpiry} value={values.expiryDate} onChange={(event) => replaceValue(item.id, { expiryDate: event.target.value })} />
-                      </Field>
-                      <Field label="Kode batch (opsional)">
-                        <input className={inputCls} maxLength={60} value={values.batchCode} onChange={(event) => replaceValue(item.id, { batchCode: event.target.value })} />
-                      </Field>
-                    </div>
-                  );
-                })}
-                <ErrorNotice error={productDetails.find((query) => query.error)?.error} />
-                {!replacementReady && <p role="alert" className="text-xs text-red-700">Tanggal kedaluwarsa wajib diisi untuk produk yang melacak kedaluwarsa.</p>}
-                <div className="flex gap-2">
-                  <button type="button" disabled={anyPending || !replacementReady || productDetails.some((query) => query.isLoading)} onClick={() => {
-                    if (window.confirm('Buat draft GR pengganti untuk setiap PO asal? Stok belum bertambah sampai GR diposting.')) receiveReplacement.mutate(returnDoc);
-                  }} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{receiveReplacement.isPending ? 'Membuat draft…' : 'Buat draft GR pengganti'}</button>
-                  <button type="button" onClick={() => setAction(null)} disabled={anyPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-                </div>
-              </div>
-            )}
-            {action === 'writeoff' && (
-              <div className="space-y-3 rounded-md border border-red-200 bg-red-50/50 p-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Persetujuan write-off</h3>
-                  <p className="text-xs text-slate-600">Barang tetap di karantina sampai persetujuan ini berhasil. Autentikasi ulang mengikuti mode persetujuan toko: {approvalMode}.</p>
-                </div>
-                <Field label="Username Owner/Admin">
-                  <input className={inputCls} autoComplete="username" value={approverUsername} onChange={(event) => setApproverUsername(event.target.value)} />
-                </Field>
-                {needsPassword && <Field label="Password Owner/Admin"><input className={inputCls} type="password" autoComplete="current-password" value={approverPassword} onChange={(event) => setApproverPassword(event.target.value)} /></Field>}
-                {needsKey && <Field label="Kunci otorisasi"><input className={inputCls} type="password" autoComplete="off" value={approverKey} onChange={(event) => setApproverKey(event.target.value)} /></Field>}
-                <Field label="Catatan persetujuan (opsional)"><textarea className={inputCls} rows={2} maxLength={500} value={writeOffNote} onChange={(event) => setWriteOffNote(event.target.value)} /></Field>
-                <div className="flex gap-2">
-                  <button type="button" disabled={anyPending || !reauthReady} onClick={() => {
-                    if (window.confirm('Setujui write-off? Stok karantina akan dikurangi secara permanen.')) writeOff.mutate();
-                  }} className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{writeOff.isPending ? 'Memproses…' : 'Setujui write-off'}</button>
-                  <button type="button" onClick={() => { setAction(null); setApproverPassword(''); setApproverKey(''); }} disabled={anyPending} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">Batal</button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-        <div className="flex justify-end border-t border-slate-100 pt-3">
-          <button type="button" onClick={close} disabled={anyPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Tutup</button>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak</button>
+            <button type="button" onClick={onClose} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Tutup</button>
+          </div>
         </div>
-      </div>
       </Modal>
-      {returnDoc && (
-        <SupplierReturnPrintSheet
-          returnDoc={returnDoc}
-          storeName={me?.store?.name ?? 'POS Retail SMK'}
-        />
-      )}
+      <SupplierReturnPrintSheet returnDoc={returnDoc} storeName={me?.store?.name ?? 'POS Retail SMK'} />
     </>
   );
 }
-
 function SupplierReturnPrintSheet({
   returnDoc,
   storeName,
@@ -853,7 +464,6 @@ function SupplierReturnPrintSheet({
           <div className="text-right text-xs leading-5">
             <div className="font-mono text-sm font-bold">{returnDoc.doc_number}</div>
             <div>Dibuat: {formatDateTime(returnDoc.created_at)}</div>
-            <div>Status: {STATUS_LABEL[returnDoc.status]}</div>
           </div>
         </header>
         <section className="mb-4 grid grid-cols-2 gap-2 text-sm">
@@ -870,7 +480,6 @@ function SupplierReturnPrintSheet({
               {hasReceiptItems && <th>PO asal</th>}
               <th className="text-right">Jumlah retur</th>
               <th className="text-right">Harga Modal</th>
-              {hasReceiptItems && <th>Penanganan</th>}
             </tr>
           </thead>
           <tbody>
@@ -881,7 +490,6 @@ function SupplierReturnPrintSheet({
                 {hasReceiptItems && <td>{item.source_po_doc_number ?? '—'}</td>}
                 <td className="text-right">{formatQty(item.qty)} {item.unit_name}</td>
                 <td className="text-right">{item.unit_cost ? formatRupiah(item.unit_cost) : '—'}</td>
-                {hasReceiptItems && <td>{item.disposition === 'quarantine' ? 'Masuk karantina' : 'Dikembalikan ke supplier'}</td>}
               </tr>
             ))}
           </tbody>

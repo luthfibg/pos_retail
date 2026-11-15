@@ -543,6 +543,7 @@ class InventoryService
 
         $balances = [];
         $errors = [];
+        $reservedByBalance = [];
         foreach ($items as $index => $item) {
             $balance = DB::table('inventory_balances')
                 ->where('product_id', (int) $item['product_id'])
@@ -659,6 +660,109 @@ class InventoryService
                 'created_by' => $actorId,
             ]);
         }
+    }
+
+    /**
+     * Remove supplier-return quantities immediately from their original stock buckets.
+     *
+     * @param  list<array<string, mixed>>  $items
+     */
+    public function returnSupplierStock(int $storeId, int $returnId, array $items, int $actorId): void
+    {
+        $this->requireTransaction();
+
+        $productIds = collect($items)->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+        DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)
+            ->orderBy('id')->lockForUpdate()->get(['id']);
+        $this->assertStockUnlocked($storeId, $productIds, 'supplier_return', $returnId);
+
+        $balances = [];
+        $errors = [];
+        foreach ($items as $index => $item) {
+            $bucket = (string) $item['source_bucket'];
+            $column = self::BUCKET_COLUMNS[$bucket] ?? null;
+            if ($column === null) {
+                throw new LogicException('Bucket stok retur supplier tidak valid.');
+            }
+
+            $balance = DB::table('inventory_balances')
+                ->where('product_id', (int) $item['product_id'])
+                ->where('location_id', (int) $item['location_id'])
+                ->whereRaw('position_key = ?', [$item['shelf_position_id'] ?? 0])
+                ->whereRaw('batch_key = ?', [$item['batch_id'] ?? 0])
+                ->lockForUpdate()
+                ->first();
+            $qty = Decimal::qty((string) $item['qty']);
+            $balanceKey = $balance === null ? '' : (int) $balance->id.':'.$bucket;
+            $available = Decimal::qty((string) ($balance->{$column} ?? '0'))
+                - ($reservedByBalance[$balanceKey] ?? 0);
+            if ($balance === null || $available < $qty) {
+                $errors["items.{$index}.qty"] = ['Stok berubah atau tidak mencukupi untuk retur.'];
+
+                continue;
+            }
+            $balances[$index] = (int) $balance->id;
+            $reservedByBalance[$balanceKey] = ($reservedByBalance[$balanceKey] ?? 0) + $qty;
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        foreach ($items as $index => $item) {
+            $bucket = (string) $item['source_bucket'];
+            $qty = Decimal::qty((string) $item['qty']);
+            $this->decreaseBalance($balances[$index], $bucket, $qty);
+            DB::table('inventory_movements')->insert([
+                'store_id' => $storeId,
+                'product_id' => (int) $item['product_id'],
+                'batch_id' => $item['batch_id'],
+                'from_location_id' => (int) $item['location_id'],
+                'from_position_id' => $item['shelf_position_id'],
+                'from_bucket' => $bucket,
+                'qty' => Decimal::qtyString($qty),
+                'movement_type' => 'supplier_return_out',
+                'unit_cost' => $item['unit_cost'],
+                'ref_type' => 'supplier_return',
+                'ref_id' => $returnId,
+                'occurred_at' => $this->now(),
+                'created_by' => $actorId,
+            ]);
+        }
+    }
+
+    /**
+     * Record damaged goods returned directly from a receipt without adding them to stock balances.
+     */
+    public function recordDamagedReceiptReturn(
+        int $storeId,
+        int $returnId,
+        int $productId,
+        int $locationId,
+        string $qty,
+        ?string $unitCost,
+        int $actorId,
+    ): void {
+        $this->requireTransaction();
+        $this->assertStockUnlocked($storeId, [$productId], 'supplier_return', $returnId);
+        $units = Decimal::qty($qty);
+        if ($units <= 0) {
+            throw new LogicException('Jumlah retur dari penerimaan harus lebih dari nol.');
+        }
+
+        DB::table('inventory_movements')->insert([
+            'store_id' => $storeId,
+            'product_id' => $productId,
+            'from_location_id' => $locationId,
+            'from_bucket' => 'damaged',
+            'qty' => Decimal::qtyString($units),
+            'movement_type' => 'supplier_return_out',
+            'unit_cost' => $unitCost,
+            'ref_type' => 'supplier_return',
+            'ref_id' => $returnId,
+            'occurred_at' => $this->now(),
+            'created_by' => $actorId,
+        ]);
     }
 
     // ------------------------------------------------------------------ penjualan (FEFO)

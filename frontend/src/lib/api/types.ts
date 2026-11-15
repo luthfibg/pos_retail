@@ -924,14 +924,6 @@ export interface StockTransferInput {
   }>;
 }
 
-export type SupplierReturnStatus =
-  | 'draft'
-  | 'submitted'
-  | 'accepted'
-  | 'rejected'
-  | 'replacement_received'
-  | 'written_off'
-  | 'cancelled';
 export type SupplierReturnBucket = 'sellable' | 'damaged';
 
 export interface SupplierReturnSummary {
@@ -944,19 +936,8 @@ export interface SupplierReturnSummary {
   is_auto_generated: boolean;
   goods_receipt_doc_number: string | null;
   invoice_no: string | null;
-  status: SupplierReturnStatus;
   requested_by: number;
   requested_by_name: string;
-  submitted_at: string | null;
-  decided_by: number | null;
-  decided_by_name: string | null;
-  decided_at: string | null;
-  decision_note: string | null;
-  loss_amount: Decimal | null;
-  approved_by: number | null;
-  approved_by_name: string | null;
-  approved_at: string | null;
-  reauth_at: string | null;
   note: string | null;
   created_at: string;
 }
@@ -991,25 +972,13 @@ export interface SupplierReturnItem {
 
 export interface SupplierReturn extends SupplierReturnSummary {
   items: SupplierReturnItem[];
-  replacement_goods_receipts?: Array<{ id: number; doc_number: string; po_id: number }>;
 }
 
 export interface SupplierReturnInput {
-  return_type?: 'incoming' | 'outgoing';
+  return_type?: 'outgoing';
   supplier_id: number;
-  goods_receipt_id?: number;
-  invoice_no?: string;
   note?: string;
-  items?: Array<{
-    product_id?: number;
-    goods_receipt_item_id?: number;
-    disposition?: 'direct_return' | 'quarantine';
-    batch_id?: number;
-    location_id?: number;
-    shelf_position_id?: number;
-    source_bucket?: SupplierReturnBucket;
-    qty?: Decimal;
-  }>;
+  items: Array<{ product_id: number; qty: Decimal }>;
 }
 
 export interface DailySalesReportRow {
@@ -1594,7 +1563,7 @@ export interface GoodsReceiptItemInput {
   po_item_id: number;
   qty_received: Decimal;
   qty_damaged?: Decimal;
-  damage_disposition?: 'direct_return' | 'quarantine' | null;
+  damage_disposition?: 'direct_return' | null;
   expiry_date?: string | null;
   batch_code?: string | null;
   shelf_position_id?: number | null;

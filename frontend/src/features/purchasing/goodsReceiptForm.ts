@@ -86,7 +86,7 @@ export function buildGoodsReceiptItems(poItems: PurchaseOrderItem[], lines: Good
       po_item_id: line.poItemId,
       qty_received: normalizeDecimal(line.qtyReceived) || '0',
       qty_damaged: normalizeDecimal(line.qtyDamaged) || '0',
-      damage_disposition: damaged > 0n ? 'quarantine' : null,
+      damage_disposition: damaged > 0n ? 'direct_return' : null,
       expiry_date: line.expiryDate || null,
       note: line.note.trim() || null,
     };

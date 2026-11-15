@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
@@ -33,6 +33,7 @@ function emptyLine(poItem: PurchaseOrderItem, key = String(poItem.id)): GoodsRec
 }
 
 export function GoodsReceiptsPage() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [poSearchValue, setPoSearchValue] = useState('');
   const [poSearch, setPoSearch] = useState('');
@@ -178,7 +179,14 @@ export function GoodsReceiptsPage() {
         )}
       </section>
 
-      {createPoId !== null && <CreateGoodsReceiptDialog poId={createPoId} onClose={() => setCreatePoId(null)} onCreated={(receipt) => { setCreatePoId(null); setSelectedReceiptId(receipt.id); }} />}
+      {createPoId !== null && <CreateGoodsReceiptDialog poId={createPoId} onClose={() => setCreatePoId(null)} onCreated={(receipt) => {
+        setCreatePoId(null);
+        if (receipt.supplier_return_id !== null) {
+          navigate(`/supplier-returns?return_id=${receipt.supplier_return_id}`);
+        } else {
+          setSelectedReceiptId(receipt.id);
+        }
+      }} />}
       {selectedReceiptId !== null && <GoodsReceiptDetailDialog receiptId={selectedReceiptId} onClose={() => setSelectedReceiptId(null)} />}
     </div>
   );
@@ -317,7 +325,7 @@ function CreateGoodsReceiptDialog({
           <ErrorNotice error={create.error} />
           <div className="flex justify-end gap-2">
             <button type="button" disabled={create.isPending} onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-            <button type="submit" disabled={lines.length === 0 || expiryLoading || Boolean(expiryError) || create.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{create.isPending ? 'Memproses…' : expiryLoading ? 'Memuat produk…' : 'Konfirmasi penerimaan'}</button>
+            <button type="submit" disabled={lines.length === 0 || expiryLoading || Boolean(expiryError) || create.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{create.isPending ? 'Memproses…' : expiryLoading ? 'Memuat produk…' : 'Lanjutkan'}</button>
           </div>
         </form>
       ) : null}
@@ -406,7 +414,7 @@ function GoodsReceiptDetailDialog({
           <div className="overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full min-w-[600px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr><th className="px-3 py-2">Barang</th><th className="px-3 py-2 text-right">Barang bagus</th><th className="px-3 py-2 text-right">Barang rusak</th><th className="px-3 py-2 text-right">Belum diterima</th><th className="px-3 py-2">Tanggal kedaluwarsa</th></tr>
+                <tr><th className="px-3 py-2">Barang</th><th className="px-3 py-2 text-right">Barang bagus</th><th className="px-3 py-2 text-right">Barang rusak</th><th className="px-3 py-2">Tanggal kedaluwarsa</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {receipt.items.map((item) => (
@@ -414,7 +422,6 @@ function GoodsReceiptDetailDialog({
                     <td className="px-3 py-2">{item.name}<div className="font-mono text-xs text-slate-500">{item.sku}</div></td>
                     <td className="px-3 py-2 text-right">{formatQty(item.qty_received)} {item.unit_name}</td>
                     <td className="px-3 py-2 text-right">{formatQty(item.qty_damaged)} {item.unit_name}</td>
-                    <td className="px-3 py-2 text-right">{formatQty(item.qty_short)} {item.unit_name}</td>
                     <td className="px-3 py-2">{item.expiry_date ? formatDate(item.expiry_date) : '—'}</td>
                   </tr>
                 ))}

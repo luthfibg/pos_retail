@@ -31,7 +31,7 @@ use Throwable;
  *  - harga beli = harga di PO; hanya pemegang goods_receipt.verify_documents yang boleh mengubahnya (selisih tampil sebagai price_variance)
  *  - stok masuk lewat InventoryService::receive (batch + saldo + pergerakan `receipt` + Harga Modal terbaru), semua dalam satu transaksi
  *  - penerimaan gudang hanya diizinkan bila warehouse_enabled aktif; posisi rak tujuan opsional dan dapat diisi saat putaway
- *  - barang rusak masuk bucket karantina dan otomatis dibuatkan Retur Barang
+ *  - barang rusak langsung dicatat keluar melalui Retur Barang; hanya barang bagus menambah stok jual
  *  - GR terposting tidak diedit; koreksi lewat dokumen koreksi (belum ada)
  */
 class GoodsReceiptService
@@ -182,7 +182,7 @@ class GoodsReceiptService
                         ]);
                     }
                     $item['qty_short'] = Decimal::qtyString($short);
-                    $item['damage_disposition'] = $damaged > 0 ? 'quarantine' : null;
+                    $item['damage_disposition'] = $damaged > 0 ? 'direct_return' : null;
                 }
                 unset($item);
                 if (array_sum(array_map(
@@ -193,6 +193,12 @@ class GoodsReceiptService
                         'items' => ['Tidak ada barang yang diterima; batalkan PO jika seluruh barang tidak dikirim.'],
                     ]);
                 }
+            } elseif (collect($receiptItems)->contains(
+                fn (array $item): bool => Decimal::qty((string) ($item['qty_damaged'] ?? 0)) > 0,
+            )) {
+                throw ValidationException::withMessages([
+                    'complete_po' => ['Barang rusak hanya dapat dicatat pada penerimaan final agar retur dan PR dibuat bersamaan.'],
+                ]);
             }
             $rows = $this->normalizeItems($actor, $storeId, $locationId, $poItems, $receiptItems);
 
@@ -373,17 +379,21 @@ class GoodsReceiptService
             StockAuthorityPolicy::assertScope($actor, $storeId, 'receipt', (int) $gr->receiving_location_id);
             $poItems = DB::table('purchase_order_items')->where('po_id', $po->id)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $items = DB::table('goods_receipt_items')->where('gr_id', $id)->orderBy('id')->get();
+            $supplierReturn = DB::table('supplier_returns')
+                ->where('store_id', $storeId)
+                ->where('goods_receipt_id', $id)
+                ->whereNotIn('status', ['cancelled'])
+                ->orderByDesc('id')
+                ->first(['id', 'status', 'return_type']);
             if ($items->contains(fn ($item) => Decimal::qty($item->qty_damaged) > 0)
-                && ! DB::table('supplier_returns')
-                    ->where('store_id', $storeId)
-                    ->where('goods_receipt_id', $id)
-                    ->where('return_type', 'incoming')
-                    ->when($isFinalReceipt, fn ($query) => $query->whereIn('status', ['draft', 'submitted']), fn ($query) => $query->where('status', 'submitted'))
-                    ->exists()) {
+                && ($supplierReturn === null || $supplierReturn->status !== 'completed')) {
                 throw ValidationException::withMessages([
-                    'items' => ['Buat Retur Barang untuk seluruh jumlah rusak sebelum memposting penerimaan.'],
+                    'items' => ['Retur dan PR otomatis untuk seluruh jumlah rusak harus dibuat saat menyimpan penerimaan.'],
                 ]);
             }
+            $immediateReturnId = $supplierReturn !== null && $supplierReturn->status === 'completed'
+                ? (int) $supplierReturn->id
+                : null;
             $products = DB::table('products')->whereIn('id', $items->pluck('product_id')->unique()->all())->get(['id', 'name', 'status'])->keyBy('id');
             $today = $this->todayWib();
 
@@ -397,9 +407,7 @@ class GoodsReceiptService
                     + Decimal::qty($item->qty_received) + Decimal::qty($item->qty_damaged) + ($isFinalReceipt ? Decimal::qty($item->qty_short) : 0);
                 $acceptedByPoItem[$item->po_item_id] = ($acceptedByPoItem[$item->po_item_id] ?? 0)
                     + Decimal::qty($item->qty_received)
-                    + ($isFinalReceipt
-                        ? Decimal::qty($item->qty_damaged)
-                        : ($item->damage_disposition === 'quarantine' ? Decimal::qty($item->qty_damaged) : 0));
+                    + ($isFinalReceipt ? Decimal::qty($item->qty_damaged) : 0);
 
                 if ($products->get($item->product_id)->status === 'inactive') {
                     $errors["items.{$i}.po_item_id"] = ['Produk nonaktif tidak dapat diterima.'];
@@ -445,21 +453,13 @@ class GoodsReceiptService
             $this->inventory->withUnlockedProducts(
                 $storeId,
                 array_values(array_unique(array_map(fn ($item) => (int) $item->product_id, $ordered))),
-                function () use ($ordered, $storeId, $id, $actor, $gr, &$lines, &$replacementBatches, &$damagedUnits, $acceptedByPoItem, &$receivedByPoItem) {
+                function () use ($ordered, $storeId, $id, $actor, $gr, $immediateReturnId, &$lines, &$replacementBatches, &$damagedUnits, $acceptedByPoItem, &$receivedByPoItem) {
                     foreach ($ordered as $item) {
                         $received = Decimal::qty($item->qty_received);
                         $damagedUnits += Decimal::qty($item->qty_damaged);
 
-                        $quarantined = $item->damage_disposition === 'quarantine' ? Decimal::qty($item->qty_damaged) : 0;
-                        foreach ([
-                            ['qty' => $received, 'bucket' => 'sellable'],
-                            ['qty' => $quarantined, 'bucket' => 'quarantine'],
-                        ] as $receiptPart) {
-                            if ($receiptPart['qty'] <= 0) {
-                                continue;
-                            }
-
-                            $qty = Decimal::qtyString($receiptPart['qty']);
+                        if ($received > 0) {
+                            $qty = Decimal::qtyString($received);
                             $in = $this->inventory->receive(
                                 $storeId,
                                 (int) $item->product_id,
@@ -473,28 +473,30 @@ class GoodsReceiptService
                                 $actor->id,
                                 (int) $gr->receiving_location_id,
                                 $item->shelf_position_id === null ? null : (int) $item->shelf_position_id,
-                                bucket: $receiptPart['bucket'],
+                                bucket: 'sellable',
                             );
 
                             $lines[] = [
                                 'product_id' => (int) $item->product_id,
                                 'batch_id' => $in['batch_id'],
                                 'qty' => $qty,
-                                'bucket' => $receiptPart['bucket'],
+                                'bucket' => 'sellable',
                                 'unit_cost' => $item->unit_cost,
                             ];
                             if ($item->supplier_return_item_id !== null) {
                                 $replacementBatches[(int) $item->supplier_return_item_id] = $in['batch_id'];
                             }
-                            if ($receiptPart['bucket'] === 'quarantine') {
-                                DB::table('supplier_return_items')
-                                    ->where('goods_receipt_item_id', $item->id)
-                                    ->where('disposition', 'quarantine')
-                                    ->update([
-                                        'batch_id' => $in['batch_id'],
-                                        'shelf_position_id' => $item->shelf_position_id,
-                                    ]);
-                            }
+                        }
+                        if ($immediateReturnId !== null && Decimal::qty($item->qty_damaged) > 0) {
+                            $this->inventory->recordDamagedReceiptReturn(
+                                $storeId,
+                                $immediateReturnId,
+                                (int) $item->product_id,
+                                (int) $gr->receiving_location_id,
+                                (string) $item->qty_damaged,
+                                $item->unit_cost,
+                                $actor->id,
+                            );
                         }
 
                         $accepted = $acceptedByPoItem[$item->po_item_id] ?? 0;
@@ -924,19 +926,9 @@ class GoodsReceiptService
                 continue;
             }
 
-            $damageDisposition = $item['damage_disposition'] ?? null;
-            if ($damaged > 0 && ! in_array($damageDisposition, ['direct_return', 'quarantine'], true)) {
-                $errors["items.{$i}.damage_disposition"] = ['Pilih apakah barang rusak dikembalikan langsung atau masuk karantina.'];
-
-                continue;
-            }
-
-            if ($damaged === 0) {
-                $damageDisposition = null;
-            }
-
-            if ($damaged > 0 && $damageDisposition === 'quarantine' && $product->track_expiry && $expiry === null) {
-                $errors["items.{$i}.expiry_date"] = ["Tanggal kedaluwarsa wajib diisi untuk barang {$product->name} yang masuk karantina."];
+            $damageDisposition = $damaged > 0 ? ($item['damage_disposition'] ?? 'direct_return') : null;
+            if ($damaged > 0 && $damageDisposition !== 'direct_return') {
+                $errors["items.{$i}.damage_disposition"] = ['Barang rusak dari penerimaan langsung dicatat sebagai retur supplier.'];
 
                 continue;
             }

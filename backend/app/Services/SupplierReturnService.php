@@ -18,6 +18,7 @@ class SupplierReturnService
         private AuditLogger $audit,
         private PermissionResolver $permissions,
         private ReauthService $reauth,
+        private PurchaseRequisitionService $requisitions,
     ) {}
 
     /** @param array<string, mixed> $filters */
@@ -26,9 +27,6 @@ class SupplierReturnService
         $this->assertCanView($user, $storeId);
         $query = $this->headerQuery($storeId)->orderByDesc('sr.id');
 
-        if (! empty($filters['status'])) {
-            $query->where('sr.status', $filters['status']);
-        }
         if (! empty($filters['return_type'])) {
             $query->where('sr.return_type', $filters['return_type']);
         }
@@ -65,13 +63,9 @@ class SupplierReturnService
                 ->where('id', (int) $data['supplier_id'])
                 ->where('is_active', 1)
                 ->lockForUpdate()
-                ->first(['id']);
+                ->first(['id', 'name']);
             if ($supplier === null) {
                 throw ValidationException::withMessages(['supplier_id' => ['Supplier tidak ditemukan atau nonaktif pada toko ini.']]);
-            }
-
-            if (($data['return_type'] ?? 'outgoing') === 'incoming') {
-                return $this->createIncomingReturn($actor, $storeId, $supplier, $data);
             }
 
             $items = array_values($data['items']);
@@ -214,24 +208,42 @@ class SupplierReturnService
                 throw ValidationException::withMessages($errors);
             }
 
+            usort($normalized, fn (array $a, array $b) => [
+                $a['product_id'], $a['batch_id'] ?? 0, $a['location_id'], $a['shelf_position_id'] ?? 0, $a['source_bucket'],
+            ] <=> [
+                $b['product_id'], $b['batch_id'] ?? 0, $b['location_id'], $b['shelf_position_id'] ?? 0, $b['source_bucket'],
+            ]);
+
+            $docNumber = DocumentNumber::format('RET', $this->sequences->next($storeId, 'RET'));
             $id = DB::table('supplier_returns')->insertGetId([
                 'store_id' => $storeId,
-                'doc_number' => DocumentNumber::format('RET', $this->sequences->next($storeId, 'RET')),
+                'doc_number' => $docNumber,
                 'supplier_id' => $supplier->id,
                 'return_type' => 'outgoing',
-                'status' => 'draft',
+                'status' => 'completed',
                 'requested_by' => $actor->id,
+                'submitted_at' => $this->nowUtc(),
                 'note' => $data['note'] ?? null,
             ]);
+            $returnItems = [];
             foreach ($normalized as $item) {
-                DB::table('supplier_return_items')->insert(['supplier_return_id' => $id] + $item);
+                $itemId = DB::table('supplier_return_items')->insertGetId(['supplier_return_id' => $id] + $item);
+                $returnItems[] = ['id' => (int) $itemId] + $item;
             }
+
+            $this->inventory->withUnlockedProducts(
+                $storeId,
+                $productIds,
+                fn () => $this->inventory->returnSupplierStock($storeId, $id, $returnItems, $actor->id),
+            );
+            $this->requisitions->createForSupplierReturn($actor, $storeId, $id);
+            $this->inventory->synchronizeAutomaticPurchaseRequisitions($actor, $storeId, $productIds);
 
             $this->audit->log(
                 'supplier_return.create',
                 'supplier_return',
                 $id,
-                after: ['supplier_id' => (int) $supplier->id, 'items_count' => count($normalized)],
+                after: ['supplier_id' => (int) $supplier->id, 'items_count' => count($normalized), 'status' => 'completed'],
                 reason: $data['note'] ?? null,
                 actorId: $actor->id,
                 storeId: $storeId,
@@ -244,7 +256,7 @@ class SupplierReturnService
     }
 
     /**
-     * Creates the linked return draft as part of a final goods receipt transaction.
+     * Creates the completed linked return as part of the goods receipt transaction.
      */
     public function createFromGoodsReceipt(User $actor, int $storeId, int $goodsReceiptId): ?int
     {
@@ -275,7 +287,6 @@ class SupplierReturnService
 
         if (DB::table('supplier_returns')
             ->where('goods_receipt_id', $goodsReceiptId)
-            ->where('return_type', 'incoming')
             ->whereNotIn('status', ['cancelled'])
             ->exists()) {
             throw ValidationException::withMessages([
@@ -287,18 +298,19 @@ class SupplierReturnService
             'store_id' => $storeId,
             'doc_number' => DocumentNumber::format('RET', $this->sequences->next($storeId, 'RET')),
             'supplier_id' => $receipt->supplier_id,
-            'return_type' => 'incoming',
+            'return_type' => 'outgoing',
             'is_auto_generated' => true,
             'goods_receipt_id' => $goodsReceiptId,
             'invoice_no' => $receipt->invoice_no,
-            'status' => 'draft',
+            'status' => 'completed',
             'requested_by' => $actor->id,
+            'submitted_at' => $this->nowUtc(),
             'note' => null,
         ]);
 
         foreach ($damagedItems as $item) {
             DB::table('goods_receipt_items')->where('id', $item->id)
-                ->update(['damage_disposition' => 'quarantine']);
+                ->update(['damage_disposition' => 'direct_return']);
             $returnItemId = DB::table('supplier_return_items')->insertGetId([
                 'supplier_return_id' => $id,
                 'goods_receipt_item_id' => $item->id,
@@ -308,23 +320,26 @@ class SupplierReturnService
                 'location_id' => $receipt->receiving_location_id,
                 'shelf_position_id' => null,
                 'source_bucket' => 'damaged',
-                'disposition' => 'quarantine',
+                'disposition' => 'direct_return',
                 'qty' => $item->qty_damaged,
-                'unit_cost' => $item->product_unit_cost ?? $item->unit_cost,
+                'unit_cost' => $item->unit_cost ?? $item->product_unit_cost,
             ]);
             DB::table('goods_receipt_items')->where('id', $item->id)
                 ->update(['supplier_return_item_id' => $returnItemId]);
         }
 
+        $this->requisitions->createForSupplierReturn($actor, $storeId, $id);
+
         $this->audit->log(
-            'supplier_return.incoming_create',
+            'supplier_return.create_from_goods_receipt',
             'supplier_return',
             $id,
             after: [
                 'goods_receipt_id' => $goodsReceiptId,
-                'return_type' => 'incoming',
+                'return_type' => 'outgoing',
                 'items_count' => $damagedItems->count(),
                 'automatic' => true,
+                'status' => 'completed',
             ],
             actorId: $actor->id,
             storeId: $storeId,
@@ -1130,8 +1145,6 @@ class SupplierReturnService
         return DB::table('supplier_returns as sr')
             ->join('suppliers as s', 's.id', '=', 'sr.supplier_id')
             ->join('users as requester', 'requester.id', '=', 'sr.requested_by')
-            ->leftJoin('users as decider', 'decider.id', '=', 'sr.decided_by')
-            ->leftJoin('users as approver', 'approver.id', '=', 'sr.approved_by')
             ->leftJoin('goods_receipts as gr', 'gr.id', '=', 'sr.goods_receipt_id')
             ->where('sr.store_id', $storeId)
             ->select(
@@ -1139,8 +1152,6 @@ class SupplierReturnService
                 's.name as supplier_name',
                 'gr.doc_number as goods_receipt_doc_number',
                 'requester.name as requested_by_name',
-                'decider.name as decided_by_name',
-                'approver.name as approved_by_name',
             );
     }
 
@@ -1157,19 +1168,8 @@ class SupplierReturnService
             'goods_receipt_id' => $row->goods_receipt_id === null ? null : (int) $row->goods_receipt_id,
             'goods_receipt_doc_number' => $row->goods_receipt_doc_number,
             'invoice_no' => $row->invoice_no,
-            'status' => $row->status,
             'requested_by' => (int) $row->requested_by,
             'requested_by_name' => $row->requested_by_name,
-            'submitted_at' => $row->submitted_at,
-            'decided_by' => $row->decided_by === null ? null : (int) $row->decided_by,
-            'decided_by_name' => $row->decided_by_name,
-            'decided_at' => $row->decided_at,
-            'decision_note' => $row->decision_note,
-            'loss_amount' => $row->loss_amount,
-            'approved_by' => $row->approved_by === null ? null : (int) $row->approved_by,
-            'approved_by_name' => $row->approved_by_name,
-            'approved_at' => $row->approved_at,
-            'reauth_at' => $row->reauth_at,
             'note' => $row->note,
             'created_at' => $row->created_at,
         ];

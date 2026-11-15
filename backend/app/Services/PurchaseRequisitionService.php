@@ -246,6 +246,89 @@ class PurchaseRequisitionService
     }
 
     /**
+     * Create a separate automatic PR for the exact quantities in one supplier return.
+     * Supplier remains a PO-time choice, while the reason keeps the return/supplier provenance.
+     */
+    public function createForSupplierReturn(User $actor, int $storeId, int $supplierReturnId): int
+    {
+        return DB::transaction(function () use ($actor, $storeId, $supplierReturnId) {
+            $return = DB::table('supplier_returns as sr')
+                ->join('suppliers as s', 's.id', '=', 'sr.supplier_id')
+                ->where('sr.store_id', $storeId)
+                ->where('sr.id', $supplierReturnId)
+                ->lockForUpdate()
+                ->first(['sr.doc_number', 's.name as supplier_name']);
+            if ($return === null) {
+                throw new \LogicException('Retur supplier tidak ditemukan untuk membuat PR otomatis.');
+            }
+
+            $quantities = [];
+            foreach (DB::table('supplier_return_items')
+                ->where('supplier_return_id', $supplierReturnId)
+                ->orderBy('product_id')
+                ->lockForUpdate()
+                ->get(['product_id', 'qty']) as $item) {
+                $productId = (int) $item->product_id;
+                $quantities[$productId] = ($quantities[$productId] ?? 0) + Decimal::qty((string) $item->qty);
+            }
+
+            if ($quantities === []) {
+                throw new \LogicException('Retur supplier kosong; PR otomatis tidak dapat dibuat.');
+            }
+
+            $products = DB::table('products')
+                ->where('store_id', $storeId)
+                ->whereIn('id', array_keys($quantities))
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id', 'unit_cost'])
+                ->keyBy('id');
+            $items = [];
+            foreach ($quantities as $productId => $qty) {
+                $product = $products->get($productId);
+                if ($product === null) {
+                    throw new \LogicException('Produk retur tidak ditemukan untuk membuat PR otomatis.');
+                }
+                $items[] = [
+                    'product_id' => $productId,
+                    'qty' => Decimal::qtyString($qty),
+                    'est_price' => $product->unit_cost,
+                    'note' => "Pengganti retur {$return->doc_number}",
+                ];
+            }
+
+            $normalized = $this->normalizeItems($storeId, $items);
+            $reason = "Retur {$return->doc_number} kepada {$return->supplier_name}";
+            $total = $this->sumTotal($normalized);
+            $id = DB::table('purchase_requisitions')->insertGetId([
+                'store_id' => $storeId,
+                'doc_number' => $this->nextDocNumber($storeId, 'PR'),
+                'requested_by' => $actor->id,
+                'reason' => $reason,
+                'est_total' => Decimal::moneyString($total),
+                'status' => 'draft',
+                'is_auto_generated' => 1,
+            ]);
+            $this->insertItems($id, $normalized);
+            $this->audit->log(
+                'purchase_requisition.auto_create',
+                'purchase_requisition',
+                $id,
+                after: [
+                    'items' => count($normalized),
+                    'est_total' => Decimal::moneyString($total),
+                    'source' => 'supplier_return',
+                    'supplier_return_id' => $supplierReturnId,
+                ],
+                actorId: $actor->id,
+                storeId: $storeId,
+            );
+
+            return (int) $id;
+        });
+    }
+
+    /**
      * Reconcile low-stock products into the store's single editable automatic PR draft.
      *
      * @param  list<int>|null  $productIds  Products affected by a stock/master-data change; null means all products
@@ -275,6 +358,7 @@ class PurchaseRequisitionService
                 ->where('store_id', $storeId)
                 ->where('is_auto_generated', 1)
                 ->where('status', 'draft')
+                ->where('reason', 'Pemantauan stok otomatis')
                 ->lockForUpdate()
                 ->first();
 

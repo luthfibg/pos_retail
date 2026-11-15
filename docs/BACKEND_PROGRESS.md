@@ -953,38 +953,29 @@ Berlaku pada semua dialog persetujuan yang memakai re-auth: persetujuan PR, konf
 
 ASUMSI: kunci per pengguna (bukan satu kunci bersama toko) agar dapat diaudit dan dicabut per orang; hash bcrypt dengan penguncian permanen dianggap cukup untuk kode 6 karakter; DELETE membawa body JSON (bila proxy membuang body DELETE, ubah ke POST).
 
-## 15. Retur Supplier dan Write-off ✅
+## 15. Retur Supplier Langsung ✅
 
 Migration awal: `2026_11_04_000059_create_supplier_returns_tables.php`; migration alur baru: `2026_11_05_000069_add_supplier_return_workflows.php`. Jalankan `php artisan migrate`; pada database yang belum memiliki permission retur, jalankan `php artisan db:seed --class=PermissionSeeder`.
 
 Validasi terarah terbaru: `GoodsReceiptTest` 23 lulus (267 assertions), `SupplierReturnTest` 8 lulus (78 assertions), dan `PurchaseOrderTest` 19 lulus (184 assertions).
 
-Retur Barang ditampilkan sebagai satu daftar di frontend. Backend tetap menyimpan `return_type` untuk membedakan alur stok yang sudah berjalan:
+Retur Barang ditampilkan tanpa kolom atau alur status supplier. Backend tetap menyimpan status internal untuk kompatibilitas dokumen lama; retur baru dibuat selesai dan tidak dapat diajukan ulang, diputuskan supplier, dibatalkan, atau diproses sebagai barang pengganti.
 
-- **Barang rusak dari penerimaan PO** otomatis dibuat sebagai retur supplier berstatus Draft di transaksi final penerimaan. Satu PO hanya menghasilkan satu GR; jumlah masuk dihitung dari sisa PO dikurangi barang rusak dan jumlah tidak dikirim. Barang rusak dihitung dalam kuantitas PO yang diterima dan masuk bucket karantina. GR langsung diposting secara internal, tanpa field `status` pada respons API; PO ditutup dan tidak lagi ditawarkan ke daftar penerimaan. Dokumen retur tertaut pada GR, baris penerimaan, supplier, HPP, dan jumlah rusak.
-- **Retur stok** dimulai dari pilihan produk di master. Kuantitas stok dialokasikan di backend ke lokasi/batch yang tersedia lalu dikarantina saat retur dikirim; supplier harus sama untuk seluruh dokumen. Barang pengganti menghasilkan GR terpisah untuk setiap PO asal; pemrosesan penerimaannya menambah stok dan menyelesaikan retur tanpa menambahkan ulang kuantitas penerimaan PO asal. Jika PO asal tidak dapat ditelusuri, backend menolak membuat GR pengganti secara eksplisit.
-
-Alur Retur Keluar: `draft` → `submitted` → `accepted` → GR pengganti `draft` → `replacement_received` setelah seluruh GR diposting, atau `draft` → `submitted` → `rejected` → `written_off`. Penolakan supplier tetap mengarantina barang hingga pemegang `inventory.adjust.approve` menyetujui write-off dengan autentikasi ulang Owner/Admin. HPP retur disnapshot dari `products.unit_cost`; write-off mencatat nilai kerugian dan movement `write_off`.
-
-Retur kerusakan penerimaan berlanjut setelah supplier merespons: `draft` → `submitted` → `replacement_received` atau `rejected`. Keputusan hanya dapat dicatat setelah GR asal diposting. Jika diterima, barang karantina asal dikeluarkan dari karantina, barang pengganti langsung ditambahkan ke stok dengan movement `supplier_replacement_in`, dan kuantitas penerimaan PO tidak berubah. Baris retur menyimpan tautan batch karantina untuk pengeluaran yang tepat; tanggal kedaluwarsa dan kode batch pengganti mengikuti data baris GR asal. Jika ditolak, nilai kerugian dihitung dari HPP snapshot × jumlah retur dan disimpan pada `loss_amount`; barang karantina tetap ada dan tidak otomatis dihapus atau dijual.
+- **Barang rusak dari penerimaan PO** dibuat sebagai retur langsung di transaksi penerimaan final. Barang bagus saja yang masuk stok jual; barang rusak dicatat keluar melalui movement `supplier_return_out` tanpa pernah masuk saldo karantina. PO menerima kuantitas bagus + rusak, sedangkan sisa PO menjadi jumlah belum diterima. GR, retur, movement, dan PR otomatis tercatat atomik. Satu PO hanya menghasilkan satu GR dan sesudahnya tidak ditawarkan lagi di daftar penerimaan.
+- **Retur stok manual** langsung mengurangi bucket stok sumber yang dipilih (atau dialokasikan rusak lebih dulu lalu layak jual), serta membuat satu PR otomatis baru berisi jumlah retur per produk. Retur manual dan retur rusak dari PO sama-sama dipisahkan per dokumen retur. Supplier dicatat pada alasan PR sebagai provenance, tetapi tetap dipilih saat PR dikonversi menjadi PO.
+- PR otomatis penjualan berbasis ambang stok tetap berjalan terpisah dan tidak diganti oleh PR retur. Keduanya dapat dibuat saat satu retur menurunkan stok di bawah ambang.
 
 ### Endpoint (`auth:sanctum`)
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
-| GET | `/api/supplier-returns` | `supplier_return.create` atau `inventory.adjust.approve` | Daftar; filter `status`, `supplier_id`, awalan nomor `q`, `per_page` |
-| POST | `/api/supplier-returns` | `supplier_return.create` | Buat draft |
+| GET | `/api/supplier-returns` | `supplier_return.create` atau `inventory.adjust.approve` | Daftar; filter `supplier_id`, awalan nomor `q`, `per_page` |
+| POST | `/api/supplier-returns` | `supplier_return.create` | Proses retur keluar langsung, kurangi stok, dan buat PR otomatis |
 | GET | `/api/supplier-returns/{id}` | `supplier_return.create` atau `inventory.adjust.approve` | Detail |
-| POST | `/api/supplier-returns/{id}/submit` | `supplier_return.create` | Retur Keluar memvalidasi stok terbaru dan memindahkan item ke karantina; Retur Masuk menandai dokumen sudah dikirim selama GR masih draft |
-| POST | `/api/supplier-returns/{id}/merge` | `supplier_return.create` | Tambahkan produk ke draft Retur Keluar; supplier harus sama, status harus `draft`, dan stok dialokasikan rusak lebih dulu |
-| POST | `/api/supplier-returns/{id}/supplier-decision` | `supplier_return.create` | Catat `{ "decision": "accept|reject", "note": "..." }`; alasan wajib untuk reject. Retur Masuk hanya setelah GR diposting: accept memasukkan pengganti ke stok dan mengeluarkan barang karantina, reject mencatat kerugian HPP dan mempertahankan karantina |
-| POST | `/api/supplier-returns/{id}/replacement-receipt` | `supplier_return.create` | Buat GR pengganti draft per PO asal; isi `items[]` dengan `return_item_id`, `expiry_date?`, `batch_code?`, `shelf_position_id?` |
-| POST | `/api/supplier-returns/{id}/write-off` | `inventory.adjust.approve` | Persetujuan Owner/Admin; wajib `approver_username` dan kredensial sesuai mode autentikasi ulang |
-| POST | `/api/supplier-returns/{id}/cancel` | `supplier_return.create` | Batalkan draft |
 
-Body buat Retur Keluar: `supplier_id`, `items[]` (`product_id`, `qty`, `source_bucket?` = `sellable|damaged`), `note?`; tanpa `source_bucket`, server otomatis mengalokasikan stok rusak lebih dulu lalu stok layak jual ke lokasi/batch yang tersedia. Body gabung draft: `items[]` (`product_id`, `qty`), tanpa mengubah catatan draft. Hanya draft Retur Keluar milik toko aktif yang dapat diubah; produk harus terhubung dengan supplier draft dan kuantitas stok dicek serta dikunci atomik. Body Retur Masuk: `return_type: "incoming"`, `supplier_id`, `goods_receipt_id`, `invoice_no?`, `note?`, dan `items[]` (`goods_receipt_item_id`, `disposition: "direct_return"|"quarantine"`). Daftar retur memuat `return_type`, relasi GR, faktur, dan disposisi. Produk dan supplier harus milik toko aktif; lingkup toko/gudang diperiksa saat tindakan terkait.
+Body buat retur manual: `supplier_id`, `items[]` (`product_id`, `qty`, `source_bucket?` = `sellable|damaged`), `note?`; tanpa `source_bucket`, server mengalokasikan stok rusak lebih dulu lalu stok layak jual. Produk harus terkait dengan supplier dan stok dicek serta dikunci atomik.
 
-Respons detail memuat `doc_number` (`RET-000001`), `return_type`, supplier, status, waktu submit/keputusan, catatan, faktur, `loss_amount` (string uang/null), approver, relasi GR dan `items[]` termasuk lokasi, batch, qty, HPP snapshot, disposisi, serta GR pengganti. Draft tidak mengubah stok; submit gagal 422 jika stok berubah/tidak cukup atau detail GR tidak cocok. Aksi penting dicatat pada audit log.
+Detail retur memuat nomor, supplier, relasi GR/faktur, catatan, dan item (lokasi, batch, jumlah, HPP). Dialog hanya menyediakan **Cetak** dan **Tutup**. Endpoint keputusan supplier, penggabungan draft, pembatalan, write-off, dan penerimaan barang pengganti tidak lagi tersedia. PR menyimpan jumlah retur persis per produk dan supplier tetap dipilih saat membuat PO. Aksi penting dicatat pada audit log.
 
 ## 16. Ubah Nama Toko oleh Pengguna Retail
 

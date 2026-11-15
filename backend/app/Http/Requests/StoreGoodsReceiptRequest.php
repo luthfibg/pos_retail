@@ -27,7 +27,7 @@ class StoreGoodsReceiptRequest extends FormRequest
             'items.*.qty_received' => ['required', 'numeric', 'min:0', 'max:99999', 'decimal:0,3'],
             'items.*.qty_damaged' => ['nullable', 'numeric', 'min:0', 'max:99999', 'decimal:0,3'],
             'items.*.qty_short' => ['nullable', 'numeric', 'min:0', 'max:99999', 'decimal:0,3'],
-            'items.*.damage_disposition' => ['nullable', 'string', 'in:direct_return,quarantine'],
+            'items.*.damage_disposition' => ['nullable', 'string', 'in:direct_return'],
             'items.*.unit_cost' => ['nullable', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'],
             'items.*.expiry_date' => ['nullable', 'date_format:Y-m-d'],
             'items.*.batch_code' => ['nullable', 'string', 'max:60'],

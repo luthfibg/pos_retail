@@ -54,7 +54,7 @@ describe('validateGoodsReceiptLines', () => {
       po_item_id: 31,
       qty_received: '5',
       qty_damaged: '1',
-      damage_disposition: 'quarantine',
+      damage_disposition: 'direct_return',
       expiry_date: '2027-01-01',
       note: null,
     }]);
