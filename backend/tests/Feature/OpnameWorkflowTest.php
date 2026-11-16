@@ -232,7 +232,7 @@ class OpnameWorkflowTest extends SeededTestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonFragment([
                 'id' => $fixture['item_id'],
-                'diff_qty' => '-1.000',
+                'diff_good_qty' => '-1.000',
             ]);
     }
 

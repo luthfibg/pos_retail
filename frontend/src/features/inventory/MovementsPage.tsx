@@ -112,7 +112,7 @@ export function MovementsPage() {
               <th className="px-3 py-2">Waktu (WIB)</th>
               <th className="px-3 py-2">Jenis</th>
               <th className="px-3 py-2">Produk</th>
-              <th className="px-3 py-2">Batch</th>
+              <th className="px-3 py-2">Kedaluwarsa</th>
               <th className="px-3 py-2">Arah</th>
               <th className="px-3 py-2 text-right">Qty</th>
               {showCost && <th className="px-3 py-2 text-right">HPP</th>}
@@ -136,10 +136,7 @@ export function MovementsPage() {
                     {m.product_name}
                     <div className="font-mono text-xs text-slate-400">{m.sku}</div>
                   </td>
-                  <td className="px-3 py-2">
-                    {m.batch_code ?? '—'}
-                    {m.expiry_date && <div className="text-xs text-slate-400">Exp {formatDate(m.expiry_date)}</div>}
-                  </td>
+                  <td className="px-3 py-2">{m.expiry_date ? formatDate(m.expiry_date) : 'Tidak ada tanggal'}</td>
                   <td className={`px-3 py-2 ${DIRECTION_CLS[dir]}`}>
                     <span className="font-medium">
                       {m.reconciliation_action === 'correction'
