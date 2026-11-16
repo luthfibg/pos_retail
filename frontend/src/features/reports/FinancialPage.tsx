@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
@@ -6,9 +6,10 @@ import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { financialApi } from '@/lib/api/endpoints';
-import type { FinancialPurchaseOrder } from '@/lib/api/types';
+import type { FinancialPurchaseOrder, FinancialReport } from '@/lib/api/types';
 import { formatRupiah } from '@/lib/format';
 import { formatPurchaseOrderPaymentTerms } from '@/features/purchasing/paymentTerms';
+import { currentMonthDateRange } from './financialPeriod';
 
 function todayWib(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -24,8 +25,12 @@ export function FinancialPage() {
   const queryClient = useQueryClient();
   const canRecord = can('financial.transaction.create');
   const today = todayWib();
-  const [filters, setFilters] = useState({ date_from: today, date_to: today });
+  const initialPeriod = currentMonthDateRange(today);
+  const [filters, setFilters] = useState(initialPeriod);
   const [applied, setApplied] = useState(filters);
+  const [printRequest, setPrintRequest] = useState<{ id: number; period: typeof filters } | null>(null);
+  const printRequestId = useRef(0);
+  const printedRequestId = useRef<number | null>(null);
   const [expense, setExpense] = useState({
     category: 'operational' as 'operational' | 'payroll',
     description: '',
@@ -38,6 +43,29 @@ export function FinancialPage() {
     queryKey: ['financial-report', applied],
     queryFn: () => financialApi.report(applied),
   });
+  useEffect(() => {
+    if (!printRequest) return;
+    const handleAfterPrint = () => {
+      printedRequestId.current = null;
+      setPrintRequest(null);
+    };
+    window.addEventListener('afterprint', handleAfterPrint, { once: true });
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, [printRequest?.id]);
+
+  useEffect(() => {
+    if (!printRequest || printedRequestId.current === printRequest.id) return;
+    if (report.isError) {
+      setPrintRequest(null);
+      return;
+    }
+    if (report.isFetching || !report.data
+      || report.data.period.date_from !== printRequest.period.date_from
+      || report.data.period.date_to !== printRequest.period.date_to) return;
+
+    printedRequestId.current = printRequest.id;
+    window.print();
+  }, [printRequest, report.data, report.isError, report.isFetching]);
   const purchaseOrders = useQuery({
     queryKey: ['financial-purchase-orders', poPage],
     queryFn: () => financialApi.purchaseOrders(poPage),
@@ -72,7 +100,9 @@ export function FinancialPage() {
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (filters.date_from > filters.date_to) return;
-    setApplied({ ...filters });
+    const period = { ...filters };
+    setApplied(period);
+    setPrintRequest({ id: ++printRequestId.current, period });
   }
 
   function submitExpense(event: FormEvent<HTMLFormElement>) {
@@ -82,13 +112,17 @@ export function FinancialPage() {
 
   const summary = report.data;
 
+  const printSummary = printRequest
+    && summary?.period.date_from === printRequest.period.date_from
+    && summary.period.date_to === printRequest.period.date_to
+    ? summary
+    : null;
+
   return (
-    <div className="space-y-5 p-4 sm:p-6">
+    <>
+    <div className="financial-screen no-print space-y-5 p-4 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Laporan Keuangan</h1>
-        <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
-          Cetak laporan
-        </button>
       </header>
 
       <form onSubmit={applyFilters} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
@@ -98,8 +132,8 @@ export function FinancialPage() {
         <Field label="Tanggal akhir">
           <input className={inputCls} type="date" required value={filters.date_to} onChange={(event) => setFilters({ ...filters, date_to: event.target.value })} />
         </Field>
-        <button type="submit" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
-          Buat laporan
+        <button type="submit" disabled={printRequest !== null} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60">
+          {printRequest ? 'Menyiapkan PDF…' : 'Buat laporan'}
         </button>
         {filters.date_from > filters.date_to && <p role="alert" className="text-sm text-red-700 sm:col-span-2">Tanggal awal harus sebelum tanggal akhir.</p>}
       </form>
@@ -190,6 +224,8 @@ export function FinancialPage() {
         </section>
       )}
     </div>
+    {printSummary && <FinancialPrintSheet report={printSummary} />}
+    </>
   );
 }
 
@@ -199,6 +235,47 @@ function SummaryCard({ label, value, detail }: { label: string; value: string; d
       <div className="text-sm text-slate-500">{label}</div>
       <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
       {detail && <div className="mt-1 text-xs text-slate-500">{detail}</div>}
+    </div>
+  );
+}
+
+function FinancialPrintSheet({ report }: { report: FinancialReport }) {
+  const rows = [
+    { label: report.cash.account_name, detail: 'Saldo akhir periode', value: report.cash.closing_balance },
+    { label: 'Saldo awal kas', value: report.cash.opening_balance },
+    { label: 'Kas masuk', value: report.cash.cash_in },
+    { label: 'Kas keluar', value: report.cash.cash_out },
+    { label: 'Pembayaran PO', value: report.supplier_payments },
+    { label: 'Laba kotor', value: report.profit.gross_profit },
+    { label: 'Laba bersih', value: report.profit.net_profit },
+    { label: 'Biaya operasional', value: report.profit.operating_expenses },
+    { label: 'Gaji', value: report.profit.payroll_expenses },
+    { label: 'Kerugian write-off retur', value: report.profit.approved_return_losses },
+  ];
+
+  return (
+    <div className="print-only print-doc">
+      <article>
+        <header className="mb-5 border-b-2 border-black pb-3">
+          <h1 className="text-2xl font-bold">LAPORAN KEUANGAN</h1>
+          <p className="mt-1 text-sm">
+            Periode: {report.period.date_from} s.d. {report.period.date_to}
+          </p>
+        </header>
+        <table>
+          <thead>
+            <tr><th>Komponen</th><th className="text-right">Jumlah</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label}>
+                <td>{row.label}{row.detail ? <div className="text-xs">{row.detail}</div> : null}</td>
+                <td className="text-right">{formatRupiah(row.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </article>
     </div>
   );
 }
