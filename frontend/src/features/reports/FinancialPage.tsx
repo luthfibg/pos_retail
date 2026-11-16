@@ -21,7 +21,7 @@ function todayWib(): string {
 }
 
 export function FinancialPage() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const queryClient = useQueryClient();
   const canRecord = can('financial.transaction.create');
   const today = todayWib();
@@ -224,7 +224,7 @@ export function FinancialPage() {
         </section>
       )}
     </div>
-    {printSummary && <FinancialPrintSheet report={printSummary} />}
+    {printSummary && <FinancialPrintSheet report={printSummary} storeName={me?.store?.name ?? ''} preparedBy={me?.user.name ?? ''} />}
     </>
   );
 }
@@ -239,42 +239,197 @@ function SummaryCard({ label, value, detail }: { label: string; value: string; d
   );
 }
 
-function FinancialPrintSheet({ report }: { report: FinancialReport }) {
-  const rows = [
-    { label: report.cash.account_name, detail: 'Saldo akhir periode', value: report.cash.closing_balance },
-    { label: 'Saldo awal kas', value: report.cash.opening_balance },
-    { label: 'Kas masuk', value: report.cash.cash_in },
-    { label: 'Kas keluar', value: report.cash.cash_out },
-    { label: 'Pembayaran PO', value: report.supplier_payments },
-    { label: 'Laba kotor', value: report.profit.gross_profit },
-    { label: 'Laba bersih', value: report.profit.net_profit },
-    { label: 'Biaya operasional', value: report.profit.operating_expenses },
-    { label: 'Gaji', value: report.profit.payroll_expenses },
-    { label: 'Kerugian write-off retur', value: report.profit.approved_return_losses },
+// ---------------------------------------------------------------------------------------------
+// Lembar cetak laporan keuangan (A4). Hanya tampil saat mencetak (kelas `print-only`); layar memakai `no-print`.
+// Tidak memakai `.print-doc` karena kelas itu memberi garis pada setiap sel tabel, sedangkan laporan keuangan
+// memakai garis tipis antar-baris, garis atas untuk subtotal, dan garis ganda untuk total akhir.
+// ---------------------------------------------------------------------------------------------
+
+/** Halaman bernama untuk laporan ini: A4, margin bawah lebih besar untuk nomor halaman (didukung Chromium; browser lain mengabaikannya). */
+const REPORT_PAGE_CSS = `
+@page financialReport {
+  size: A4 portrait;
+  margin: 16mm 16mm 18mm;
+  @bottom-left { content: "Laporan Keuangan"; font-size: 8pt; color: #475569; }
+  @bottom-right { content: "Halaman " counter(page) " dari " counter(pages); font-size: 8pt; color: #475569; }
+}`;
+
+type StatementRow =
+  | { kind: 'heading'; label: string }
+  | { kind: 'line'; label: string; cents: number; indent?: boolean }
+  | { kind: 'subtotal'; label: string; cents: number }
+  | { kind: 'total'; label: string; cents: number };
+
+/** Angka uang dari server berupa string desimal; dijumlahkan dalam sen (bilangan bulat) agar subtotal tidak melenceng. */
+function toCents(value: string): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
+
+/** Format akuntansi: pemisah ribuan id-ID, nilai negatif dalam kurung. Desimal hanya tampil bila ada sen di laporan. */
+function statementAmount(cents: number, showCents: boolean): string {
+  const digits = showCents ? 2 : 0;
+  const text = new Intl.NumberFormat('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Math.abs(cents) / 100);
+  return cents < 0 ? `(${text})` : text;
+}
+
+/** "2026-11-01" -> "1 November 2026" (tanggal kalender murni, tanpa pergeseran zona waktu). */
+function longDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeZone: 'UTC' }).format(date);
+}
+
+function periodLabel(period: FinancialReport['period']): string {
+  return period.date_from === period.date_to
+    ? longDate(period.date_from)
+    : `${longDate(period.date_from)} s.d. ${longDate(period.date_to)}`;
+}
+
+function buildStatements(report: FinancialReport) {
+  const { cash, profit } = report;
+  const gross = toCents(profit.gross_profit);
+  const operating = toCents(profit.operating_expenses);
+  const payroll = toCents(profit.payroll_expenses);
+  const returnLoss = toCents(profit.approved_return_losses);
+  const net = toCents(profit.net_profit);
+  const opening = toCents(cash.opening_balance);
+  const cashIn = toCents(cash.cash_in);
+  const cashOut = toCents(cash.cash_out);
+  const closing = toCents(cash.closing_balance);
+  const supplierPayments = toCents(report.supplier_payments);
+
+  const incomeStatement: StatementRow[] = [
+    { kind: 'line', label: 'Laba kotor penjualan', cents: gross },
+    { kind: 'heading', label: 'Beban' },
+    { kind: 'line', label: 'Biaya operasional', cents: operating, indent: true },
+    { kind: 'line', label: 'Gaji karyawan', cents: payroll, indent: true },
+    { kind: 'line', label: 'Kerugian write-off retur supplier', cents: returnLoss, indent: true },
+    { kind: 'subtotal', label: 'Total beban', cents: operating + payroll + returnLoss },
+    { kind: 'total', label: net < 0 ? 'RUGI BERSIH' : 'LABA BERSIH', cents: net },
+  ];
+  const cashFlow: StatementRow[] = [
+    { kind: 'line', label: 'Saldo awal kas', cents: opening },
+    { kind: 'line', label: 'Kas masuk', cents: cashIn, indent: true },
+    { kind: 'line', label: 'Kas keluar', cents: -cashOut, indent: true },
+    { kind: 'subtotal', label: 'Kenaikan (penurunan) kas bersih', cents: cashIn - cashOut },
+    { kind: 'total', label: 'SALDO AKHIR KAS', cents: closing },
   ];
 
+  const showCents = [gross, operating, payroll, returnLoss, net, opening, cashIn, cashOut, closing, supplierPayments]
+    .some((cents) => cents % 100 !== 0);
+  return { incomeStatement, cashFlow, supplierPayments, showCents };
+}
+
+function StatementTable({ rows, showCents }: { rows: StatementRow[]; showCents: boolean }) {
   return (
-    <div className="print-only print-doc">
-      <article>
-        <header className="mb-5 border-b-2 border-black pb-3">
-          <h1 className="text-2xl font-bold">LAPORAN KEUANGAN</h1>
-          <p className="mt-1 text-sm">
-            Periode: {report.period.date_from} s.d. {report.period.date_to}
-          </p>
-        </header>
-        <table>
-          <thead>
-            <tr><th>Komponen</th><th className="text-right">Jumlah</th></tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.label}>
-                <td>{row.label}{row.detail ? <div className="text-xs">{row.detail}</div> : null}</td>
-                <td className="text-right">{formatRupiah(row.value)}</td>
+    <table className="w-full border-collapse text-[10.5pt]">
+      <thead>
+        <tr className="border-y border-black">
+          <th className="py-1 pr-2 text-left font-semibold">Uraian</th>
+          <th className="w-44 py-1 pl-2 text-right font-semibold">Jumlah (Rp)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => {
+          if (row.kind === 'heading') {
+            return <tr key={row.label}><td colSpan={2} className="pb-0.5 pt-2 font-semibold">{row.label}</td></tr>;
+          }
+          const amount = statementAmount(row.cents, showCents);
+          if (row.kind === 'line') {
+            return (
+              <tr key={row.label} className="border-b border-slate-300" style={{ breakInside: 'avoid' }}>
+                <td className={`py-1 pr-2 ${row.indent ? 'pl-6' : ''}`}>{row.label}</td>
+                <td className="py-1 pl-2 text-right tabular-nums">{amount}</td>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            );
+          }
+          if (row.kind === 'subtotal') {
+            return (
+              <tr key={row.label} className="border-t border-black font-semibold" style={{ breakInside: 'avoid' }}>
+                <td className="py-1 pr-2">{row.label}</td>
+                <td className="py-1 pl-2 text-right tabular-nums">{amount}</td>
+              </tr>
+            );
+          }
+          return (
+            <tr key={row.label} className="font-bold" style={{ breakInside: 'avoid', borderTop: '1px solid #000', borderBottom: '3px double #000' }}>
+              <td className="py-1.5 pr-2">{row.label}</td>
+              <td className="py-1.5 pl-2 text-right tabular-nums">{amount}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function ReportSignatures({ preparedBy }: { preparedBy: string }) {
+  const cells = [
+    { role: 'Dibuat oleh', name: preparedBy },
+    { role: 'Diperiksa oleh', name: '' },
+    { role: 'Disetujui oleh (Owner)', name: '' },
+  ];
+  return (
+    <section className="mt-10 text-center text-xs" style={{ breakInside: 'avoid' }}>
+      <div className="grid grid-cols-3 gap-8">
+        {cells.map((cell) => (
+          <div key={cell.role}>
+            <div className="font-medium">{cell.role}</div>
+            <div className="h-20" />
+            <div className="border-t border-black pt-1 font-medium">{cell.name || '(............................)'}</div>
+            <div className="mt-1 text-[10px] text-slate-600">Tanggal: ....................</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FinancialPrintSheet({ report, storeName, preparedBy }: { report: FinancialReport; storeName: string; preparedBy: string }) {
+  const { incomeStatement, cashFlow, supplierPayments, showCents } = buildStatements(report);
+  const [printedAt] = useState(() => new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Asia/Jakarta' }).format(new Date()));
+  const period = periodLabel(report.period);
+
+  return (
+    <div className="print-only text-black" style={{ page: 'financialReport', fontSize: '11pt' }}>
+      <style>{REPORT_PAGE_CSS}</style>
+      <article>
+        <header className="mb-5 text-center" style={{ borderBottom: '4px double #000', paddingBottom: '0.75rem' }}>
+          {storeName && <div className="text-base font-bold uppercase tracking-wide">{storeName}</div>}
+          <h1 className="mt-1 text-xl font-bold tracking-wide">LAPORAN KEUANGAN</h1>
+          <p className="mt-1 text-sm">Periode {period}</p>
+          <p className="text-xs">(Disajikan dalam Rupiah)</p>
+        </header>
+
+        <section className="mb-6">
+          <h2 className="mb-1 text-sm font-bold uppercase tracking-wide">A. Laporan Laba Rugi</h2>
+          <p className="mb-2 text-xs">Untuk periode {period}</p>
+          <StatementTable rows={incomeStatement} showCents={showCents} />
+        </section>
+
+        <section className="mb-6">
+          <h2 className="mb-1 text-sm font-bold uppercase tracking-wide">B. Laporan Arus Kas</h2>
+          <p className="mb-2 text-xs">Akun kas: {report.cash.account_name} · periode {period}</p>
+          <StatementTable rows={cashFlow} showCents={showCents} />
+        </section>
+
+        <section className="text-xs leading-5" style={{ breakInside: 'avoid' }}>
+          <h2 className="mb-1 text-sm font-bold uppercase tracking-wide">C. Catatan</h2>
+          <ol className="list-decimal pl-5">
+            <li>Laba bersih = laba kotor − biaya operasional − gaji karyawan − kerugian write-off retur supplier yang disetujui pada periode.</li>
+            <li>Kas masuk dan kas keluar adalah total mutasi buku kas akun {report.cash.account_name} selama periode.</li>
+            <li>Pembayaran PO kepada supplier selama periode: Rp {statementAmount(supplierPayments, showCents)}.</li>
+            <li>Nilai dalam kurung menunjukkan pengurangan atau angka negatif.</li>
+          </ol>
+        </section>
+
+        <ReportSignatures preparedBy={preparedBy} />
+
+        <p className="mt-6 border-t border-slate-300 pt-1 text-[9pt] text-slate-600">
+          Dicetak pada {printedAt} WIB{preparedBy ? ` oleh ${preparedBy}` : ''}.
+        </p>
       </article>
     </div>
   );
