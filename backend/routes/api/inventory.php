@@ -59,7 +59,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('stock-opname-sessions/{session}/submit', [OpnameSessionController::class, 'submit'])
         ->whereNumber('session')->middleware('can:opname.post');
     Route::post('stock-opname-sessions/{session}/approve', [OpnameSessionController::class, 'approve'])
-        ->whereNumber('session')->middleware('can:opname.approve');
+        ->whereNumber('session')->middleware('can:opname.post');
     Route::post('stock-opname-sessions/{session}/reject', [OpnameSessionController::class, 'reject'])
         ->whereNumber('session')->middleware('can:opname.approve');
     Route::get('stock-opname-sessions/{session}/tree', [OpnameSessionController::class, 'tree'])

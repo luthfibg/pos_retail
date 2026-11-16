@@ -49,7 +49,7 @@ export function OpnamePage() {
               >
                 <span className="font-medium">{session.number}</span>
                 <span className="text-sm text-slate-600">
-                  {session.status === 'pending_approval' ? 'Menunggu' : `${session.counted_products}/${session.total_products}`}
+                  {session.status === 'pending_approval' ? 'Draft' : `${session.counted_products}/${session.total_products}`}
                 </span>
               </Link>
             </li>

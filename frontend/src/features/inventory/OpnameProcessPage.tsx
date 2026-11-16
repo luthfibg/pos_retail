@@ -20,7 +20,6 @@ export function OpnameProcessPage() {
   const { can, me } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const isOwner = me?.roles.includes('Owner') ?? false;
 
   const [filter, setFilter] = useState<'todo' | 'done'>('todo');
   const [search, setSearch] = useState('');
@@ -34,6 +33,8 @@ export function OpnameProcessPage() {
   const [password, setPassword] = useState('');
   const [reason, setReason] = useState('');
   const [reconciliationActions, setReconciliationActions] = useState<Record<number, ReconciliationAction | ''>>({});
+  const [reconciliationReasons, setReconciliationReasons] = useState<Record<number, string>>({});
+  const [approverUsername, setApproverUsername] = useState('');
   const [printRequested, setPrintRequested] = useState(false);
   const [printJob, setPrintJob] = useState<{ report: OpnameReport; items: OpnameItem[] } | null>(null);
   const requestId = useRef('');
@@ -113,8 +114,12 @@ export function OpnameProcessPage() {
   function open(next: Dialog) {
     requestId.current = newRequestId();
     setPassword('');
+    setApproverUsername(can('opname.approve') ? me?.user.username ?? '' : '');
     setReason('');
-    if (next === 'review') setReconciliationActions({});
+    if (next === 'review') {
+      setReconciliationActions({});
+      setReconciliationReasons({});
+    }
     finish.reset();
     cancel.reset();
     approve.reset();
@@ -122,7 +127,7 @@ export function OpnameProcessPage() {
   }
 
   const finish = useMutation({
-    mutationFn: () => opnameApi.submit(id, { client_request_id: requestId.current, ...(isOwner ? { owner_password: password } : {}) }),
+    mutationFn: () => opnameApi.submit(id, { client_request_id: requestId.current }),
     onSuccess: (result) => {
       setDialog(null);
       void refresh();
@@ -134,8 +139,13 @@ export function OpnameProcessPage() {
     onSuccess: () => { void refresh(); navigate(LIST_HREF); },
   });
   const approve = useMutation({
-    mutationFn: (reconciliations: Array<{ item_id: number; action: ReconciliationAction }>) =>
-      opnameApi.approve(id, { client_request_id: requestId.current, owner_password: password, reconciliations }),
+    mutationFn: (reconciliations: Array<{ item_id: number; action: ReconciliationAction; reason: string }>) =>
+      opnameApi.approve(id, {
+        client_request_id: requestId.current,
+        approver_username: approverUsername.trim(),
+        owner_password: password,
+        reconciliations,
+      }),
     onSuccess: () => { setDialog(null); void refresh(); navigate(HISTORY_HREF); },
   });
 
@@ -169,11 +179,12 @@ export function OpnameProcessPage() {
 
   const pending = finish.isPending || cancel.isPending || approve.isPending;
   const dialogError = finish.error ?? cancel.error ?? approve.error;
-  const needsPassword = dialog === 'authorize_reconciliation' || (dialog === 'finish' && isOwner);
+  const needsPassword = dialog === 'authorize_reconciliation';
   const reasonOk = reason.trim().length >= 3;
   const confirmDisabled = pending
-    || (needsPassword && password === '')
-    || (dialog === 'review' && variances.some((row) => !reconciliationActions[row.id]))
+    || (needsPassword && (password === '' || approverUsername.trim() === ''))
+    || (dialog === 'review' && variances.some((row) =>
+      !reconciliationActions[row.id] || (reconciliationReasons[row.id] ?? '').trim().length < 3))
     || (dialog === 'cancel' && !reasonOk);
 
   function confirm() {
@@ -186,7 +197,11 @@ export function OpnameProcessPage() {
     } else if (dialog === 'authorize_reconciliation') {
       const reconciliations = variances.flatMap((row) => {
         const action = reconciliationActions[row.id];
-        return action ? [{ item_id: row.id, action }] : [];
+        return action ? [{
+          item_id: row.id,
+          action,
+          reason: (reconciliationReasons[row.id] ?? '').trim(),
+        }] : [];
       });
       approve.mutate(reconciliations);
     }
@@ -328,10 +343,11 @@ export function OpnameProcessPage() {
 
       {data.status === 'pending_approval' && (
         <div className="space-y-3">
-          <p className="font-medium">Menunggu persetujuan</p>
+          <p className="font-medium">Draft hasil opname</p>
+          <p className="text-sm text-slate-600">Cetak hasil sementara atau periksa selisih dan pilih tindakan rekonsiliasi stok.</p>
           {report.isPending && <p className="text-sm text-slate-500">Memuat hasil opname…</p>}
           {report.isError && <p role="alert" className="text-sm text-red-700">{shortMessage(report.error, 'Gagal memuat hasil opname')}</p>}
-          {can('opname.approve') && (
+          {(can('opname.post') || can('opname.approve')) && (
             <div className="flex gap-2">
               <button
                 type="button"
@@ -370,7 +386,7 @@ export function OpnameProcessPage() {
               <>
                 <dl className="grid grid-cols-2 gap-3 rounded-md bg-slate-50 p-3 text-sm">
                   <div><dt className="text-slate-500">Produk dihitung</dt><dd className="font-medium">{report.data.totals?.products_counted ?? data.counted_products}/{report.data.totals?.products_total ?? data.total_products}</dd></div>
-                  <div><dt className="text-slate-500">Produk berselisih</dt><dd className="font-medium">{report.data.totals?.variance_products ?? variances.length}</dd></div>
+                  <div><dt className="text-slate-500">Jumlah total produk yang selisih</dt><dd className="font-medium">{report.data.totals?.variance_products ?? variances.length}</dd></div>
                   <div><dt className="text-slate-500">Total kurang</dt><dd className="font-medium">{formatCount(report.data.totals?.short_qty)}</dd></div>
                   <div><dt className="text-slate-500">Total lebih</dt><dd className="font-medium">{formatCount(report.data.totals?.over_qty)}</dd></div>
                 </dl>
@@ -381,8 +397,8 @@ export function OpnameProcessPage() {
                         {data.condition_counting ? (
                           <tr>
                             <th className="px-3 py-2">Produk</th>
-                            <th className="px-3 py-2">Sistem bagus</th><th className="px-3 py-2">Hitung bagus</th><th className="px-3 py-2">Selisih bagus</th>
-                            <th className="px-3 py-2">Sistem rusak</th><th className="px-3 py-2">Hitung rusak</th><th className="px-3 py-2">Selisih rusak</th>
+                            <th className="px-3 py-2">Stok bagus</th><th className="px-3 py-2">Barang bagus</th><th className="px-3 py-2">Selisih bagus</th>
+                            <th className="px-3 py-2">Stok rusak</th><th className="px-3 py-2">Barang rusak</th><th className="px-3 py-2">Selisih rusak</th>
                             <th className="px-3 py-2">Rekonsiliasi</th>
                           </tr>
                         ) : (
@@ -413,21 +429,35 @@ export function OpnameProcessPage() {
                               </>
                             )}
                             <td className="px-3 py-2">
-                              <select
-                                aria-label={`Rekonsiliasi ${row.name}`}
-                                value={reconciliationActions[row.id] ?? ''}
-                                onChange={(event) => {
-                                  const action = event.target.value;
-                                  if (action === '' || action === 'write_off' || action === 'correction') {
-                                    setReconciliationActions((current) => ({ ...current, [row.id]: action }));
-                                  }
-                                }}
-                                className="min-h-10 rounded-md border border-slate-300 px-2"
-                              >
-                                <option value="">Pilih tindakan</option>
-                                <option value="write_off">Pemutihan</option>
-                                <option value="correction">Koreksi stok</option>
-                              </select>
+                              <div className="min-w-56 space-y-2">
+                                <select
+                                  aria-label={`Rekonsiliasi ${row.name}`}
+                                  value={reconciliationActions[row.id] ?? ''}
+                                  onChange={(event) => {
+                                    const action = event.target.value;
+                                    if (action === '' || action === 'write_off' || action === 'correction') {
+                                      setReconciliationActions((current) => ({ ...current, [row.id]: action }));
+                                    }
+                                  }}
+                                  className="min-h-10 w-full rounded-md border border-slate-300 px-2"
+                                >
+                                  <option value="">Pilih tindakan</option>
+                                  <option value="write_off">Pemutihan</option>
+                                  <option value="correction">Koreksi stok</option>
+                                </select>
+                                <textarea
+                                  aria-label={`Alasan rekonsiliasi ${row.name}`}
+                                  maxLength={500}
+                                  rows={2}
+                                  value={reconciliationReasons[row.id] ?? ''}
+                                  onChange={(event) => setReconciliationReasons((current) => ({
+                                    ...current,
+                                    [row.id]: event.target.value,
+                                  }))}
+                                  placeholder="Alasan pemutihan atau koreksi stok"
+                                  className="w-full rounded-md border border-slate-300 px-2 py-1.5"
+                                />
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -444,10 +474,31 @@ export function OpnameProcessPage() {
               <input aria-label="Alasan" placeholder="Alasan" value={reason} onChange={(event) => setReason(event.target.value)} className={fieldCls} />
             )}
             {dialog === 'authorize_reconciliation' && (
-              <p className="text-sm text-slate-600">Masukkan password Owner untuk menyetujui rekonsiliasi stok yang dipilih.</p>
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">Masukkan username dan password Owner (atau Admin pada model sederhana) untuk menyetujui rekonsiliasi stok yang dipilih.</p>
+                <ul className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                  {variances.map((row) => (
+                    <li key={row.id}>
+                      <p className="font-medium text-slate-900">
+                        {row.name} · {reconciliationActions[row.id] === 'write_off' ? 'Pemutihan' : 'Koreksi stok'}
+                      </p>
+                      <p className="whitespace-pre-wrap text-slate-600">{reconciliationReasons[row.id]?.trim()}</p>
+                    </li>
+                  ))}
+                </ul>
+                <label className="block text-sm font-medium text-slate-700">
+                  Username pemberi persetujuan
+                  <input
+                    autoComplete="off"
+                    value={approverUsername}
+                    onChange={(event) => setApproverUsername(event.target.value)}
+                    className={`${fieldCls} mt-1`}
+                  />
+                </label>
+              </div>
             )}
             {needsPassword && (
-              <input type="password" autoComplete="current-password" aria-label="Password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className={fieldCls} />
+              <input type="password" autoComplete="new-password" aria-label="Password persetujuan" placeholder="Password persetujuan" value={password} onChange={(event) => setPassword(event.target.value)} className={fieldCls} />
             )}
             {dialogError && <p role="alert" className="text-sm text-red-700">{shortMessage(dialogError, 'Gagal')}</p>}
           </div>
@@ -520,7 +571,7 @@ function OpnamePrintSheet({ report, items, storeName, onDone }: { report: Opname
         </header>
         <dl className="mb-4 grid grid-cols-2 gap-2 text-sm">
           <div><dt className="font-semibold">Produk dihitung</dt><dd>{report.totals?.products_counted ?? 0}/{report.totals?.products_total ?? 0}</dd></div>
-          <div><dt className="font-semibold">Produk berselisih</dt><dd>{report.totals?.variance_products ?? rows.length}</dd></div>
+          <div><dt className="font-semibold">Jumlah total produk yang selisih</dt><dd>{report.totals?.variance_products ?? rows.length}</dd></div>
           <div><dt className="font-semibold">Total kurang</dt><dd>{formatCount(report.totals?.short_qty)}</dd></div>
           <div><dt className="font-semibold">Total lebih</dt><dd>{formatCount(report.totals?.over_qty)}</dd></div>
         </dl>
@@ -530,7 +581,7 @@ function OpnamePrintSheet({ report, items, storeName, onDone }: { report: Opname
               {conditionCounting ? (
                 <tr>
                   <th>No</th><th>Produk</th><th>SKU</th><th>Barcode</th>
-                  <th>Sistem bagus</th><th>Sistem rusak</th><th>Hitung bagus</th><th>Hitung rusak</th>
+                  <th>Stok bagus</th><th>Stok rusak</th><th>Barang bagus</th><th>Barang rusak</th>
                   <th>Selisih bagus</th><th>Selisih rusak</th>
                   <th>No. PO</th><th>Tgl. PO</th><th>No. penerimaan</th><th>Tgl. penerimaan</th>
                   <th>Sisa bagus</th><th>Sisa rusak</th>

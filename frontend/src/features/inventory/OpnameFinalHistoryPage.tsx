@@ -29,11 +29,12 @@ function ReconciliationItems({ sessionId }: { sessionId: number }) {
   return (
     <div className="mt-3">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[620px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-xs text-slate-500">
               <th className="px-3 py-2 font-medium">Produk</th>
               <th className="px-3 py-2 font-medium">Tindakan</th>
+              <th className="px-3 py-2 font-medium">Alasan</th>
               <th className="px-3 py-2 font-medium">Selisih barang bagus</th>
               <th className="px-3 py-2 font-medium">Selisih barang rusak</th>
               <th className="px-3 py-2 font-medium">Selisih total</th>
@@ -88,6 +89,7 @@ function ReconciliationRow({ item }: { item: OpnameItem }) {
           ? 'Pemutihan'
           : item.reconciliation_action === 'correction' ? 'Koreksi stok' : 'Selisih opname'}
       </td>
+      <td className="whitespace-pre-wrap px-3 py-3">{item.reconciliation_reason || '—'}</td>
       <td className="px-3 py-3">{goodDiff == null ? '—' : formatDiff(Number(goodDiff))}</td>
       <td className="px-3 py-3">{damagedDiff == null ? '—' : formatDiff(Number(damagedDiff))}</td>
       <td className="px-3 py-3">{totalDiff == null ? '—' : formatDiff(Number(totalDiff))}</td>

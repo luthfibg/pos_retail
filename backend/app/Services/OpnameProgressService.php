@@ -289,6 +289,7 @@ class OpnameProgressService
                     $row['diff_qty'] = $item->diff_qty;
                     if ($item->reconciliation_action !== null) {
                         $row['reconciliation_action'] = $item->reconciliation_action;
+                        $row['reconciliation_reason'] = $item->reconciliation_reason;
                         $row['reconciliation_diff_qty'] = $item->reconciliation_diff_qty ?? $item->diff_qty;
                         $row['reconciliation_diff_good_qty'] = $item->reconciliation_diff_good_qty ?? $item->diff_good_qty;
                         $row['reconciliation_diff_damaged_qty'] = $item->reconciliation_diff_damaged_qty ?? $item->diff_damaged_qty;

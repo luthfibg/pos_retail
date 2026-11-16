@@ -625,6 +625,7 @@ export interface OpnameItem {
   diff_good_qty?: Decimal | null;
   diff_damaged_qty?: Decimal | null;
   reconciliation_action?: 'write_off' | 'correction' | null;
+  reconciliation_reason?: string | null;
   reconciliation_diff_qty?: Decimal | null;
   reconciliation_diff_good_qty?: Decimal | null;
   reconciliation_diff_damaged_qty?: Decimal | null;

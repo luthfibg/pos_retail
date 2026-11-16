@@ -330,12 +330,13 @@ export const opnameApi = {
       method: 'POST',
       body: { reason },
     }).then((r) => r.data),
-  submit: (id: number, input: { client_request_id: string; owner_password?: string }) =>
+  submit: (id: number, input: { client_request_id: string }) =>
     api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/submit`, { method: 'POST', body: input }).then((r) => r.data),
   approve: (id: number, input: {
     client_request_id: string;
+    approver_username: string;
     owner_password: string;
-    reconciliations: Array<{ item_id: number; action: 'write_off' | 'correction' }>;
+    reconciliations: Array<{ item_id: number; action: 'write_off' | 'correction'; reason: string }>;
   }) =>
     api<{ data: OpnameSession }>(`/stock-opname-sessions/${id}/approve`, { method: 'POST', body: input }).then((r) => r.data),
   reject: (id: number, input: { client_request_id: string; owner_password: string; reason: string }) =>

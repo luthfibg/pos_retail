@@ -15,7 +15,6 @@ class SubmitOpnameSessionRequest extends FormRequest
     {
         return [
             'client_request_id' => ['required', 'uuid'],
-            'owner_password' => ['sometimes', 'string', 'max:200'],
         ];
     }
 }

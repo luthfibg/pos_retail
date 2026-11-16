@@ -55,87 +55,45 @@ class OpnameWorkflowService
 
             $session = $this->lockSession($storeId, $sessionId);
             if ($session->status !== 'in_progress') {
-                throw $this->invalidStatus($session->status, 'Hanya sesi yang sedang berjalan yang dapat diajukan atau diposting.');
+                throw $this->invalidStatus($session->status, 'Hanya sesi yang sedang berjalan yang dapat diselesaikan.');
             }
             $items = $this->completeItems($sessionId, (bool) $session->condition_counting);
-            $owner = $this->settings->isOwner($actor, $storeId);
-            if ($owner) {
-                $this->confirmApprover($actor, $storeId, (string) ($data['owner_password'] ?? ''), 'opname.post');
-            }
-
             $snapshot = $this->makeSnapshot($storeId, $sessionId, $items);
             $thresholds = $this->settings->thresholds($storeId);
             $reasons = $this->approvalEvaluator->evaluate($storeId, $items, $snapshot, $thresholds);
-            $approvalRequired = ! $owner && $reasons !== [];
             $now = $this->now();
             $this->freezeItems($sessionId, $items, $snapshot);
 
-            if ($approvalRequired) {
-                DB::table('stock_opname_sessions')->where('id', $sessionId)->update([
-                    'status' => 'pending_approval',
-                    'submitted_at' => $now,
-                    'submitted_by' => $actor->id,
-                    'approval_required' => true,
-                    'approval_reasons' => json_encode($reasons, JSON_UNESCAPED_UNICODE),
-                    'rejected_at' => null,
-                    'rejected_by' => null,
-                    'reject_reason' => null,
-                    ...$snapshot['totals'],
-                    'updated_at' => $now,
-                ]);
-                $this->recordAction($sessionId, 'submitted', $actor->id, $data['client_request_id'], null, $now);
-                $this->audit->log(
-                    'stock_opname.submit',
-                    'stock_opname_session',
-                    $sessionId,
-                    before: ['status' => 'in_progress'],
-                    after: ['status' => 'pending_approval', 'reasons' => $reasons],
-                    storeId: $storeId,
-                    actorId: $actor->id,
-                );
-                $this->notifications->notifyPermission(
-                    $storeId,
-                    'opname.approve',
-                    'stock_opname_approval_required',
-                    "Stock opname {$session->number} menunggu persetujuan Admin atau Owner.",
-                    'stock_opname_session',
-                    $sessionId,
-                    $actor->id,
-                );
-
-                return $this->sessionSummary($actor, $storeId, $sessionId);
-            }
-
-            $adjustedProducts = $this->postDifferences($actor, $storeId, $sessionId, $items, $snapshot);
             DB::table('stock_opname_sessions')->where('id', $sessionId)->update([
-                'status' => 'posted',
+                'status' => 'pending_approval',
                 'submitted_at' => $now,
                 'submitted_by' => $actor->id,
-                'approval_required' => false,
+                'approval_required' => true,
                 'approval_reasons' => json_encode($reasons, JSON_UNESCAPED_UNICODE),
                 'rejected_at' => null,
                 'rejected_by' => null,
                 'reject_reason' => null,
-                'approved_at' => $owner ? $now : null,
-                'approved_by' => $owner ? $actor->id : null,
-                'posted_at' => $now,
-                'posted_by' => $actor->id,
                 ...$snapshot['totals'],
                 'updated_at' => $now,
             ]);
-            if ($adjustedProducts !== []) {
-                $this->inventory->synchronizeAutomaticPurchaseRequisitions($actor, $storeId, $adjustedProducts);
-            }
-            $this->recordAction($sessionId, 'posted', $actor->id, $data['client_request_id'], null, $now);
+            $this->recordAction($sessionId, 'submitted', $actor->id, $data['client_request_id'], null, $now);
             $this->audit->log(
-                'stock_opname.post',
+                'stock_opname.submit',
                 'stock_opname_session',
                 $sessionId,
                 before: ['status' => 'in_progress'],
-                after: ['status' => 'posted', 'variance_products' => $snapshot['totals']['variance_products']],
-                selfApproval: $owner,
+                after: ['status' => 'pending_approval', 'reasons' => $reasons],
                 storeId: $storeId,
                 actorId: $actor->id,
+            );
+            $this->notifications->notifyPermission(
+                $storeId,
+                'opname.approve',
+                'stock_opname_approval_required',
+                "Stock opname {$session->number} menunggu persetujuan Admin atau Owner.",
+                'stock_opname_session',
+                $sessionId,
+                $actor->id,
             );
 
             return $this->sessionSummary($actor, $storeId, $sessionId);
@@ -145,8 +103,6 @@ class OpnameWorkflowService
     /** @param array<string, mixed> $data @return array<string, mixed> */
     public function approve(User $actor, int $storeId, int $sessionId, array $data): array
     {
-        $this->assertOwnerApprover($actor, $storeId);
-
         return DB::transaction(function () use ($actor, $storeId, $sessionId, $data) {
             $existing = $this->idempotentResult($actor, $storeId, $sessionId, $data['client_request_id'], ['approved']);
             if ($existing !== null) {
@@ -156,7 +112,23 @@ class OpnameWorkflowService
             if ($session->status !== 'pending_approval') {
                 throw $this->invalidStatus($session->status, 'Hanya sesi yang menunggu persetujuan yang dapat disetujui.');
             }
-            $approver = $this->confirmApprover($actor, $storeId, (string) $data['owner_password'], 'opname.approve');
+            try {
+                $approver = $this->reauth->confirm(
+                    (string) ($data['approver_username'] ?? $actor->username),
+                    (string) $data['owner_password'],
+                    'opname.approve',
+                    $actor,
+                );
+            } catch (ValidationException $exception) {
+                $message = collect($exception->errors())->flatten()->first() ?? 'Konfirmasi password Owner gagal.';
+                throw ValidationException::withMessages(['owner_password' => [$message]]);
+            }
+            if (! $this->settings->isApprovalAuthority($approver, $storeId)
+                || ! app(PermissionResolver::class)->allows($approver, 'opname.approve', $storeId)) {
+                throw ValidationException::withMessages([
+                    'owner_password' => ['Pemberi persetujuan tidak berwenang di toko ini.'],
+                ]);
+            }
             $items = $this->completeItems($sessionId, (bool) $session->condition_counting);
             $snapshot = $this->frozenSnapshot($sessionId, $session, $items);
             $varianceItems = $this->itemsWithDifferences($items, $snapshot);
@@ -542,14 +514,23 @@ class OpnameWorkflowService
 
     /**
      * @param  array<int, object>  $varianceItems
-     * @param  array<int, array{item_id: int, action: string}>  $requested
-     * @return array<int, string>
+     * @param  array<int, array{item_id: int, action: string, reason: string}>  $requested
+     * @return array<int, array{action: string, reason: string}>
      */
     private function validatedReconciliationActions(array $varianceItems, array $requested): array
     {
         $actions = [];
         foreach ($requested as $reconciliation) {
-            $actions[(int) $reconciliation['item_id']] = $reconciliation['action'];
+            $reason = trim($reconciliation['reason']);
+            if (mb_strlen($reason) < 3) {
+                throw ValidationException::withMessages([
+                    'reconciliations' => 'Alasan rekonsiliasi minimal 3 karakter.',
+                ]);
+            }
+            $actions[(int) $reconciliation['item_id']] = [
+                'action' => $reconciliation['action'],
+                'reason' => $reason,
+            ];
         }
         $varianceIds = array_map(fn ($item) => (int) $item->id, $varianceItems);
         $providedIds = array_map('intval', array_keys($actions));
@@ -566,17 +547,21 @@ class OpnameWorkflowService
 
     /**
      * @param  array<int, object>  $items
-     * @param  array<int, string>  $actions
+     * @param  array<int, array{action: string, reason: string}>  $actions
      */
     private function applyReconciliations(int $sessionId, array $items, array $actions, bool $conditionCounting): void
     {
         foreach ($items as $item) {
-            $action = $actions[(int) $item->id] ?? null;
-            if ($action === null) {
+            $reconciliation = $actions[(int) $item->id] ?? null;
+            if ($reconciliation === null) {
                 continue;
             }
 
-            $updates = ['reconciliation_action' => $action];
+            $action = $reconciliation['action'];
+            $updates = [
+                'reconciliation_action' => $action,
+                'reconciliation_reason' => $reconciliation['reason'],
+            ];
             if ($action === 'correction') {
                 $updates += [
                     'counted_qty' => $item->system_qty_at_count,

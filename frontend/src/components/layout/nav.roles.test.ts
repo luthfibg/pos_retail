@@ -112,7 +112,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Dashboard',
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Pergerakan Stok',
-      'Keuangan > Laporan Keuangan, Laporan Kasir Jaga, Setoran Masuk',
+      'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Keuangan',
       'Karyawan',
     ]);
   });
@@ -130,7 +130,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
     expect(sidebarFor(PERMISSIONS.Accounting ?? [])).toEqual([
       'Dashboard',
       'Inventory > Stok Barang, Stok Opname, Pergerakan Stok',
-      'Keuangan > Laporan Keuangan, Laporan Kasir Jaga, Laporan Piutang',
+      'Keuangan > Laporan Kasir Jaga, Laporan Piutang, Laporan Keuangan',
     ]);
   });
 
@@ -139,7 +139,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Dashboard',
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Retur Barang, Stok Opname, Pergerakan Stok',
-      'Keuangan > Laporan Keuangan, Laporan Kasir Jaga',
+      'Keuangan > Laporan Kasir Jaga, Laporan Keuangan',
       'Karyawan',
       'Pengaturan',
     ]);
@@ -151,7 +151,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Retur Barang, Stok Opname, Pergerakan Stok',
       'Penjualan',
-      'Keuangan > Laporan Keuangan, Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang',
+      'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang, Laporan Keuangan',
       'Data Master > Kategori, Supplier, Karyawan',
       'Pengaturan',
     ]);

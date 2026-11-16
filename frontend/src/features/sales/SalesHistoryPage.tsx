@@ -70,8 +70,7 @@ export function SalesHistoryPage() {
     <div className="sales-history-screen space-y-5 p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Riwayat Penjualan</h1>
-          <p className="mt-1 text-sm text-slate-600">Cari transaksi, lihat detail struk, cetak salinan, atau batalkan transaksi sesuai aturan kasir jaga dan tagihan.</p>
+          <h1 className="text-xl font-semibold">Data Struk Penjualan</h1>
         </div>
         <Field label="Ukuran kertas cetak">
           <select className={inputCls} value={thermalPaperSize} onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}>
