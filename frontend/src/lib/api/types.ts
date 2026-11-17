@@ -389,7 +389,6 @@ export interface ProductSupplier {
   code: string;
   name: string;
   is_active: boolean;
-  default_payment_terms: PaymentTerms | null;
 }
 
 export interface StockMonitoringSetting {
@@ -728,7 +727,6 @@ export interface OpnameCategoryOption {
   children: OpnameCategoryOption[];
 }
 
-export type PaymentTerms = 'prepaid' | 'credit' | 'cod';
 export type PurchaseOrderPaymentTerms = 'top' | 'cbd' | 'cod';
 
 export interface Supplier {
@@ -738,7 +736,6 @@ export interface Supplier {
   contact_name: string | null;
   phone: string | null;
   address: string | null;
-  default_payment_terms: PaymentTerms | null;
   is_active: boolean;
 }
 
@@ -753,7 +750,6 @@ export interface SupplierInput {
   contact_name?: string | null;
   phone?: string | null;
   address?: string | null;
-  default_payment_terms?: PaymentTerms;
 }
 
 export type ExpiryStatus = 'none' | 'ok' | 'near_expiry' | 'expired';
@@ -1416,7 +1412,6 @@ export interface PurchaseOrderSupplier {
   id: number;
   code: string;
   name: string;
-  default_payment_terms: PaymentTerms | null;
 }
 
 export interface PurchaseRequisition extends PurchaseRequisitionSummary {

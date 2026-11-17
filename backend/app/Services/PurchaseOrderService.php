@@ -220,7 +220,7 @@ class PurchaseOrderService
             $items = $this->normalizeItems($pr, $data['items'], null, (int) $supplier->id);
             [$orderDate, $expectedDate] = $this->dates($data);
             $total = $this->sumTotal($items);
-            $paymentTerms = $this->purchaseOrderPaymentTerms($data['payment_terms'] ?? $supplier->default_payment_terms);
+            $paymentTerms = $this->purchaseOrderPaymentTerms($data['payment_terms'] ?? 'cod');
             $paymentTermDays = $paymentTerms === 'top' ? (int) ($data['payment_term_days'] ?? 0) : null;
             if ($paymentTerms === 'top' && $paymentTermDays < 1) {
                 throw ValidationException::withMessages(['payment_term_days' => ['Jumlah hari wajib diisi untuk termin TOP.']]);

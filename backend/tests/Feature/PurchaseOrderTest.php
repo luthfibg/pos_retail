@@ -92,17 +92,18 @@ class PurchaseOrderTest extends SeededTestCase
     public function test_creates_po_from_approved_pr_and_converts_the_pr(): void
     {
         $p = $this->product();
-        $supplier = $this->supplier(['default_payment_terms' => 'credit']);
+        $supplier = $this->supplier();
         $pr = $this->pr($this->cashier->id, [$p => ['10', '2500']]);
 
         $payload = $this->payload($pr, $supplier, $p);
+        $payload['payment_terms'] = 'top';
         $payload['payment_term_days'] = 30;
         $response = $this->postJson('/api/purchase-orders', $payload)
             ->assertCreated()
             ->assertJsonPath('data.status', 'approved')
             ->assertJsonPath('data.receipt_status', 'none')
             ->assertJsonPath('data.payment_status', 'unpaid')
-            ->assertJsonPath('data.payment_terms', 'top')           // dari termin bawaan supplier
+            ->assertJsonPath('data.payment_terms', 'top')
             ->assertJsonPath('data.payment_term_days', 30)
             ->assertJsonPath('data.total', '24000.00')
             ->assertJsonPath('data.items.0.line_total', '24000.00')
@@ -114,6 +115,18 @@ class PurchaseOrderTest extends SeededTestCase
         $this->assertSame('converted', DB::table('purchase_requisitions')->where('id', $pr)->value('status'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_requisition.convert', 'entity_id' => $pr]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'purchase_order.create']);
+    }
+
+    public function test_new_po_uses_cod_when_no_payment_term_is_selected(): void
+    {
+        $product = $this->product();
+        $supplier = $this->supplier();
+        $pr = $this->pr($this->cashier->id, [$product => ['10', '2500']]);
+
+        $this->postJson('/api/purchase-orders', $this->payload($pr, $supplier, $product))
+            ->assertCreated()
+            ->assertJsonPath('data.payment_terms', 'cod')
+            ->assertJsonPath('data.payment_term_days', null);
     }
 
     public function test_top_requires_days_on_create_and_draft_update(): void

@@ -154,7 +154,7 @@ class PurchaseRequisitionService
                 ->whereIn('ps.product_id', $productIds)
                 ->where('s.is_active', true)
                 ->orderBy('s.name')
-                ->get(['ps.product_id', 's.id', 's.code', 's.name', 's.default_payment_terms'])
+                ->get(['ps.product_id', 's.id', 's.code', 's.name'])
                 ->groupBy('product_id');
 
         foreach ($items as &$item) {
@@ -163,7 +163,6 @@ class PurchaseRequisitionService
                     'id' => (int) $supplier->id,
                     'code' => $supplier->code,
                     'name' => $supplier->name,
-                    'default_payment_terms' => $supplier->default_payment_terms,
                 ])
                 ->values()
                 ->all();

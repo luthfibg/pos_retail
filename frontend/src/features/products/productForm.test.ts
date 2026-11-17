@@ -11,7 +11,7 @@ const product: Product = {
   id: 1, sku: 'P-000001', barcode: '2000000000015', name: 'Teh Botol', category_id: 3,
   category_name: 'Minuman', unit_name: 'pcs', track_expiry: false, sell_price: '3500.00',
   unit_cost: '2000.0000',
-  suppliers: [{ id: 8, code: 'SUP-8', name: 'Supplier Teh', is_active: true, default_payment_terms: 'cod' }],
+  suppliers: [{ id: 8, code: 'SUP-8', name: 'Supplier Teh', is_active: true }],
   min_stock: '10.000', critical_stock: '3.000', restock_quantity: '24.000', status: 'active',
   stock_sellable: '12.000', stock_status: 'aman',
 };
@@ -55,8 +55,8 @@ describe('normalizeScannedBarcode', () => {
 });
 
 describe('sharedActiveSuppliers', () => {
-  const supplierA = { id: 8, code: 'SUP-8', name: 'Supplier Teh', is_active: true, default_payment_terms: 'cod' as const };
-  const supplierB = { id: 9, code: 'SUP-9', name: 'Supplier B', is_active: true, default_payment_terms: 'cod' as const };
+  const supplierA = { id: 8, code: 'SUP-8', name: 'Supplier Teh', is_active: true };
+  const supplierB = { id: 9, code: 'SUP-9', name: 'Supplier B', is_active: true };
 
   it('returns only suppliers shared by every selected product', () => {
     expect(sharedActiveSuppliers([

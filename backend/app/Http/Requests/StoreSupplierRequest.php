@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class StoreSupplierRequest extends FormRequest
 {
@@ -21,7 +20,7 @@ class StoreSupplierRequest extends FormRequest
             'contact_name' => ['nullable', 'string', 'max:120'],
             'phone' => ['nullable', 'string', 'max:40'],
             'address' => ['nullable', 'string', 'max:255'],
-            'default_payment_terms' => ['nullable', Rule::in(['prepaid', 'credit', 'cod'])],
+            'default_payment_terms' => ['prohibited'],
         ];
     }
 }

@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class SupplierService
 {
-    private const EDITABLE = ['name', 'contact_name', 'phone', 'address', 'default_payment_terms', 'is_active'];
+    private const EDITABLE = ['name', 'contact_name', 'phone', 'address', 'is_active'];
 
     public function __construct(private AuditLogger $audit)
     {
@@ -56,7 +56,6 @@ class SupplierService
             'contact_name' => $data['contact_name'] ?? null,
             'phone' => $data['phone'] ?? null,
             'address' => $data['address'] ?? null,
-            'default_payment_terms' => $data['default_payment_terms'] ?? 'prepaid',
             'is_active' => 1,
         ];
 
@@ -138,7 +137,6 @@ class SupplierService
             'contact_name' => $row->contact_name,
             'phone' => $row->phone,
             'address' => $row->address,
-            'default_payment_terms' => $row->default_payment_terms,
             'is_active' => (bool) $row->is_active,
         ];
     }

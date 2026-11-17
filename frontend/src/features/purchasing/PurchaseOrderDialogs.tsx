@@ -11,7 +11,7 @@ import { centsToMoney, lineCents, moneyToCents, qtyToMilli } from '@/lib/money';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { PurchaseStageTracker } from './PurchaseStageTracker';
 import { isPoPrintable, poStage } from './purchaseFlow';
-import { PURCHASE_ORDER_PAYMENT_TERMS_LABEL, purchaseOrderTermsFromSupplier } from './paymentTerms';
+import { PURCHASE_ORDER_PAYMENT_TERMS_LABEL } from './paymentTerms';
 
 export const ORDER_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
   draft: 'Draft',
@@ -114,10 +114,6 @@ export function PurchaseOrderCreateDialog({
       if (current && supplierOptions.some((supplier) => String(supplier.id) === current)) return current;
       return autoSupplier ? String(autoSupplier.id) : '';
     });
-    if (autoSupplier) {
-      setTerms(purchaseOrderTermsFromSupplier(autoSupplier.default_payment_terms));
-      setPaymentTermDays('');
-    }
   }, [availability.data, autoSupplier, supplierOptions, supplierSelection.data]);
   const chosenSupplierId = Number(supplierId);
   const availableItems = rowsWithRemaining.filter((item) =>
@@ -166,9 +162,6 @@ export function PurchaseOrderCreateDialog({
 
   function chooseSupplier(id: string) {
     setSupplierId(id);
-    const supplier = supplierOptions.find((item) => String(item.id) === id);
-    setTerms(purchaseOrderTermsFromSupplier(supplier?.default_payment_terms));
-    setPaymentTermDays('');
   }
 
   function updateLine(productId: number, patch: Partial<OrderLine>) {

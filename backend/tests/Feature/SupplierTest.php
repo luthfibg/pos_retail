@@ -15,15 +15,15 @@ class SupplierTest extends SeededTestCase
             'name' => 'CV Maju Jaya',
             'phone' => '0812345678',
         ])->assertCreated()
-            ->assertJsonPath('data.default_payment_terms', 'prepaid')
+            ->assertJsonMissingPath('data.default_payment_terms')
             ->assertJsonPath('data.is_active', true);
 
         $id = $response->json('data.id');
         $this->assertDatabaseHas('audit_logs', ['action' => 'supplier.create', 'entity_id' => $id, 'actor_id' => $admin->id]);
 
-        $this->patchJson("/api/suppliers/{$id}", ['default_payment_terms' => 'credit', 'is_active' => false])
+        $this->patchJson("/api/suppliers/{$id}", ['is_active' => false])
             ->assertOk()
-            ->assertJsonPath('data.default_payment_terms', 'credit')
+            ->assertJsonMissingPath('data.default_payment_terms')
             ->assertJsonPath('data.is_active', false);
         $this->assertDatabaseHas('audit_logs', ['action' => 'supplier.update', 'entity_id' => $id]);
 
@@ -44,7 +44,7 @@ class SupplierTest extends SeededTestCase
             ->assertStatus(422)->assertJsonValidationErrors('code');
     }
 
-    public function test_code_cannot_be_changed_and_terms_are_validated(): void
+    public function test_code_cannot_be_changed_and_payment_terms_are_not_accepted_for_suppliers(): void
     {
         $this->signIn('Admin');
 
@@ -52,7 +52,12 @@ class SupplierTest extends SeededTestCase
 
         $this->patchJson("/api/suppliers/{$id}", ['code' => 'BARU'])
             ->assertStatus(422)->assertJsonValidationErrors('code');
-        $this->patchJson("/api/suppliers/{$id}", ['default_payment_terms' => 'barter'])
+        $this->postJson('/api/suppliers', [
+            'code' => 'SUP-002',
+            'name' => 'B',
+            'default_payment_terms' => 'credit',
+        ])->assertStatus(422)->assertJsonValidationErrors('default_payment_terms');
+        $this->patchJson("/api/suppliers/{$id}", ['default_payment_terms' => 'credit'])
             ->assertStatus(422)->assertJsonValidationErrors('default_payment_terms');
     }
 

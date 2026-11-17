@@ -7,7 +7,6 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { ActiveBadge } from '@/components/ui/ActiveBadge';
 import { Pagination } from '@/components/ui/Pagination';
 import { SupplierFormDialog } from './SupplierFormDialog';
-import { TERMS_LABEL } from './supplierForm';
 
 export function SuppliersPage() {
   const [q, setQ] = useState('');
@@ -54,7 +53,6 @@ export function SuppliersPage() {
               <th className="px-3 py-2">Kode</th>
               <th className="px-3 py-2">Nama</th>
               <th className="px-3 py-2">Kontak</th>
-              <th className="px-3 py-2">Termin</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2" />
             </tr>
@@ -71,16 +69,15 @@ export function SuppliersPage() {
                   {s.contact_name ?? '—'}
                   {s.phone && <div className="text-xs text-slate-400">{s.phone}</div>}
                 </td>
-                <td className="px-3 py-2">{s.default_payment_terms ? TERMS_LABEL[s.default_payment_terms] : '—'}</td>
                 <td className="px-3 py-2"><ActiveBadge active={s.is_active} /></td>
                 <td className="px-3 py-2 text-right">
                   <button type="button" onClick={() => setDialog({ supplier: s })} className="text-sm text-slate-700 underline">Ubah</button>
                 </td>
               </tr>
             ))}
-            {query.isLoading && <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>}
+            {query.isLoading && <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-500">Memuat…</td></tr>}
             {!query.isLoading && rows.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">Tidak ada supplier.</td></tr>
+              <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-500">Tidak ada supplier.</td></tr>
             )}
           </tbody>
         </table>

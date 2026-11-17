@@ -397,7 +397,7 @@ class ProductService
 
     /**
      * @param  list<int>  $productIds
-     * @return array<int, list<array{id: int, code: string, name: string, is_active: bool, default_payment_terms: string}>>
+     * @return array<int, list<array{id: int, code: string, name: string, is_active: bool}>>
      */
     private function suppliersByProduct(array $productIds): array
     {
@@ -415,7 +415,6 @@ class ProductService
                 's.code',
                 's.name',
                 's.is_active',
-                's.default_payment_terms',
             ])
             ->groupBy('product_id')
             ->map(fn ($rows) => $rows->map(fn ($supplier) => [
@@ -423,7 +422,6 @@ class ProductService
                 'code' => $supplier->code,
                 'name' => $supplier->name,
                 'is_active' => (bool) $supplier->is_active,
-                'default_payment_terms' => $supplier->default_payment_terms,
             ])->values()->all())
             ->all();
     }

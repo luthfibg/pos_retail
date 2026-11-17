@@ -6,7 +6,7 @@ import {
 
 const supplier: Supplier = {
   id: 1, code: 'SUP-01', name: 'PT Maju', contact_name: 'Budi', phone: '0812', address: null,
-  default_payment_terms: 'credit', is_active: true,
+  is_active: true,
 };
 
 describe('validateSupplier', () => {
@@ -26,7 +26,7 @@ describe('validateSupplier', () => {
 describe('payload', () => {
   it('tambah: kolom opsional kosong dilewati', () => {
     const p = buildSupplierCreate({ ...emptySupplier(), code: ' S1 ', name: ' Toko ', phone: '08' });
-    expect(p).toEqual({ code: 'S1', name: 'Toko', default_payment_terms: 'prepaid', phone: '08' });
+    expect(p).toEqual({ code: 'S1', name: 'Toko', phone: '08' });
   });
   it('ubah tanpa perubahan = kosong', () => {
     expect(buildSupplierUpdate(valuesFromSupplier(supplier), supplier)).toEqual({});
@@ -35,8 +35,8 @@ describe('payload', () => {
     const v = { ...valuesFromSupplier(supplier), contactName: '', address: '' };
     expect(buildSupplierUpdate(v, supplier)).toEqual({ contact_name: null });
   });
-  it('mengubah termin dan status', () => {
-    const v = { ...valuesFromSupplier(supplier), terms: 'cod' as const, isActive: false };
-    expect(buildSupplierUpdate(v, supplier)).toEqual({ default_payment_terms: 'cod', is_active: false });
+  it('mengubah status tanpa mengirim termin pembayaran supplier', () => {
+    const v = { ...valuesFromSupplier(supplier), isActive: false };
+    expect(buildSupplierUpdate(v, supplier)).toEqual({ is_active: false });
   });
 });

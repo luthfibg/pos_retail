@@ -38,7 +38,6 @@ trait BuildsPurchasing
             'store_id' => $this->storeId(),
             'code' => "SUP-T{$n}",
             'name' => "Supplier Uji {$n}",
-            'default_payment_terms' => 'prepaid',
             'is_active' => 1,
         ]);
     }

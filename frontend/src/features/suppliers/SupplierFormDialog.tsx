@@ -2,12 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supplierApi } from '@/lib/api/endpoints';
 import { ApiError } from '@/lib/api/client';
-import type { PaymentTerms, Supplier } from '@/lib/api/types';
+import type { Supplier } from '@/lib/api/types';
 import { Modal } from '@/components/ui/Modal';
 import { Field, inputCls } from '@/components/ui/Field';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import {
-  TERMS_LABEL, buildSupplierCreate, buildSupplierUpdate, emptySupplier, validateSupplier, valuesFromSupplier,
+  buildSupplierCreate, buildSupplierUpdate, emptySupplier, validateSupplier, valuesFromSupplier,
   type SupplierErrors, type SupplierFormValues, type SupplierUpdate,
 } from './supplierForm';
 
@@ -99,12 +99,6 @@ export function SupplierFormDialog({ supplier, onClose }: Props) {
 
           <Field label="Alamat" error={err('address')}>
             <input className={inputCls} value={values.address} onChange={(e) => set('address', e.target.value)} />
-          </Field>
-
-          <Field label="Termin pembayaran bawaan" error={err('default_payment_terms')}>
-            <select className={inputCls} value={values.terms} onChange={(e) => set('terms', e.target.value as PaymentTerms)}>
-              {(Object.keys(TERMS_LABEL) as PaymentTerms[]).map((t) => <option key={t} value={t}>{TERMS_LABEL[t]}</option>)}
-            </select>
           </Field>
 
           {mode === 'edit' && (

@@ -1,10 +1,4 @@
-import type { PaymentTerms, Supplier, SupplierInput } from '@/lib/api/types';
-
-export const TERMS_LABEL: Record<PaymentTerms, string> = {
-  prepaid: 'Bayar di muka',
-  credit: 'Kredit / tempo',
-  cod: 'COD (bayar saat barang diterima)',
-};
+import type { Supplier, SupplierInput } from '@/lib/api/types';
 
 export interface SupplierFormValues {
   code: string;
@@ -12,19 +6,18 @@ export interface SupplierFormValues {
   contactName: string;
   phone: string;
   address: string;
-  terms: PaymentTerms;
   isActive: boolean;
 }
 
 export type SupplierErrors = Partial<Record<
-  'code' | 'name' | 'contact_name' | 'phone' | 'address' | 'default_payment_terms' | 'is_active',
+  'code' | 'name' | 'contact_name' | 'phone' | 'address' | 'is_active',
   string
 >>;
 
 export type SupplierUpdate = Partial<Omit<SupplierInput, 'code'>> & { is_active?: boolean };
 
 export function emptySupplier(): SupplierFormValues {
-  return { code: '', name: '', contactName: '', phone: '', address: '', terms: 'prepaid', isActive: true };
+  return { code: '', name: '', contactName: '', phone: '', address: '', isActive: true };
 }
 
 export function valuesFromSupplier(s: Supplier): SupplierFormValues {
@@ -34,7 +27,6 @@ export function valuesFromSupplier(s: Supplier): SupplierFormValues {
     contactName: s.contact_name ?? '',
     phone: s.phone ?? '',
     address: s.address ?? '',
-    terms: s.default_payment_terms ?? 'prepaid',
     isActive: s.is_active,
   };
 }
@@ -58,7 +50,6 @@ export function buildSupplierCreate(v: SupplierFormValues): SupplierInput {
   const input: SupplierInput = {
     code: v.code.trim(),
     name: v.name.trim(),
-    default_payment_terms: v.terms,
   };
   if (v.contactName.trim()) input.contact_name = v.contactName.trim();
   if (v.phone.trim()) input.phone = v.phone.trim();
@@ -82,7 +73,6 @@ export function buildSupplierUpdate(v: SupplierFormValues, original: Supplier): 
   if (phone !== undefined) p.phone = phone;
   if (address !== undefined) p.address = address;
 
-  if (v.terms !== (original.default_payment_terms ?? 'prepaid')) p.default_payment_terms = v.terms;
   if (v.isActive !== original.is_active) p.is_active = v.isActive;
   return p;
 }
