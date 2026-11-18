@@ -26,25 +26,35 @@ function ReconciliationItems({ sessionId }: { sessionId: number }) {
     return <p className="py-4 text-sm text-slate-500">Tidak ada perubahan stok tercatat pada sesi ini.</p>;
   }
 
+  const groups = [
+    { key: 'write_off', rows: items.data.data.filter((item) => item.reconciliation_action === 'write_off'), showWriteOffResult: true },
+    { key: 'correction', rows: items.data.data.filter((item) => item.reconciliation_action === 'correction'), showWriteOffResult: false },
+    { key: 'legacy', rows: items.data.data.filter((item) => !item.reconciliation_action), showWriteOffResult: false },
+  ].filter((group) => group.rows.length > 0);
+
   return (
     <div className="mt-3">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-xs text-slate-500">
-              <th className="px-3 py-2 font-medium">Produk</th>
-              <th className="px-3 py-2 font-medium">Tindakan</th>
-              <th className="px-3 py-2 font-medium">Alasan</th>
-              <th className="px-3 py-2 font-medium">Selisih barang bagus</th>
-              <th className="px-3 py-2 font-medium">Selisih barang rusak</th>
-              <th className="px-3 py-2 font-medium">Selisih total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.data.data.map((item) => <ReconciliationRow key={item.id} item={item} />)}
-          </tbody>
-        </table>
-      </div>
+      {groups.map((group) => (
+        <div key={group.key} className="mb-3 overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-xs text-slate-500">
+                <th className="px-3 py-2 font-medium">Produk</th>
+                <th className="px-3 py-2 font-medium">Tindakan</th>
+                <th className="px-3 py-2 font-medium">Alasan</th>
+                <th className="px-3 py-2 font-medium">Riwayat selisih barang bagus</th>
+                <th className="px-3 py-2 font-medium">Riwayat selisih barang rusak</th>
+                {group.showWriteOffResult && <th className="px-3 py-2 font-medium">Hasil Pemutihan</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {group.rows.map((item) => (
+                <ReconciliationRow key={item.id} item={item} showWriteOffResult={group.showWriteOffResult} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
       <div className="mt-3 flex items-center justify-between gap-3 text-sm text-slate-600">
         <span>{items.data.total} produk dengan perubahan stok</span>
         <div className="flex items-center gap-2">
@@ -71,10 +81,9 @@ function ReconciliationItems({ sessionId }: { sessionId: number }) {
   );
 }
 
-function ReconciliationRow({ item }: { item: OpnameItem }) {
+function ReconciliationRow({ item, showWriteOffResult }: { item: OpnameItem; showWriteOffResult: boolean }) {
   const goodDiff = item.reconciliation_diff_good_qty ?? item.diff_good_qty;
   const damagedDiff = item.reconciliation_diff_damaged_qty ?? item.diff_damaged_qty;
-  const totalDiff = item.reconciliation_diff_qty ?? item.diff_qty;
 
   return (
     <tr className="border-b border-slate-100 align-top">
@@ -92,7 +101,7 @@ function ReconciliationRow({ item }: { item: OpnameItem }) {
       <td className="whitespace-pre-wrap px-3 py-3">{item.reconciliation_reason || '—'}</td>
       <td className="px-3 py-3">{goodDiff == null ? '—' : formatDiff(Number(goodDiff))}</td>
       <td className="px-3 py-3">{damagedDiff == null ? '—' : formatDiff(Number(damagedDiff))}</td>
-      <td className="px-3 py-3">{totalDiff == null ? '—' : formatDiff(Number(totalDiff))}</td>
+      {showWriteOffResult && <td className="px-3 py-3">0</td>}
     </tr>
   );
 }

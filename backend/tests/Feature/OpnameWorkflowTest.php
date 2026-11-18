@@ -247,6 +247,29 @@ class OpnameWorkflowTest extends SeededTestCase
             ->where('product_id', $fixture['product_id'])->sum('qty_sellable'));
     }
 
+    public function test_clean_opname_requires_approval_but_no_reconciliation(): void
+    {
+        $this->actAsAdmin();
+        $fixture = $this->countedProduct('5.000', '5');
+
+        $this->postJson("/api/stock-opname-sessions/{$fixture['session_id']}/submit", [
+            'client_request_id' => fake()->uuid(),
+        ])->assertOk()->assertJsonPath('data.status', 'pending_approval');
+
+        $owner = $this->owner('owner-clean-opname');
+        Sanctum::actingAs($owner, ['*']);
+        $this->postJson("/api/stock-opname-sessions/{$fixture['session_id']}/approve", [
+            'client_request_id' => fake()->uuid(),
+            'owner_password' => 'password-owner-123',
+            'reconciliations' => [],
+        ])->assertOk()->assertJsonPath('data.status', 'posted');
+
+        $this->assertSame(1, DB::table('stock_opname_approvals')
+            ->where('session_id', $fixture['session_id'])->where('action', 'approved')->count());
+        $this->assertSame(0, DB::table('inventory_movements')
+            ->where('ref_type', 'stock_opname')->where('ref_id', $fixture['session_id'])->count());
+    }
+
     public function test_final_history_items_include_legacy_variances_without_reconciliation_action(): void
     {
         $this->actAsAdmin();

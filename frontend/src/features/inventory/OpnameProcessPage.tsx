@@ -465,9 +465,6 @@ export function OpnameProcessPage() {
                     </table>
                   </div>
                 ) : <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Tidak ada selisih stok.</p>}
-                <p className="text-xs text-slate-600">
-                  Pemutihan mengubah saldo stok sesuai hasil hitung. Koreksi stok menyamakan hasil hitung ke stok sistem tanpa mengubah saldo.
-                </p>
               </>
             )}
             {dialog === 'cancel' && (
@@ -475,17 +472,23 @@ export function OpnameProcessPage() {
             )}
             {dialog === 'authorize_reconciliation' && (
               <div className="space-y-3">
-                <p className="text-sm text-slate-600">Masukkan username dan password Owner (atau Admin pada model sederhana) untuk menyetujui rekonsiliasi stok yang dipilih.</p>
-                <ul className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                  {variances.map((row) => (
-                    <li key={row.id}>
-                      <p className="font-medium text-slate-900">
-                        {row.name} · {reconciliationActions[row.id] === 'write_off' ? 'Pemutihan' : 'Koreksi stok'}
-                      </p>
-                      <p className="whitespace-pre-wrap text-slate-600">{reconciliationReasons[row.id]?.trim()}</p>
-                    </li>
-                  ))}
-                </ul>
+                <p className="text-sm text-slate-600">
+                  {variances.length > 0
+                    ? 'Masukkan username dan password Owner (atau Admin pada model sederhana) untuk menyetujui rekonsiliasi stok yang dipilih.'
+                    : 'Tidak ada selisih stok. Persetujuan tetap diperlukan, tanpa rekonsiliasi stok.'}
+                </p>
+                {variances.length > 0 && (
+                  <ul className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                    {variances.map((row) => (
+                      <li key={row.id}>
+                        <p className="font-medium text-slate-900">
+                          {row.name} · {reconciliationActions[row.id] === 'write_off' ? 'Pemutihan' : 'Koreksi stok'}
+                        </p>
+                        <p className="whitespace-pre-wrap text-slate-600">{reconciliationReasons[row.id]?.trim()}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <label className="block text-sm font-medium text-slate-700">
                   Username pemberi persetujuan
                   <input
