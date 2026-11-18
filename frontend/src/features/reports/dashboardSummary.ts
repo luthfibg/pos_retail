@@ -14,8 +14,6 @@ export interface CashierShiftTotals {
   reportCount: number;
   cashSalesCents: bigint;
   creditSalesCents: bigint;
-  cashInCents: bigint;
-  cashOutCents: bigint;
 }
 
 export function summarizeCashierShifts(shifts: Array<Pick<Shift, 'id' | 'status' | 'summary'>>): CashierShiftTotals {
@@ -23,8 +21,6 @@ export function summarizeCashierShifts(shifts: Array<Pick<Shift, 'id' | 'status'
     reportCount: 0,
     cashSalesCents: 0n,
     creditSalesCents: 0n,
-    cashInCents: 0n,
-    cashOutCents: 0n,
   };
 
   for (const shift of shifts) {
@@ -32,8 +28,6 @@ export function summarizeCashierShifts(shifts: Array<Pick<Shift, 'id' | 'status'
     totals.reportCount++;
     totals.cashSalesCents += parseCents(shift.summary.cash_sales_total, `penjualan tunai shift ${shift.id}`);
     totals.creditSalesCents += parseCents(shift.summary.credit_sales_total, `penjualan kredit shift ${shift.id}`);
-    totals.cashInCents += parseCents(shift.summary.cash_in, `kas masuk shift ${shift.id}`);
-    totals.cashOutCents += parseCents(shift.summary.cash_out, `kas keluar shift ${shift.id}`);
   }
 
   return totals;

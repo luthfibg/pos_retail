@@ -1080,7 +1080,6 @@ export interface InventoryReport {
 
 export interface CashSummaryReport {
   sales: { transaction_count: number; cash: Decimal; payroll_credit: Decimal };
-  movements: { cash_in: Decimal; cash_out: Decimal };
   deposits: { counted_amount: Decimal; settled_amount: Decimal; received_amount: Decimal };
   net_cash_movement: Decimal;
   shift_count: number;
@@ -1193,12 +1192,10 @@ export type ShiftStatus = 'open' | 'counting' | 'closed' | 'reviewed';
 
 export type FloatFlag = 'no_policy' | 'below_minimum' | 'nothing_to_deposit';
 export type DepositStatus = 'draft' | 'submitted' | 'received' | 'discrepancy' | 'corrected';
-export type DepositKind = 'partial' | 'final';
 
 export interface CashDeposit {
   id: number;
   doc_number: string;
-  kind: DepositKind;
   shift_id: number;
   shift_doc_number: string;
   status: DepositStatus;
@@ -1225,7 +1222,7 @@ export interface FundAccount {
   balance: Decimal;
 }
 
-/** Setoran akhir shift (kind=final). Dibuat otomatis saat tutup shift bila ada yang harus disetor. */
+/** Setoran akhir shift yang dibuat otomatis saat tutup shift bila ada yang harus disetor. */
 export interface ShiftDeposit {
   id: number;
   doc_number: string;
@@ -1257,19 +1254,6 @@ export interface FloatPolicies {
   main_cash: FloatPolicy | null;
 }
 
-export type CashMovementType = 'in' | 'out';
-
-export interface CashMovement {
-  id: number;
-  shift_id: number;
-  type: CashMovementType;
-  amount: Decimal;
-  reason: string;
-  created_by: number;
-  created_by_name: string;
-  created_at: string;
-}
-
 export type FloatPolicyInput =
   | {
       mode: 'fixed';
@@ -1294,10 +1278,6 @@ export interface ShiftSummary {
   cash_sales_total: Decimal;
   credit_sales_count: number;
   credit_sales_total: Decimal;
-  cash_in: Decimal;
-  cash_out: Decimal;
-  /** Setoran parsial yang sudah diserahkan; mengurangi kas diharapkan. */
-  partial_deposits: Decimal;
 }
 
 export interface Register {

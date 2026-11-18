@@ -11,8 +11,6 @@ import { normalizeDecimal } from '@/features/products/productForm';
 import { ShiftFigures, ShiftStatusBadge } from './ShiftParts';
 import { formatRupiah } from '@/lib/format';
 import { canOpenNextShift } from './shiftLogic';
-import { CashMovementsPanel } from './CashMovementsPanel';
-import { PartialDepositsPanel } from './PartialDepositsPanel';
 
 const DEPOSIT_STATUS_LABEL: Record<DepositStatus, string> = {
   draft: 'Draft — belum diserahkan',
@@ -29,7 +27,7 @@ export function ShiftPage() {
   const current = useQuery({ queryKey: ['shifts', 'current'], queryFn: shiftApi.current });
   const pendingDeposits = useQuery({
     queryKey: ['cash-deposits', 'final-drafts'],
-    queryFn: () => cashDepositApi.list({ status: 'draft', kind: 'final', per_page: 100 }),
+    queryFn: () => cashDepositApi.list({ status: 'draft', per_page: 100 }),
     enabled: current.isSuccess && current.data === null && !justClosed,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ['shifts'] });
@@ -170,10 +168,6 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
 // ------------------------------------------------------------------ shift berjalan
 
 function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChanged: () => void; onClosed: (s: Shift) => void }) {
-  const partialDrafts = useQuery({
-    queryKey: ['cash-deposits', 'shift-drafts', shift.id],
-    queryFn: () => cashDepositApi.list({ shift_id: shift.id, kind: 'partial', status: 'draft', per_page: 100 }),
-  });
   const [confirming, setConfirming] = useState(false);
 
   const startCount = useMutation({
@@ -195,40 +189,19 @@ function ActiveShiftCard({ shift, onChanged, onClosed }: { shift: Shift; onChang
         <ShiftFigures shift={shift} />
       </div>
 
-      <CashMovementsPanel shift={shift} />
-
-      {(shift.status === 'open' || shift.status === 'counting') && (
-        <PartialDepositsPanel
-          shift={shift}
-          hasDraft={Boolean(partialDrafts.data?.data.length)}
-          checkingDraft={partialDrafts.isLoading || Boolean(partialDrafts.error)}
-        />
-      )}
-
       <ErrorNotice error={startCount.error} />
 
       {shift.status === 'open' && (
         <div className="rounded-lg border border-slate-200 bg-white p-5">
           <h2 className="font-semibold">Tutup kasir jaga</h2>
-          <ErrorNotice error={partialDrafts.error} />
-          <button type="button" disabled={partialDrafts.isLoading} onClick={() => setConfirming(true)} className="mt-3 rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50">
+          <button type="button" onClick={() => setConfirming(true)} className="mt-3 rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
             Mulai hitung kas
           </button>
         </div>
       )}
 
       {shift.status === 'counting' && (
-        partialDrafts.isLoading ? (
-          <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">Memeriksa Draft setoran sebelum penutupan…</p>
-        ) : partialDrafts.error ? (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-900">
-            <ErrorNotice error={partialDrafts.error} />
-          </div>
-        ) : partialDrafts.data?.data.length ? (
-          null
-        ) : (
-          <CloseShiftForm shift={shift} onClosed={onClosed} />
-        )
+        <CloseShiftForm shift={shift} onClosed={onClosed} />
       )}
 
       {confirming && (

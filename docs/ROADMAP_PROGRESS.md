@@ -95,7 +95,7 @@ Role bawaan: Owner dapat meninjau, menghitung, mengubah ambang, menyetujui, dan 
 - **Adjustment dan opname:** Kasir membuat dan mengajukan snapshot hitung stok; Admin menyetujui (re-auth wajib untuk loss/expired) dan posting movement penyesuaian secara atomik. ✅
 - **Karyawan:** Kasir menambah karyawan (menunggu verifikasi, hanya tunai), Admin memverifikasi dan menetapkan batas kredit, notifikasi ke Admin. ✅
 - **Kasir:** buka shift (hitung buta), jual tunai atau kredit potong gaji (FEFO, diskon, PPN opsional, batas kredit + pengecualian Admin dengan re-auth, anti transaksi ganda), cetak ulang berlabel SALINAN, tutup shift dengan selisih kas, tinjau oleh Admin. ✅
-- **Kas dan koreksi:** kebijakan endapan (tetap/persen, min/maks, pembulatan ke bawah), setoran akhir shift dan setoran parsial tengah shift, Finance menghitung ulang dan menerima (selisih → koreksi), saldo Kas Kecil/Kas Besar dari ledger, void penjualan oleh Admin (stok kembali, kas/kredit dikoreksi). ✅
+- **Kas dan koreksi:** kebijakan endapan (tetap/persen, min/maks, pembulatan ke bawah), setoran akhir shift, Finance menghitung ulang dan menerima (selisih → koreksi), saldo Kas Kecil/Kas Besar dari ledger, void penjualan oleh Admin (stok kembali, kas/kredit dikoreksi). ✅ Kas nonpenjualan dan setoran parsial telah dihapus atas permintaan pengguna.
 - **Kas nonpenjualan:** Kasir mencatat kas masuk/keluar pada shift aktif; kas yang diharapkan dan saldo Kas Kecil diperbarui, dengan audit dan ledger. ✅
 - **Pembelian:** PR → pemeriksaan Finance → persetujuan Owner → PO → kirim → penerimaan barang ke toko atau gudang (posisi rak opsional), HPP rata-rata, verifikasi surat jalan/faktur. ✅
 - **Lampiran penerimaan:** Kasir/Admin dapat mengunggah foto surat jalan atau dokumen pendukung pada GR yang belum diverifikasi; berkas disimpan privat dan aksesnya dibatasi ke pemilik GR atau pemegang izin verifikasi. ✅
@@ -156,7 +156,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
 | 0.1 | Dokumen kebutuhan teknis (v0.2 + Bagian 15), matrix permission, state diagram, pertanyaan bisnis | ✅ | docs/ |
-| 0.2 | ERD + skema database Paket 1 (55 tabel) | ✅ | docs/erd_paket1.md, schema_paket1.sql |
+| 0.2 | ERD + skema database Paket 1 (54 tabel) | ✅ | docs/erd_paket1.md, schema_paket1.sql |
 
 ### Fase 1 — Fondasi backend (tahap 1a–1c)
 
@@ -194,8 +194,8 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | 3.2 | Posting penjualan atomik: tunai + kredit potong gaji, FEFO, diskon, PPN opsional, batas kredit + pengecualian Admin, idempotensi | ✅ | SaleTest |
 | 3.3 | Riwayat penjualan dan cetak ulang berlabel SALINAN | ✅ | SaleTest |
 | 3.4 | Void / pembatalan penjualan: Admin, stok kembali ke batch asal, kredit hanya bila belum ditagih, tunai hanya selama shift struk masih open | ✅ | SaleVoidTest (6) |
-| 3.5 | Setoran dan endapan (parsial / final), kebijakan endapan berversi, penerimaan Finance, selisih/koreksi, saldo dana. Usulan endapan Kasir (`float_proposals`) belum | ✅ | CashDepositTest (14) |
-| 3.6 | Kas masuk / keluar lain (`cash_movements`) | ✅ | CashMovementTest (4) |
+| 3.5 | Setoran akhir dan endapan, kebijakan endapan berversi, penerimaan Finance, selisih/koreksi, saldo dana. Usulan endapan Kasir (`float_proposals`) belum | ✅ | CashDepositTest |
+| 3.6 | Kas masuk / keluar nonpenjualan (`cash_movements`) | Dihapus | Permintaan pengguna; migration menghapus tabel, entri ledger, dan data historis |
 | 3.7 | Pengaturan diskon dan PPN lewat API (Admin): CRUD diskon + saklar/tarif PPN berversi | ✅ | PricingSettingsTest |
 | 3.8 | Retur pelanggan dan credit note | ⏸ | Paket 2 |
 
@@ -419,7 +419,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 **Batasan dan tindak lanjut:** Handoff #7 full-suite benchmark yang turut berjalan pada validasi ini mencatat start 1.683 s, tree 0.050 s, items/100 0.140 s, lookup 0.053 s, count 0.096 s, hitungan terbaru/2 0.096 s, rekomendasi/2 0.125 s, dan guard 20 produk 0.005 s; metrik ini bukan benchmark endpoint Handoff #8. UAT staging dua perangkat/scanner belum dilakukan. Rekomendasi 5.8: pertahankan kolom/reason yang masih dipakai; bila ingin dihapus, lakukan audit consumer+data dan migrasi terpisah setelah persetujuan pengguna. Panduan operator ditambahkan di `docs/PANDUAN_OPNAME.md`.
 
-**Terbaru (28 Okt 2026): backend suite lulus 238 test; UI Dashboard dan Tagihan HRD telah dikonfirmasi pengguna, Manajemen Pengguna dan Transfer Stok siap diuji.** UI kas nonpenjualan, Draft setoran parsial, dan Riwayat Penjualan juga sudah diuji pengguna. `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway belum dibuat, sementara unggah/unduh lampiran tersedia dan menunggu uji klik. Penerimaan, UI PR/PO dan Adjustment/Opname menunggu uji klik. Akses Finance receive-only pada antrean setoran lulus test backend; UAT UI Finance masih belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
+**Terbaru (28 Okt 2026; riwayat): backend suite lulus 238 test; UI Dashboard dan Tagihan HRD telah dikonfirmasi pengguna, Manajemen Pengguna dan Transfer Stok siap diuji. UI kas nonpenjualan dan Draft setoran parsial pernah diuji, tetapi kedua fitur beserta data historisnya kini dihapus atas permintaan pengguna; setoran final setelah shift ditutup tetap ada.** `/goods-receipts` mendukung lokasi gudang backend 4.4 dan lampiran dokumen backend 4.5; UI pemilih lokasi/putaway belum dibuat, sementara unggah/unduh lampiran tersedia dan menunggu uji klik. Penerimaan, UI PR/PO dan Adjustment/Opname menunggu uji klik. Akses Finance receive-only pada antrean setoran lulus test backend; UAT UI Finance masih belum dikonfirmasi. Kontrak adjustment ada di `BACKEND_PROGRESS.md` bagian 1.
 
 | Modul | Bagian `BACKEND_PROGRESS.md` | Status backend | Folder UI terlihat di zip terakhir |
 |---|---|---|---|

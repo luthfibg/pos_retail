@@ -52,12 +52,11 @@ class ShiftTest extends SeededTestCase
 
     public function test_close_computes_variance_requires_note_and_carries_float_to_next_shift(): void
     {
-        $cashier = $this->signIn('Kasir');
+        $this->signIn('Kasir');
         $shiftId = $this->postJson('/api/shifts/open')->json('data.id');
 
-        DB::table('cash_movements')->insert(['shift_id' => $shiftId, 'type' => 'in', 'amount' => 50000, 'reason' => 'tambahan modal', 'created_by' => $cashier->id]);
-        DB::table('cash_movements')->insert(['shift_id' => $shiftId, 'type' => 'out', 'amount' => 5000, 'reason' => 'beli plastik', 'created_by' => $cashier->id]);
-        // diharapkan = 0 + 50.000 - 5.000 = 45.000
+        DB::table('cash_shifts')->where('id', $shiftId)->update(['opening_balance' => '45000.00']);
+        // saldo awal 45.000; tanpa transaksi tunai, kas diharapkan tetap 45.000
 
         $this->postJson("/api/shifts/{$shiftId}/close", ['counted_cash' => '44000'])
             ->assertUnprocessable()->assertJsonValidationErrors(['variance_note']);

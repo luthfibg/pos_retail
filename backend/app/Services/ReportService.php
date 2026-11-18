@@ -286,15 +286,12 @@ class ReportService
         $sales = DB::table('sales')
             ->where('store_id', $storeId)->where('status', 'posted')
             ->whereBetween('posted_at', [$start, $end]);
-        $movements = DB::table('cash_movements as m')->join('cash_shifts as s', 's.id', '=', 'm.shift_id')
-            ->where('s.store_id', $storeId)->whereBetween('m.created_at', [$start, $end]);
         $deposits = DB::table('cash_deposits as d')->join('cash_shifts as s', 's.id', '=', 'd.shift_id')
             ->where('d.store_id', $storeId)->whereBetween('d.created_at', [$start, $end]);
         $shifts = DB::table('cash_shifts')->where('store_id', $storeId)->whereBetween('opened_at', [$start, $end]);
 
         if ($cashierId !== null) {
             $sales->where('cashier_id', $cashierId);
-            $movements->where('s.cashier_id', $cashierId);
             $deposits->where('s.cashier_id', $cashierId);
             $shifts->where('cashier_id', $cashierId);
         }
@@ -302,17 +299,12 @@ class ReportService
         $saleRows = $sales->selectRaw("coalesce(sum(case when payment_mode = 'cash' then total else 0 end), 0) as cash_sales")
             ->selectRaw("coalesce(sum(case when payment_mode = 'payroll_credit' then total else 0 end), 0) as credit_sales")
             ->selectRaw('count(*) as sale_count')->first();
-        $movementRows = $movements->selectRaw("coalesce(sum(case when type = 'in' then amount else 0 end), 0) as cash_in")
-            ->selectRaw("coalesce(sum(case when type = 'out' then amount else 0 end), 0) as cash_out")
-            ->first();
         $depositRows = $deposits->selectRaw('coalesce(sum(d.counted_amount), 0) as counted_amount')
             ->selectRaw("coalesce(sum(case when d.status in ('received', 'corrected') then d.received_amount else 0 end), 0) as received_amount")
             ->selectRaw("coalesce(sum(case when d.status in ('submitted', 'received', 'discrepancy', 'corrected') then d.deposit_amount else 0 end), 0) as deposit_amount")
             ->first();
 
         $cashSales = Decimal::money((string) $saleRows->cash_sales);
-        $cashIn = Decimal::money((string) $movementRows->cash_in);
-        $cashOut = Decimal::money((string) $movementRows->cash_out);
         $depositsAmount = Decimal::money((string) $depositRows->deposit_amount);
 
         $balances = [];
@@ -335,16 +327,12 @@ class ReportService
                 'cash' => Decimal::moneyString($cashSales),
                 'payroll_credit' => Decimal::moneyString(Decimal::money((string) $saleRows->credit_sales)),
             ],
-            'movements' => [
-                'cash_in' => Decimal::moneyString($cashIn),
-                'cash_out' => Decimal::moneyString($cashOut),
-            ],
             'deposits' => [
                 'counted_amount' => Decimal::moneyString(Decimal::money((string) $depositRows->counted_amount)),
                 'settled_amount' => Decimal::moneyString(Decimal::money((string) $depositRows->deposit_amount)),
                 'received_amount' => Decimal::moneyString(Decimal::money((string) $depositRows->received_amount)),
             ],
-            'net_cash_movement' => Decimal::moneyString($cashSales + $cashIn - $cashOut - $depositsAmount),
+            'net_cash_movement' => Decimal::moneyString($cashSales - $depositsAmount),
             'shift_count' => (int) $shifts->count(),
             'fund_balances' => $balances,
         ];

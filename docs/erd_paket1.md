@@ -63,8 +63,7 @@ erDiagram
   registers ||--o{ cash_shifts : opens
   users ||--o{ cash_shifts : cashier
   cash_shifts ||--o{ sales : contains
-  cash_shifts ||--o{ cash_movements : has
-  cash_shifts ||--o{ cash_deposits : "partial / final"
+  cash_shifts ||--o{ cash_deposits : "setoran akhir"
   customers ||--o{ sales : "payroll_credit"
   sales ||--|{ sale_items : has
   sale_items ||--o{ sale_item_batches : "FEFO allocation"
@@ -81,7 +80,7 @@ erDiagram
   fund_accounts ||--o{ cash_deposits : "source / destination"
   float_policies ||--o{ cash_deposits : applied
   sales { enum payment_mode; enum billing_status; bool over_limit_flag; char idempotency_key UK }
-  cash_deposits { enum kind; decimal counted_amount; decimal float_kept; decimal deposit_amount }
+  cash_deposits { decimal counted_amount; decimal float_kept; decimal deposit_amount }
 ```
 
 ## Catatan desain yang tercermin di skema

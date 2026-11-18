@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-****Diperbarui:** 10 November 2026 · Handoff #7: endpoint batch hitungan dan indeks offline; `OpnameCountTest` 7/128 lulus. Handoff #8: riwayat, ekspor, pengingat, dan filter tersedia; kontrak dan batas validasi ada di `docs/ROADMAP_PROGRESS.md`, status suite penuh dan UAT masih terbuka. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan + kas nonpenjualan), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+****Diperbarui:** 10 November 2026 · Handoff #7: endpoint batch hitungan dan indeks offline; `OpnameCountTest` 7/128 lulus. Handoff #8: riwayat, ekspor, pengingat, dan filter tersedia; kontrak dan batas validasi ada di `docs/ROADMAP_PROGRESS.md`, status suite penuh dan UAT masih terbuka. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan; kas nonpenjualan sudah dihapus), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 Progres implementasi Adjustment langsung Handoff #1: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #1”.
 Sesi opname Handoff #2 (skema, service, endpoint, izin, test, dan kontrak UI): lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #2”.
@@ -322,7 +322,7 @@ Respons shift (`data`):
 { "id": 1, "doc_number": "KASIR-JAGA-03112026-kasir-jual", "register_id": 1, "register_name": "Kasir Depan", "cashier_id": 4, "cashier_name": "Kasir-jual",
   "status": "open", "opening_balance": "0.00", "opened_at": "2026-10-23 03:00:00.000", "closed_at": null,
   "summary": { "cash_sales_count": 1, "cash_sales_total": "27500.00", "credit_sales_count": 0,
-               "credit_sales_total": "0.00", "cash_in": "0.00", "cash_out": "0.00" },
+               "credit_sales_total": "0.00" },
   "expected_cash": null, "counted_cash": null, "variance": null, "variance_note": null,
   "float_kept": null, "reviewed_at": null }
 ```
@@ -330,9 +330,8 @@ Respons shift (`data`):
 - `opening_balance` = endapan shift sebelumnya (0 untuk shift pertama). Gagal membuka shift → 422 `errors.shift` (sudah punya shift / laci sedang dipakai kasir lain, pesan menyebut namanya).
 - Tutup shift: bila selisih ≠ 0, `variance_note` **wajib** (422 `errors.variance_note`). Selisih = terhitung − diharapkan (negatif = kurang).
 - **Tutup shift + setoran (🟡, bagian 7):** `float_kept` kini = endapan menurut kebijakan Admin, dan bila ada yang harus disetor, respons memuat `deposit` (setoran akhir berstatus `draft`). **Tanpa kebijakan aktif perilakunya sama seperti sebelumnya** (seluruh kas jadi endapan, `deposit: null`, `float_flags: ["no_policy"]`).
-- Respons `POST /api/shifts/{id}/close` menambah `float_flags` (array: `no_policy`, `below_minimum`, `nothing_to_deposit`); respons shift mana pun menambah `deposit` (setoran akhir atau `null`) dan `summary.partial_deposits`.
+- Respons `POST /api/shifts/{id}/close` menambah `float_flags` (array: `no_policy`, `below_minimum`, `nothing_to_deposit`); respons shift mana pun menambah `deposit` (setoran akhir atau `null`).
 - `POST /api/shifts/open` ditolak (`errors.shift`) bila setoran akhir shift sebelumnya masih `draft`.
-- Kas masuk/keluar lain (`cash_movements`) ikut dihitung di kas diharapkan, tetapi belum ada endpoint untuk mencatatnya ⏳.
 
 ---
 
@@ -602,11 +601,9 @@ Endapan = uang yang sengaja tetap di laci dan menjadi saldo awal shift berikutny
 |---|---|---|---|
 | GET | `/api/float-policies` | `float.propose` | Kebijakan aktif: `{ "data": { "petty_cash": {…}\|null, "main_cash": {…}\|null } }` |
 | PUT | `/api/float-policies/{scope}` | `float.configure` (Admin) | Tetapkan versi baru (`scope` = `petty_cash`\|`main_cash`); versi lama dinonaktifkan, tercatat di audit |
-| POST | `/api/shifts/{id}/deposits` | `cash_deposit.create` | **Setoran parsial** tengah shift: `{ "counted_amount": "800000", "note"? }` → Draft |
-| GET | `/api/cash-deposits?status=&kind=&shift_id=&per_page=` | `cash_deposit.create` **atau** `cash_deposit.receive` | Daftar (pemegang `create`: hanya shift sendiri; pemegang `receive`: semua) |
+| GET | `/api/cash-deposits?status=&shift_id=&per_page=` | `cash_deposit.create` **atau** `cash_deposit.receive` | Daftar (pemegang `create`: hanya shift sendiri; pemegang `receive`: semua) |
 | GET | `/api/cash-deposits/{id}` | `cash_deposit.create` **atau** `cash_deposit.receive` | Detail (pemegang `create` dibatasi ke shift sendiri; pemegang `receive` dapat melihat semua) |
 | POST | `/api/cash-deposits/{id}/submit` | `cash_deposit.create` | Kasir menyerahkan uang: `draft` → `submitted` |
-| POST | `/api/cash-deposits/{id}/cancel` | idem | Batalkan Draft **parsial** (dokumen dihapus; setoran akhir tidak bisa dibatalkan) |
 | POST | `/api/cash-deposits/{id}/receive` | `cash_deposit.receive` (Admin) | Finance menghitung ulang: `{ "received_amount": "734000", "note"? }` |
 | POST | `/api/cash-deposits/{id}/correct` | `cash_deposit.receive` | Tutup selisih dengan alasan: `{ "reason" }` |
 | GET | `/api/fund-accounts` | `cash_deposit.receive` | Saldo Kas Kecil dan Kas Besar (dari ledger) |
@@ -616,13 +613,12 @@ Kebijakan (`PUT` body): `{ "mode": "fixed", "fixed_amount": "500000", "min_amoun
 Aturan hitung:
 - `fixed`: endapan = nominal. `percent`: endapan = persen × basis (`cash_sales_shift` = total penjualan tunai shift; `cash_on_hand` = kas terhitung). Hasil dijepit ke `min_amount`/`max_amount`.
 - Kas terhitung < `min_amount` → setoran 0, flag `below_minimum`. Kas ≤ endapan → setoran 0, flag `nothing_to_deposit`. **Tanpa kebijakan aktif** → setoran 0, flag `no_policy`, seluruh kas = endapan.
-- **Tutup shift** (`POST /api/shifts/{id}/close`) membuat setoran akhir `kind: "final"` berstatus `draft` bila ada yang disetor; `data.deposit` berisi `{ id, doc_number, status, deposit_amount, float_kept }`. Kasir menekan "Serahkan" (`submit`) → Finance `receive`. Shift berikutnya baru bisa dibuka setelah setoran akhir diserahkan, dan saldo awalnya = `float_kept`.
-- **Setoran parsial** boleh saat shift `open`/`counting`; satu Draft sekaligus; shift tidak bisa ditutup selama ada Draft (`errors.status`). Kas diharapkan baru berkurang setelah parsial **diserahkan** (`summary.partial_deposits`). Tidak ada yang bisa disetor → `errors.counted_amount` (pesan menjelaskan alasannya).
+- **Tutup shift** (`POST /api/shifts/{id}/close`) membuat setoran akhir berstatus `draft` bila ada yang disetor; `data.deposit` berisi `{ id, doc_number, status, deposit_amount, float_kept }`. Kasir menekan "Serahkan" (`submit`) → Finance `receive`. Shift berikutnya baru bisa dibuka setelah setoran akhir diserahkan, dan saldo awalnya = `float_kept`.
 
-Dokumen setoran (`data`): `{ id, doc_number "DEP-202610-000001", kind "final"\|"partial", shift_id, shift_doc_number, status, counted_amount, float_kept, deposit_amount, received_amount, difference, received_by_name, received_at, note, created_by, created_by_name, created_at }`.
+Dokumen setoran (`data`): `{ id, doc_number "DEP-202610-000001", shift_id, shift_doc_number, status, counted_amount, float_kept, deposit_amount, received_amount, difference, received_by_name, received_at, note, created_by, created_by_name, created_at }`.
 Status: `draft` → `submitted` → `received` (cocok) atau `discrepancy` (berbeda; `note` **wajib** → `errors.note`) → `corrected` (alasan). Ledger saat `receive`: Kas Kecil −`deposit_amount`, Kas Besar +`received_amount`; `correct` tidak mengubah ledger. Selisih = `received_amount − deposit_amount` (negatif = kurang).
 
-Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + endapan + `float_flags`), tombol "Serahkan setoran", form setoran parsial, antrean "Setoran masuk" untuk Finance/Admin (terima/selisih/koreksi), halaman kebijakan endapan (Admin), kartu saldo Kas Kecil/Kas Besar.
+Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + endapan + `float_flags`), tombol "Serahkan setoran", antrean "Setoran masuk" untuk Finance/Admin (terima/selisih/koreksi), halaman kebijakan endapan (Admin), kartu saldo Kas Kecil/Kas Besar.
 
 ### 7.2 Void penjualan
 
@@ -644,27 +640,9 @@ Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + enda
 
 ---
 
-### 7.4 Kas masuk/keluar nonpenjualan ✅
+### 7.4 Kas nonpenjualan dan setoran parsial — dihapus
 
-> Status: ✅ `CashMovementTest` 4 lulus; seluruh suite 204 test (1.764 assertions) lulus pada 26 Okt 2026. Tidak ada migration; ditambahkan permission `cash_movement.create`. Untuk database yang sudah ada, jalankan `php artisan db:seed --class=PermissionSeeder` agar permission baru diberikan ke role sistem.
-
-| Method | Path | Izin | Fungsi |
-|---|---|---|---|
-| GET | `/api/shifts/{id}/cash-movements?per_page=` | `cash_movement.create` | Daftar pergerakan kas shift, terbaru dulu; Kasir hanya shift sendiri, Admin semua |
-| POST | `/api/shifts/{id}/cash-movements` | `cash_movement.create` | Catat kas masuk/keluar nonpenjualan pada shift aktif |
-
-Permintaan:
-```json
-{ "type": "in", "amount": "50000", "reason": "Tambahan modal" }
-```
-- `type`: `in` atau `out`; `amount` wajib positif, maksimal 2 desimal; `reason` wajib (maks. 255 karakter).
-- Kasir hanya dapat menulis dan melihat pergerakan pada shift sendiri; Admin (pemegang `shift.review`) dapat mengelola shift mana pun. Shift harus berstatus `open`; saat mulai hitung atau setelah ditutup, pencatatan ditolak dengan 422 `status`.
-- Satu transaksi atomik membuat `cash_movements`, entri ledger Kas Kecil (`cash_movement_in` positif / `cash_movement_out` negatif), dan audit `cash_movement.create`. Jumlah tampil sebagai string desimal.
-- Respons item: `id, shift_id, type, amount, reason, created_by, created_by_name, created_at`. Daftar berpaginasi dengan bentuk Laravel standar.
-- Kas masuk/keluar masuk dalam perhitungan kas yang diharapkan saat tutup shift. Tidak ada operasi hapus/koreksi; bila salah, koreksi lewat pencatatan kas berlawanan dengan keterangan yang menjelaskan.
-
-### Layar yang bisa dibuat
-Pada layar shift, sediakan form kas masuk/keluar hanya saat status `open` dan daftar riwayat pergerakan kas; setelah pencatatan, muat ulang ringkasan shift. Tangani 403/404/422 mengikuti konvensi umum.
+Pencatatan kas masuk/keluar nonpenjualan dan setoran parsial tidak lagi tersedia. Route, permission, tabel pergerakan kas, jenis deposit, entri ledger terkait, dan catatan historis kedua fitur dihapus melalui migration. Kas shift dihitung dari saldo awal dan penjualan tunai; setoran final setelah shift ditutup tetap berjalan.
 
 ## 8. Tagihan HRD ✅
 
@@ -770,7 +748,7 @@ Semua endpoint memakai `auth:sanctum` dan `reports.view`; data dibatasi ke toko 
 
 - **Penjualan harian:** jumlah transaksi, bruto, diskon, PPN, penjualan bersih, serta pemisahan tunai/kredit gaji; daftar harian menyertakan hari nol agar dashboard stabil.
 - **Inventori:** produk aktif yang stoknya habis/kritis/hampir habis dan baris batch stok aktif yang mendekati atau melewati tanggal kedaluwarsa. Ambang kedaluwarsa memakai `expiry_warning_days` toko (default 30 hari) dan dapat ditimpa `expiry_days` (1–365). Parameter `include_expired=false` menyembunyikan batch kedaluwarsa.
-- **Kas:** penjualan tunai dan kredit gaji, kas masuk/keluar shift, setoran tertimbang/diterima, jumlah shift, dan pergerakan kas bersih. `net_cash_movement = penjualan tunai + kas masuk - kas keluar - setoran final/submitted/diterima`.
+- **Kas:** penjualan tunai dan kredit gaji, jumlah setoran shift, jumlah setoran diterima, jumlah shift, dan pergerakan kas bersih. `net_cash_movement = penjualan tunai - setoran final yang sudah diserahkan`.
 - `fund_balances` hanya dikirim untuk pengguna dengan `shift.review`; Kasir tidak menerima saldo dana lintas kasir/toko.
 - `/dashboard` menggabungkan ketiga bagian di atas. Endpoint khusus tersedia untuk layar yang hanya membutuhkan satu domain.
 
@@ -830,7 +808,7 @@ Backend tetap penentu izin: menu frontend cukup mengikuti `permissions` dari `GE
 Dampak ke endpoint lain:
 - `GET /api/roles` hanya mengembalikan role yang dapat ditugaskan pada model aktif. `POST/PATCH /api/users` dengan role di luar itu → 422 `errors.role`; mengaktifkan kembali akun yang rolenya tidak tersedia → 422 `errors.is_active` (ganti role sekaligus: boleh).
 - Aturan "toko harus punya minimal satu pengendali aktif" berlaku untuk `Admin` (simple) atau `Owner` (standard). Self-protection tetap.
-- Middleware baru `can.any:a,b` (lolos bila memegang salah satu permission) dipakai agar role non-Kasir dapat **membaca**: `GET /api/shifts/{id}` dan `GET /api/shifts/{id}/cash-movements` (+ `shift.review`), `GET /api/sales` dan `/api/sales/{id}` (+ `shift.review`), `GET /api/goods-receipts`, `/{id}`, dan unduh lampiran (+ `goods_receipt.verify_documents`). Data tetap dibatasi di service.
+- Middleware baru `can.any:a,b` (lolos bila memegang salah satu permission) dipakai agar role non-Kasir dapat **membaca**: `GET /api/shifts/{id}` (+ `shift.review`), `GET /api/sales` dan `/api/sales/{id}` (+ `shift.review`), `GET /api/goods-receipts`, `/{id}`, dan unduh lampiran (+ `goods_receipt.verify_documents`). Data tetap dibatasi di service.
 
 **Matriks role (ASUMSI, perlu konfirmasi klien)** — definisi tunggal di `PermissionCatalog::roles()`:
 

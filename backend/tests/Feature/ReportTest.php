@@ -95,28 +95,10 @@ class ReportTest extends SeededTestCase
             'qty_sellable' => '5.000',
         ]);
 
-        DB::table('cash_movements')->insert([
-            'shift_id' => $this->shiftId,
-            'type' => 'in',
-            'amount' => '50.00',
-            'reason' => 'Modal tambahan',
-            'created_by' => $this->cashier->id,
-            'created_at' => '2026-10-28 02:30:00',
-        ]);
-        DB::table('cash_movements')->insert([
-            'shift_id' => $this->shiftId,
-            'type' => 'out',
-            'amount' => '10.00',
-            'reason' => 'Operasional',
-            'created_by' => $this->cashier->id,
-            'created_at' => '2026-10-28 03:30:00',
-        ]);
-
         $fund = DB::table('fund_accounts')->value('id');
         DB::table('cash_deposits')->insert([
             'store_id' => $this->storeId(),
             'doc_number' => 'DEP-RPT',
-            'kind' => 'partial',
             'shift_id' => $this->shiftId,
             'source_fund_id' => $fund,
             'destination_fund_id' => $fund,
@@ -145,10 +127,8 @@ class ReportTest extends SeededTestCase
             ->assertJsonPath('data.inventory.expiring_batches.0.product_id', $expiring)
             ->assertJsonPath('data.inventory.expiring_batches.0.status', 'akan_kedaluwarsa')
             ->assertJsonPath('data.cash.sales.cash', '100.00')
-            ->assertJsonPath('data.cash.movements.cash_in', '50.00')
-            ->assertJsonPath('data.cash.movements.cash_out', '10.00')
             ->assertJsonPath('data.cash.deposits.received_amount', '20.00')
-            ->assertJsonPath('data.cash.net_cash_movement', '120.00');
+            ->assertJsonPath('data.cash.net_cash_movement', '80.00');
 
         $this->getJson('/api/reports/sales-daily?date_from=2026-10-28&date_to=2026-10-29')
             ->assertOk()

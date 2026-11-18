@@ -18,7 +18,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Area | Status | Verifikasi |
 |---|---|---|
 | Dokumen kebutuhan (ERD, matrix permission, state diagram, pertanyaan bisnis) | Selesai, v0.5 + Bagian 15 | — |
-| Skema database Paket 1 (55 tabel) + ERD | Selesai | **Lolos** `migrate:fresh` di mesin pengguna |
+| Skema database Paket 1 (54 tabel) + ERD | Selesai | **Lolos** `migrate:fresh` di mesin pengguna |
 | Migration Laravel (55 file, urut FK) | Selesai | **Lolos** di mesin pengguna |
 | Seeder (toko, role, 47 permission, register, akun dana, setting, akun admin) | Selesai | **Lolos** test |
 | Auth: login/logout/me (Sanctum, throttle, audit) | Selesai | **Lolos** test |
@@ -43,7 +43,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Frontend: POS dan pengaturan diskon/PPN | Sudah dibuat | Test frontend lulus; lihat `docs/FRONTEND_PROGRESS.md` |
 | Frontend: penyerahan setoran akhir Kasir dan konfigurasi kebijakan endapan Admin | Selesai | `npm run typecheck`, `npm test` dan build lulus; lihat riwayat `docs/FRONTEND_PROGRESS.md` |
 | Frontend: kas masuk/keluar nonpenjualan | Selesai | Otomatisasi lulus dan pengguna sudah menguji alur klik |
-| Frontend: setoran parsial/antrean Finance | Implementasi tersedia; uji sebagian | Pengguna mengonfirmasi buat Draft parsial; serah/batal dan Finance masih perlu diuji |
+| Frontend: setoran akhir/antrean Finance | Implementasi tersedia; uji sebagian | Setoran parsial sudah dihapus; setoran akhir dan Finance tetap tersedia |
 | Frontend: riwayat penjualan | Selesai; diuji pengguna | Daftar/filter, detail, cetak SALINAN, void |
 | Frontend: penerimaan barang | Implementasi tersedia; menunggu uji klik | PO receivable, qty diterima/rusak, batch/kedaluwarsa, Draft/posting/pembatalan, verifikasi dokumen Admin |
 | Frontend: PR Kasir | Implementasi tersedia; menunggu uji klik | Buat/ubah Draft/returned, ajukan, detail dan batalkan |
@@ -86,7 +86,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 3. **Uang = `DECIMAL(18,2)`, qty = `DECIMAL(18,3)`**; API mengembalikan **string desimal** (`"3500.00"`), jangan float. Waktu disimpan **UTC**, tampil WIB.
 4. **Otorisasi:** route memakai `->middleware(['auth:sanctum', 'can:<kode.permission>'])`. Kode permission dan deskripsi hanya didefinisikan di `app/Support/PermissionCatalog.php` (satu sumber). Subset Kasir ada di `PermissionCatalog::cashier()`.
 5. **Persetujuan (PR Owner, pengecualian kredit, write-off, adjustment):** pakai `ReauthService::assertProvided($data, $requester)` lalu `ReauthService::confirm($username, $password, $permission, $requester, $key)`; kredensial yang dibutuhkan mengikuti mode toko (`password` / `key` / `password_and_key`, lihat `BACKEND_PROGRESS.md` bagian 14). Pemberi persetujuan mengetik password akunnya sendiri; tidak ada password bersama.
-6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`, `customer.create|update|status_change|verify|set_limit`, `inventory.opening_balance`, `stock_adjustment.create|request|approve|post|reject|cancel`, `shift.open|start_count|close|review`, `cash_movement.create`, `sale.post`, `sale.credit_exception`, `receipt.reprint`, `purchase_requisition.create|update|submit|finance_check|return|approve|reject|cancel|convert|reopen`, `purchase_order.create|update|submit|approve|confirm|send|cancel|close`, `goods_receipt.create|attach|post|verify_documents|cancel`, `authorization_key.set|delete|revoke|locked`, `settings.approval_auth|admin_model|stock_authority`.
+6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`, `customer.create|update|status_change|verify|set_limit`, `inventory.opening_balance`, `stock_adjustment.create|request|approve|post|reject|cancel`, `shift.open|start_count|close|review`, `sale.post`, `sale.credit_exception`, `receipt.reprint`, `purchase_requisition.create|update|submit|finance_check|return|approve|reject|cancel|convert|reopen`, `purchase_order.create|update|submit|approve|confirm|send|cancel|close`, `goods_receipt.create|attach|post|verify_documents|cancel`, `authorization_key.set|delete|revoke|locked`, `settings.approval_auth|admin_model|stock_authority`. Audit historis kas nonpenjualan tetap dapat tersimpan sebagai jejak.
 7. **Dokumen terposting tidak dihapus/diedit.** Koreksi lewat pembatalan, reversal, atau dokumen koreksi yang bertaut.
 8. **Penomoran dokumen:** `NumberSequence::next($storeId, $jenis, $periode)` — hanya di dalam transaksi — lalu `DocumentNumber::format('SALE', $n, '202610')` → `SALE-202610-000123` (sudah ada; stok awal memakai `OPEN-000001`).
 9. **Stok:** saldo (`inventory_balances`) turunan dari `inventory_movements` (append-only). Stok negatif **dilarang**. Perubahan stok dilakukan lewat alur `InventoryService` (`receive`, `sell` FEFO, `voidSale`, `transfer`, atau `recordDirectAdjustment` melalui `StockAdjustmentService`), **wajib di dalam `DB::transaction` pemanggil**; produk dikunci berurutan id. Hitung qty/uang dengan `App\Support\Decimal` (integer), bukan float.
@@ -117,7 +117,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 **Kas dan dana**
 - Dana operasional kas kecil dan kas besar tetap dicatat di ledger; data rekening bank hanya berupa nama bank, pemilik, dan nomor rekening untuk PO (maksimal lima).
-- **Endapan:** setiap setoran wajib menyisakan endapan (nominal atau persen, basis penjualan tunai shift **atau** uang tunai di laci). Batas min/maks diatur Admin; Kasir boleh mengusulkan. **Pembulatan setoran ke bawah Rp1.000.** Endapan menjadi saldo awal shift berikutnya. **Setoran parsial** tengah shift boleh (shift tetap terbuka).
+- **Endapan:** setoran akhir setelah shift ditutup wajib menyisakan endapan (nominal atau persen, basis penjualan tunai shift **atau** uang tunai di laci). Batas min/maks diatur Admin; Kasir boleh mengusulkan. **Pembulatan setoran ke bawah Rp1.000.** Endapan menjadi saldo awal shift berikutnya. Tidak ada pencatatan kas nonpenjualan atau setoran parsial.
 - Alur PO tidak memeriksa saldo rekening atau mengalokasikan dana. Ledger dan tabel alokasi PO lama dipertahankan hanya sebagai data historis dan tidak digunakan oleh alur aktif.
 - Pembayaran supplier bervariasi (`prepaid`/`credit`/`cod`) — disimpan per supplier dan per PO.
 - Write-off barang rusak/kadaluarsa hanya setelah retur supplier ditolak, **persetujuan Owner (re-auth)**.
@@ -162,7 +162,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 | **A. Karyawan & denah rak** | `customers` (create Kasir/verify Admin), `customer_credit_limits`, notifikasi `customer.limit_needed` (+ endpoint notifikasi), CRUD rak/posisi | master data (selesai) |
 | **B. Inventory inti** | `InventoryService` (saldo + movement + batch + FEFO, transaksi, anti-negatif), penerimaan barang dari PO, transfer, adjustment | — **fondasi bagi C dan D** |
 | **C. Pembelian** | PR → pemeriksaan Finance → persetujuan Owner (re-auth) → PO (tanpa saldo pembelian di Paket 1) | B (untuk penerimaan) |
-| **D. POS & kas** | shift buka/tutup, posting penjualan (idempotensi, FEFO, aturan kredit/batas/pengecualian), void, cetak ulang, cash movement, kebijakan endapan, setoran parsial/final | A (karyawan), B (stok) |
+| **D. POS & kas** | shift buka/tutup, posting penjualan (idempotensi, FEFO, aturan kredit/batas/pengecualian), void, cetak ulang, kebijakan endapan, setoran akhir | A (karyawan), B (stok) |
 | **E. Tagihan** | periode tagihan, tutup periode, invoice gabungan + rincian per karyawan, catat pembayaran HRD | D |
 | **F. Frontend** | scaffold (Vite + React + TS), klien API bertipe, login/layout/guard permission, layar master data, **layar kasir (prioritas)**, penerimaan, PR/PO, shift/setoran, tagihan | kontrak API dari A–E (mulai dari yang sudah ada) |
 | **G. Cetak** | struk thermal 58/80 mm via CSS print browser, paket cetak invoice + struk | D, E |

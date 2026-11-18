@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\CashDepositController;
-use App\Http\Controllers\CashMovementController;
 use App\Http\Controllers\FloatPolicyController;
 use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\SaleController;
@@ -25,10 +24,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('shifts/{shift}/start-count', [ShiftController::class, 'startCount'])->whereNumber('shift')->middleware('can:shift.close');
     Route::post('shifts/{shift}/close', [ShiftController::class, 'close'])->whereNumber('shift')->middleware('can:shift.close');
     Route::post('shifts/{shift}/review', [ShiftController::class, 'review'])->whereNumber('shift')->middleware('can:shift.review');
-    Route::get('shifts/{shift}/cash-movements', [CashMovementController::class, 'index'])
-        ->whereNumber('shift')->middleware('can.any:cash_movement.create,shift.review');
-    Route::post('shifts/{shift}/cash-movements', [CashMovementController::class, 'store'])
-        ->whereNumber('shift')->middleware('can:cash_movement.create');
 
     // Penjualan. Kasir hanya melihat struknya sendiri; Admin (shift.review) melihat semua.
     Route::post('sales/preview', [SaleController::class, 'preview'])
@@ -40,12 +35,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('sales/{sale}/void', [SaleController::class, 'void'])->whereNumber('sale')->middleware('can:sales.void');
 
     // Setoran kasir (Kas Kecil -> Kas Besar) dan kebijakan endapan
-    Route::post('shifts/{shift}/deposits', [CashDepositController::class, 'storePartial'])->whereNumber('shift')->middleware('can:cash_deposit.create');
     // Kasir (create) dan Finance (receive) perlu membaca antrean setoran.
     Route::get('cash-deposits', [CashDepositController::class, 'index']);
     Route::get('cash-deposits/{deposit}', [CashDepositController::class, 'show'])->whereNumber('deposit');
     Route::post('cash-deposits/{deposit}/submit', [CashDepositController::class, 'submit'])->whereNumber('deposit')->middleware('can:cash_deposit.create');
-    Route::post('cash-deposits/{deposit}/cancel', [CashDepositController::class, 'cancel'])->whereNumber('deposit')->middleware('can:cash_deposit.create');
     Route::post('cash-deposits/{deposit}/receive', [CashDepositController::class, 'receive'])->whereNumber('deposit')->middleware('can:cash_deposit.receive');
     Route::post('cash-deposits/{deposit}/correct', [CashDepositController::class, 'correct'])->whereNumber('deposit')->middleware('can:cash_deposit.receive');
     Route::get('fund-accounts', [CashDepositController::class, 'funds'])->middleware('can:cash_deposit.receive');

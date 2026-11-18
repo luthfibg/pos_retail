@@ -49,7 +49,6 @@ class RegisterService
                 $pendingDeposit = DB::table('cash_deposits as d')
                     ->join('cash_shifts as s', 's.id', '=', 'd.shift_id')
                     ->where('s.register_id', $row->id)
-                    ->where('d.kind', 'final')
                     ->where('d.status', 'draft')
                     ->exists();
                 $reason = $shift !== null

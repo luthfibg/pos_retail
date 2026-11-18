@@ -166,7 +166,7 @@ export function DashboardMenuSummaries({ applied }: DashboardMenuSummariesProps)
         const salesCents = totals.cashSalesCents + totals.creditSalesCents;
         return {
           value: `${totals.reportCount} laporan · total penjualan ${amountFromCents(salesCents)}`,
-          detail: `Tunai ${amountFromCents(totals.cashSalesCents)} · kredit ${amountFromCents(totals.creditSalesCents)} · kas masuk ${amountFromCents(totals.cashInCents)} · kas keluar ${amountFromCents(totals.cashOutCents)}`,
+          detail: `Tunai ${amountFromCents(totals.cashSalesCents)} · kredit ${amountFromCents(totals.creditSalesCents)}`,
         };
       },
     });

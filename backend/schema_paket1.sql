@@ -808,21 +808,6 @@ CREATE TABLE cash_shifts (
   CONSTRAINT fk_shift_reviewer FOREIGN KEY (reviewed_by) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE cash_movements (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  shift_id BIGINT UNSIGNED NOT NULL,
-  type ENUM('in','out') NOT NULL,
-  amount DECIMAL(18,2) NOT NULL,
-  reason VARCHAR(255) NOT NULL,
-  created_by BIGINT UNSIGNED NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  KEY idx_cm_shift (shift_id),
-  CONSTRAINT fk_cm_shift FOREIGN KEY (shift_id) REFERENCES cash_shifts (id),
-  CONSTRAINT fk_cm_user FOREIGN KEY (created_by) REFERENCES users (id),
-  CONSTRAINT chk_cm_amount CHECK (amount > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- Satu jenis penjualan (K1/K2 lama tidak dimodelkan); kasir tercatat per transaksi.
 CREATE TABLE sales (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -964,7 +949,6 @@ CREATE TABLE cash_deposits (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   store_id BIGINT UNSIGNED NOT NULL,
   doc_number VARCHAR(30) NOT NULL,
-  kind ENUM('partial','final') NOT NULL,
   shift_id BIGINT UNSIGNED NOT NULL,
   source_fund_id BIGINT UNSIGNED NOT NULL,
   destination_fund_id BIGINT UNSIGNED NOT NULL,

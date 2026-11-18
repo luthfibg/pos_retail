@@ -13,7 +13,7 @@ const PERMISSIONS: Record<string, string[]> = {
   Kasir: [
     'product.create', 'shelf_layout.view', 'inventory.view', 'customer.create', 'customer.select', 'purchase_requisition.create',
     'goods_receipt.create', 'supplier_return.create', 'stock_transfer.create', 'sales.create', 'receipt.reprint', 'shift.open',
-    'shift.close', 'cash_movement.create', 'float.propose', 'cash_deposit.create', 'reports.view',
+    'shift.close', 'float.propose', 'cash_deposit.create', 'reports.view',
   ],
   Finance: [
     'inventory.view', 'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit', 'purchase_requisition.finance_check',

@@ -40,7 +40,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 | `/login` | Login | — | HANDOFF 6 | ✅ | Throttle 429 ditangani |
 | (layout) | Sidebar: menu Kasir/Kasir Jaga Saya disembunyikan untuk Admin; Produk berada di grup Inventory; kelompok menu abu tipis dan submenu putih; workspace kanan yang dapat discroll | permission | — | 🟡 | Sidebar tetap di viewport; menunggu verifikasi browser |
 | `/pos` | **Kasir**: scan/cari produk, keranjang, tunai dan kredit potong gaji, pemilih karyawan, konfirmasi, struk cetak, pengecualian kredit Admin | `sales.create` | 4, 5 | 🟡 | Integrasi pratinjau FR-01 selesai; uji klik integrasi terbaru menunggu pengguna |
-| `/shift` | Kasir Jaga Saya: buka, mulai hitung, tutup (hitung buta), catat kas masuk/keluar, setoran parsial dan serahkan setoran akhir | `shift.open`, `cash_deposit.create`, `cash_movement.create` | 4, 7 | 🟡 | UI parsial baru dibuat; menunggu verifikasi browser |
+| `/shift` | Kasir Jaga Saya: buka, mulai hitung, tutup (hitung buta), dan serahkan setoran akhir | `shift.open`, `cash_deposit.create` | 4, 7 | 🟡 | Kas masuk/keluar nonpenjualan dan setoran parsial sudah dihapus |
 | `/shifts` | Laporan Kasir Jaga (Admin) | `shift.review` | 4 | ✅ | Tombol tindakan memakai istilah "Periksa" |
 | `/cash-deposits` | Setoran Masuk: antrean, penerimaan Finance, koreksi selisih, saldo Kas Kecil/Besar | `cash_deposit.receive` | 7.1 | 🟡 | UI baru dibuat; menunggu verifikasi browser |
 | `/sales` | Riwayat Penjualan: daftar/filter, detail struk, cetak SALINAN, void sesuai izin/status shift/tagihan | `sales.create`, `receipt.reprint`, `sales.void` | 5, 7.2 | ✅ | Pengguna mengonfirmasi uji klik berjalan lancar (27 Okt 2026) |
@@ -74,7 +74,7 @@ Test otomatis hanya mencakup **logika murni** (validasi, penyusun payload, aritm
 |---|---|---|---|
 | Kas masuk/keluar nonpenjualan | 7.4 | ✅ | Form kas masuk/keluar berkonfirmasi dan riwayat berpaginasi di halaman Shift; perubahan kas hanya saat shift aktif. Otomatisasi frontend lulus dan pengguna sudah menguji alur klik tanpa kendala |
 | Penyerahan setoran akhir (Kasir) | 7.1 | ✅ | Hasil tutup shift menampilkan nilai setoran/endapan/flag, serahkan setoran Draft, pulihkan setoran Draft setelah reload, dan tahan buka shift baru sampai setoran diserahkan |
-| Fitur setoran/endapan lainnya | 7.1 | 🟡 | Pengguna telah menguji pembuatan Draft setoran parsial Kasir dan mengonfirmasi hasil sesuai ekspektasi. Uji serah/batal Draft, blokir tutup shift, antrean/penerimaan Finance, koreksi selisih, dan saldo dana masih menunggu |
+| Fitur setoran/endapan lainnya | 7.1 | 🟡 | Setoran parsial sudah dihapus. Uji setoran akhir, antrean/penerimaan Finance, koreksi selisih, dan saldo dana masih perlu konfirmasi |
 | Transfer stok antarposisi / putaway | 1 | 🟡 | `/inventory/transfers`: daftar/filter, buat Draft dari saldo sellable, detail, posting, dan pembatalan Draft. Katalog posisi rak belum tersedia di API; input ID posisi tujuan opsional |
 | Adjustment dan opname | 2.7 | 🟡 | `/inventory/adjustments`: buat Draft snapshot saldo sellable, ajukan, batalkan, antrean/detail, approve/reject, re-auth untuk loss/expired, dan posting atomik. Backend mengizinkan approver membaca antrean/detail tanpa permission request. Menunggu uji klik; belum ada sesi opname terpisah |
 | Riwayat penjualan | 5, 7.2 | ✅ | `/sales`: daftar + filter, detail, **cetak ulang SALINAN**, **void** Admin; pengguna mengonfirmasi uji klik berjalan lancar |
@@ -119,7 +119,7 @@ Pada 28 Okt 2026, setelah tahap Manajemen Pengguna, `npm run typecheck`, `npm te
 
 ## 4. Celah dan catatan yang diketahui
 
-1. **Setoran dan endapan:** Setoran akhir, kebijakan endapan, setoran parsial Kasir, antrean Finance/Admin, penerimaan/koreksi selisih, dan saldo dana tersedia di UI. Pengguna mengonfirmasi pembuatan Draft parsial; uji tindakan lain termasuk antrean Finance masih ditunggu. Tanpa kebijakan endapan aktif, backend mempertahankan seluruh kas terhitung sebagai endapan dan tidak membuat dokumen setoran akhir; atur kebijakan sebelum menguji. **Fitur kas lengkap tetap prasyarat go-live.** Backend daftar/detail setoran kini mengizinkan `cash_deposit.create` atau `cash_deposit.receive`; Finance tidak memerlukan izin pembuatan Kasir untuk membaca antrean.
+1. **Setoran dan endapan:** Setoran akhir, kebijakan endapan, antrean Finance/Admin, penerimaan/koreksi selisih, dan saldo dana tersedia di UI. Setoran parsial dan kas nonpenjualan sudah dihapus. Uji setoran akhir dan antrean Finance masih ditunggu. Tanpa kebijakan endapan aktif, backend mempertahankan seluruh kas terhitung sebagai endapan dan tidak membuat dokumen setoran akhir; atur kebijakan sebelum menguji. **Fitur kas tetap prasyarat go-live.** Backend daftar/detail setoran mengizinkan `cash_deposit.create` atau `cash_deposit.receive`; Finance tidak memerlukan izin pembuatan Kasir untuk membaca antrean.
 2. **Pratinjau penjualan (FR-01):** backend `POST /api/sales/preview` terintegrasi di layar `/pos` untuk total resmi, diskon, PPN, stok FEFO, dan sinyal batas kredit. Layar tidak menghitung ulang aturan bisnis saat pratinjau gagal; peringatan ditampilkan bila total final posting berubah dari pratinjau.
 3. **Hasil transaksi tidak diketahui:** bila jaringan putus saat posting, keranjang dikunci dan hanya bisa kirim ulang dengan kunci yang sama. Bila tab ditutup sebelum itu, struk mungkin tersimpan tetapi tidak terlihat; riwayat penjualan kini menyediakan pencarian dan detail struk untuk menemukan transaksi tersebut.
 4. **Cetak struk dan invoice:** struk thermal kini memiliki pilihan 58/80 mm dengan ukuran halaman CSS terpisah, dan invoice A4 menampilkan status serta riwayat pembayaran/sisa tagihan. Uji printer fisik, pemilihan printer browser, dan printer/scanner perangkat klien masih wajib dilakukan (ROADMAP 6.1, 6.2, 7.4).
@@ -137,7 +137,7 @@ Pada 28 Okt 2026, setelah tahap Manajemen Pengguna, `npm run typecheck`, `npm te
 5. 🟡 **Manajemen Pengguna** (bagian 10): `/users` mengelola akun toko dan tombol profil menyediakan ganti sandi sendiri; menunggu uji klik.
 6. **Transfer stok** (backend 2.6 sudah siap): UI `/inventory/transfers` tersedia; uji klik menunggu, bersama beberapa layar lain yang sudah tersedia.
 
-Verifikasi tindakan setoran parsial/Finance dan layar penerimaan barang tetap belum dikonfirmasi pengguna; ini adalah sisa uji UI yang sudah ada, bukan fitur backend yang belum tersedia.
+Catatan verifikasi lama untuk setoran parsial sudah superseded karena fitur tersebut dihapus. Uji UI antrean/penerimaan Finance dan layar penerimaan barang masih menunggu konfirmasi.
 
 Jika jadwal mundur, yang tidak boleh dipotong: layar kasir, setoran + endapan, tagihan HRD (HANDOFF bagian 7).
 

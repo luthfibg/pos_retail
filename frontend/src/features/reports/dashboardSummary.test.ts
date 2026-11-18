@@ -52,9 +52,6 @@ function cashierShift(overrides: Partial<Pick<Shift, 'id' | 'status' | 'summary'
       cash_sales_total: '2.00',
       credit_sales_count: 1,
       credit_sales_total: '4.50',
-      cash_in: '0.50',
-      cash_out: '0.25',
-      partial_deposits: '0',
     },
     ...overrides,
   };
@@ -96,9 +93,6 @@ describe('dashboard cashier shift summaries', () => {
           cash_sales_total: '3.00',
           credit_sales_count: 1,
           credit_sales_total: '1.00',
-          cash_in: '0.25',
-          cash_out: '0.15',
-          partial_deposits: '0',
         },
       }),
       cashierShift({ id: 3, status: 'open' }),
@@ -108,8 +102,6 @@ describe('dashboard cashier shift summaries', () => {
       reportCount: 2,
       cashSalesCents: 500n,
       creditSalesCents: 550n,
-      cashInCents: 75n,
-      cashOutCents: 40n,
     });
   });
 

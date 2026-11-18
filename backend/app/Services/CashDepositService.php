@@ -19,13 +19,9 @@ use Illuminate\Validation\ValidationException;
  *  - TANPA kebijakan aktif -> setoran 0 dan seluruh kas tetap sebagai endapan (tanda no_policy) [perilaku sementara lama]
  *  - status: draft -> submitted (kasir menyerahkan) -> received (Finance menghitung ulang, ledger Kas Kecil (-) dan Kas Besar (+))
  *            atau discrepancy (hitung ulang berbeda; wajib catatan) -> corrected (alasan; ledger tidak diubah)
- *  - setoran parsial (tengah shift) mengurangi kas diharapkan sejak diserahkan
  */
 class CashDepositService
 {
-    /** Status yang berarti uang sudah meninggalkan laci. */
-    public const HANDED_OVER = ['submitted', 'received', 'discrepancy', 'corrected'];
-
     public function __construct(private AuditLogger $audit, private NumberSequence $sequences)
     {
     }
@@ -154,7 +150,7 @@ class CashDepositService
      *
      * @param  array{policy: object|null, float: int, deposit: int, flags: list<string>}  $plan
      */
-    public function createDraft(User $actor, int $storeId, object $shift, int $counted, array $plan, string $kind, ?string $note): ?int
+    public function createDraft(User $actor, int $storeId, object $shift, int $counted, array $plan): ?int
     {
         if ($plan['deposit'] <= 0) {
             return null;
@@ -171,7 +167,6 @@ class CashDepositService
         $id = DB::table('cash_deposits')->insertGetId([
             'store_id' => $storeId,
             'doc_number' => $docNo,
-            'kind' => $kind,
             'shift_id' => $shift->id,
             'source_fund_id' => $petty,
             'destination_fund_id' => $main,
@@ -180,48 +175,15 @@ class CashDepositService
             'deposit_amount' => Decimal::moneyString($plan['deposit']),
             'policy_id' => $plan['policy']?->id,
             'status' => 'draft',
-            'note' => $note,
             'created_by' => $actor->id,
         ]);
 
         $this->audit->log('cash_deposit.create', 'cash_deposit', $id, after: [
-            'doc_number' => $docNo, 'kind' => $kind, 'counted' => Decimal::moneyString($counted),
+            'doc_number' => $docNo, 'counted' => Decimal::moneyString($counted),
             'float_kept' => Decimal::moneyString($plan['float']), 'deposit' => Decimal::moneyString($plan['deposit']),
         ], storeId: $storeId, actorId: $actor->id);
 
         return $id;
-    }
-
-    /**
-     * Setoran parsial di tengah shift: kasir menghitung uang di laci, sistem menghitung bagian yang boleh disetor.
-     *
-     * @return array<string, mixed>
-     */
-    public function createPartial(User $actor, int $storeId, int $shiftId, string $countedAmount, ?string $note, bool $canManage): array
-    {
-        $id = DB::transaction(function () use ($actor, $storeId, $shiftId, $countedAmount, $note, $canManage) {
-            $shift = DB::table('cash_shifts')->where('store_id', $storeId)->where('id', $shiftId)->lockForUpdate()->first();
-            abort_if($shift === null, 404, 'Shift tidak ditemukan.');
-            abort_if(! $canManage && (int) $shift->cashier_id !== $actor->id, 403, 'Anda hanya dapat menyetor dari shift sendiri.');
-
-            if (! in_array($shift->status, ['open', 'counting'], true)) {
-                throw ValidationException::withMessages(['shift' => ['Setoran parsial hanya untuk shift yang sedang berjalan.']]);
-            }
-            if (DB::table('cash_deposits')->where('shift_id', $shiftId)->where('status', 'draft')->exists()) {
-                throw ValidationException::withMessages(['shift' => ['Masih ada setoran Draft pada shift ini. Serahkan atau batalkan dulu.']]);
-            }
-
-            $counted = Decimal::money($countedAmount);
-            $plan = $this->plan($storeId, $shiftId, $counted);
-
-            if ($plan['deposit'] <= 0) {
-                throw ValidationException::withMessages(['counted_amount' => [$this->nothingMessage($plan['flags'])]]);
-            }
-
-            return $this->createDraft($actor, $storeId, $shift, $counted, $plan, 'partial', $note);
-        });
-
-        return $this->find($actor, $storeId, $id, true);
     }
 
     // ------------------------------------------------------------------ alur status
@@ -245,27 +207,6 @@ class CashDepositService
     }
 
     /** @return array<string, mixed> */
-    public function cancel(User $actor, int $storeId, int $id, ?string $reason, bool $canManage): array
-    {
-        DB::transaction(function () use ($actor, $storeId, $id, $reason, $canManage) {
-            $deposit = $this->lock($storeId, $id);
-            $this->assertCashier($actor, $deposit, $canManage);
-
-            if ($deposit->status !== 'draft') {
-                throw ValidationException::withMessages(['status' => ['Hanya setoran Draft yang dapat dibatalkan.']]);
-            }
-            if ($deposit->kind === 'final') {
-                throw ValidationException::withMessages(['status' => ['Setoran akhir shift tidak dapat dibatalkan; serahkan setoran tersebut.']]);
-            }
-
-            // dokumen draft parsial belum mengubah apa pun; hapus agar tidak mengganjal penutupan shift
-            DB::table('cash_deposits')->where('id', $id)->delete();
-            $this->audit->log('cash_deposit.cancel', 'cash_deposit', $id, before: ['status' => 'draft', 'doc_number' => $deposit->doc_number], reason: $reason, storeId: $storeId, actorId: $actor->id);
-        });
-
-        return ['id' => $id, 'cancelled' => true];
-    }
-
     /**
      * Finance menghitung ulang dan menerima. Selisih -> status discrepancy (catatan wajib).
      * Ledger: Kas Kecil dikurangi sebesar yang diserahkan, Kas Besar ditambah sebesar yang diterima.
@@ -352,7 +293,7 @@ class CashDepositService
         if (! $canSeeAll) {
             $query->where('s.cashier_id', $actor->id);
         }
-        foreach (['status', 'kind'] as $field) {
+        foreach (['status'] as $field) {
             if (! empty($filters[$field])) {
                 $query->where("d.{$field}", $filters[$field]);
             }
@@ -384,7 +325,7 @@ class CashDepositService
     /** Setoran akhir shift (untuk ditampilkan di data shift). @return array<string, mixed>|null */
     public function finalForShift(int $shiftId): ?array
     {
-        $row = DB::table('cash_deposits')->where('shift_id', $shiftId)->where('kind', 'final')->first(['id', 'doc_number', 'status', 'deposit_amount', 'float_kept']);
+        $row = DB::table('cash_deposits')->where('shift_id', $shiftId)->first(['id', 'doc_number', 'status', 'deposit_amount', 'float_kept']);
 
         return $row === null ? null : [
             'id' => (int) $row->id, 'doc_number' => $row->doc_number, 'status' => $row->status,
@@ -398,16 +339,6 @@ class CashDepositService
     {
         return DB::table('float_policies')->where('store_id', $storeId)->where('scope', $scope)->where('is_active', 1)
             ->orderByDesc('id')->first();
-    }
-
-    /** @param list<string> $flags */
-    private function nothingMessage(array $flags): string
-    {
-        return match (true) {
-            in_array('no_policy', $flags, true) => 'Kebijakan endapan belum ditetapkan Admin; setoran belum dapat dihitung.',
-            in_array('below_minimum', $flags, true) => 'Kas di bawah endapan minimum; tidak ada yang dapat disetor.',
-            default => 'Kas di laci tidak melebihi endapan; tidak ada yang dapat disetor.',
-        };
     }
 
     private function assertCashier(User $actor, object $deposit, bool $canManage): void
@@ -439,7 +370,6 @@ class CashDepositService
         return [
             'id' => (int) $row->id,
             'doc_number' => $row->doc_number,
-            'kind' => $row->kind,
             'shift_id' => (int) $row->shift_id,
             'shift_doc_number' => $row->shift_doc_number,
             'status' => $row->status,

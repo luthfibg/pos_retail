@@ -39,8 +39,6 @@ export function ShiftFigures({ shift }: { shift: Shift }) {
       {row('Saldo awal', formatRupiah(shift.opening_balance))}
       {row('Penjualan tunai', `${formatRupiah(s.cash_sales_total)} (${s.cash_sales_count} struk)`)}
       {row('Penjualan kredit karyawan', `${formatRupiah(s.credit_sales_total)} (${s.credit_sales_count} struk)`)}
-      {row('Kas masuk lain', formatRupiah(s.cash_in))}
-      {row('Kas keluar', formatRupiah(s.cash_out))}
       {shift.expected_cash !== null && row('Kas diharapkan', formatRupiah(shift.expected_cash))}
       {shift.counted_cash !== null && row('Kas terhitung', formatRupiah(shift.counted_cash))}
       {shift.variance !== null && row('Selisih', <VarianceText value={shift.variance} />)}

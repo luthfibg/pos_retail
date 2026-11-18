@@ -45,14 +45,12 @@ class CashDepositTest extends SeededTestCase
         $this->putJson('/api/float-policies/petty_cash', $override + ['mode' => 'fixed', 'fixed_amount' => '500000', 'rounding_unit' => 1000])->assertOk();
     }
 
-    /** Kasir membuka shift dan laci menerima uang masuk $cashIn (kas masuk lain). */
-    private function openShiftWithCash(string $cashIn, ?User $user = null): int
+    /** Buka shift dengan saldo awal yang disiapkan seperti endapan shift sebelumnya. */
+    private function openShiftWithOpeningCash(string $openingCash, ?User $user = null): int
     {
         $this->as($user ?? $this->cashier);
         $id = (int) $this->postJson('/api/shifts/open')->assertCreated()->json('data.id');
-        if ($cashIn !== '0') {
-            DB::table('cash_movements')->insert(['shift_id' => $id, 'type' => 'in', 'amount' => $cashIn, 'reason' => 'modal uji', 'created_by' => ($user ?? $this->cashier)->id]);
-        }
+        DB::table('cash_shifts')->where('id', $id)->update(['opening_balance' => $openingCash]);
 
         return $id;
     }
@@ -61,7 +59,7 @@ class CashDepositTest extends SeededTestCase
     private function closedShiftWithDeposit(): array
     {
         $this->policy();
-        $shift = $this->openShiftWithCash('1234567');
+        $shift = $this->openShiftWithOpeningCash('1234567');
         $this->as($this->cashier);
         $close = $this->postJson("/api/shifts/{$shift}/close", ['counted_cash' => '1234567'])->assertOk();
 
@@ -89,7 +87,7 @@ class CashDepositTest extends SeededTestCase
 
     public function test_without_policy_whole_cash_stays_as_float_like_before(): void
     {
-        $shift = $this->openShiftWithCash('300000');
+        $shift = $this->openShiftWithOpeningCash('300000');
 
         $r = $this->postJson("/api/shifts/{$shift}/close", ['counted_cash' => '300000'])->assertOk();
 
@@ -103,7 +101,7 @@ class CashDepositTest extends SeededTestCase
 
         $this->assertDatabaseHas('cash_shifts', ['id' => $shift, 'status' => 'closed', 'float_kept' => '500567.00']);
         $this->assertDatabaseHas('cash_deposits', [
-            'id' => $depositId, 'kind' => 'final', 'shift_id' => $shift, 'status' => 'draft',
+            'id' => $depositId, 'shift_id' => $shift, 'status' => 'draft',
             'counted_amount' => '1234567.00', 'float_kept' => '500567.00', 'deposit_amount' => '734000.00',
         ]);
         $period = now('Asia/Jakarta')->format('Ym');
@@ -116,7 +114,7 @@ class CashDepositTest extends SeededTestCase
     public function test_percent_of_cash_sales_with_min_and_max_clamps(): void
     {
         $this->policy(['mode' => 'percent', 'percent' => '10', 'percent_base' => 'cash_sales_shift', 'fixed_amount' => null]);
-        $shift = $this->openShiftWithCash('400000');
+        $shift = $this->openShiftWithOpeningCash('400000');
         $this->sellCash('100000');
         $this->as($this->cashier);
         // kas = 400.000 + 100.000 = 500.000; endapan = 10% x 100.000 = 10.000
@@ -127,7 +125,7 @@ class CashDepositTest extends SeededTestCase
     public function test_percent_of_cash_on_hand_and_min_clamp(): void
     {
         $this->policy(['mode' => 'percent', 'percent' => '10', 'percent_base' => 'cash_on_hand', 'min_amount' => '250000', 'fixed_amount' => null]);
-        $shift = $this->openShiftWithCash('2000000');
+        $shift = $this->openShiftWithOpeningCash('2000000');
         $this->as($this->cashier);
         // 10% x 2.000.000 = 200.000 -> dijepit ke minimum 250.000; setoran 1.750.000
         $this->postJson("/api/shifts/{$shift}/close", ['counted_cash' => '2000000'])->assertOk()
@@ -137,7 +135,7 @@ class CashDepositTest extends SeededTestCase
     public function test_max_clamp_and_edge_cases(): void
     {
         $this->policy(['fixed_amount' => '500000', 'max_amount' => '20000']);
-        $shift = $this->openShiftWithCash('300000');
+        $shift = $this->openShiftWithOpeningCash('300000');
         $this->as($this->cashier);
         $this->postJson("/api/shifts/{$shift}/close", ['counted_cash' => '300000'])->assertOk()
             ->assertJsonPath('data.float_kept', '20000.00')->assertJsonPath('data.deposit.deposit_amount', '280000.00');
@@ -154,7 +152,7 @@ class CashDepositTest extends SeededTestCase
     public function test_cash_below_minimum_is_flagged_and_nothing_is_deposited(): void
     {
         $this->policy(['fixed_amount' => '100000', 'min_amount' => '100000']);
-        $shift = $this->openShiftWithCash('50000');
+        $shift = $this->openShiftWithOpeningCash('50000');
         $this->as($this->cashier);
 
         $this->postJson("/api/shifts/{$shift}/close", ['counted_cash' => '50000'])->assertOk()
@@ -181,7 +179,7 @@ class CashDepositTest extends SeededTestCase
         [, $depositId] = $this->closedShiftWithDeposit();
 
         $this->as($this->cashier);
-        $this->postJson("/api/cash-deposits/{$depositId}/cancel")->assertUnprocessable()->assertJsonValidationErrors(['status']);
+        $this->postJson("/api/cash-deposits/{$depositId}/cancel")->assertNotFound();
 
         $this->as($this->makeUser('Kasir', 'kasir-orang-lain'));
         $this->getJson("/api/cash-deposits/{$depositId}")->assertNotFound();
@@ -190,7 +188,7 @@ class CashDepositTest extends SeededTestCase
 
         $this->as($this->admin);
         $this->getJson('/api/cash-deposits')->assertOk()->assertJsonPath('total', 1);
-        $this->getJson('/api/cash-deposits?status=draft&kind=final')->assertOk()->assertJsonPath('total', 1);
+        $this->getJson('/api/cash-deposits?status=draft')->assertOk()->assertJsonPath('total', 1);
         $this->getJson('/api/cash-deposits?status=bogus')->assertUnprocessable();
     }
 
@@ -211,7 +209,7 @@ class CashDepositTest extends SeededTestCase
         $this->getJson('/api/fund-accounts')->assertOk();
 
         $shiftId = (int) DB::table('cash_deposits')->where('id', $depositId)->value('shift_id');
-        $this->postJson("/api/shifts/{$shiftId}/deposits", ['counted_amount' => '800000'])->assertForbidden();
+        $this->postJson("/api/shifts/{$shiftId}/deposits", ['counted_amount' => '800000'])->assertNotFound();
         $this->postJson("/api/cash-deposits/{$depositId}/submit")->assertForbidden();
         $this->postJson("/api/cash-deposits/{$depositId}/receive", ['received_amount' => '734000'])
             ->assertOk()->assertJsonPath('data.status', 'received');
@@ -283,64 +281,18 @@ class CashDepositTest extends SeededTestCase
         $this->postJson("/api/cash-deposits/{$depositId}/correct", ['reason' => 'lagi'])->assertUnprocessable();
     }
 
-    // ------------------------------------------------------------------ setoran parsial
-
-    public function test_partial_deposit_reduces_expected_cash_only_after_handover(): void
+    public function test_non_sales_cash_and_partial_deposit_endpoints_are_removed(): void
     {
-        $this->policy(['fixed_amount' => '300000']);
-        $shift = $this->openShiftWithCash('800000');
+        $shift = $this->openShiftWithOpeningCash('800000');
         $this->as($this->cashier);
 
-        $partial = (int) $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '800000', 'note' => 'laci penuh'])
-            ->assertCreated()->assertJsonPath('data.kind', 'partial')->assertJsonPath('data.deposit_amount', '500000.00')
-            ->assertJsonPath('data.float_kept', '300000.00')->assertJsonPath('data.status', 'draft')->json('data.id');
-
-        $this->as($this->admin);
-        $this->getJson("/api/shifts/{$shift}")->assertJsonPath('data.expected_cash', '800000.00')->assertJsonPath('data.summary.partial_deposits', '0.00');
-
-        $this->as($this->cashier);
-        $this->postJson("/api/cash-deposits/{$partial}/submit")->assertOk();
-
-        $this->as($this->admin);
-        $this->getJson("/api/shifts/{$shift}")->assertJsonPath('data.expected_cash', '300000.00')->assertJsonPath('data.summary.partial_deposits', '500000.00');
-
-        // sisa di laci cocok -> tutup tanpa selisih, tidak ada setoran akhir
-        $this->as($this->cashier);
-        $this->postJson("/api/shifts/{$shift}/close", ['counted_cash' => '300000'])->assertOk()
-            ->assertJsonPath('data.variance', '0.00')->assertJsonPath('data.deposit', null)->assertJsonPath('data.float_kept', '300000.00');
-    }
-
-    public function test_partial_deposit_rules(): void
-    {
-        $shift = $this->openShiftWithCash('800000');
-        $this->as($this->cashier);
-
-        // tanpa kebijakan aktif
-        $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '800000'])->assertUnprocessable()->assertJsonValidationErrors(['counted_amount']);
-
-        $this->policy(['fixed_amount' => '300000']);
-        $this->as($this->cashier);
-        $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '200000'])->assertUnprocessable()->assertJsonValidationErrors(['counted_amount']);
-        $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '-1'])->assertUnprocessable();
-
-        $draft = (int) $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '800000'])->assertCreated()->json('data.id');
-        // satu draft sekaligus, dan shift tidak bisa ditutup selama ada draft
-        $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '800000'])->assertUnprocessable()->assertJsonValidationErrors(['shift']);
-        $this->postJson("/api/shifts/{$shift}/close", ['counted_cash' => '800000'])->assertUnprocessable()->assertJsonValidationErrors(['status']);
-
-        $this->postJson("/api/cash-deposits/{$draft}/cancel", ['reason' => 'salah hitung'])->assertOk()->assertJsonPath('data.cancelled', true);
-        $this->assertSame(0, DB::table('cash_deposits')->count());
-        $this->postJson("/api/shifts/{$shift}/close", ['counted_cash' => '800000'])->assertOk();
-
-        // shift sudah ditutup -> tidak bisa setor parsial
-        $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '800000'])->assertUnprocessable()->assertJsonValidationErrors(['shift']);
-
-        // shift milik orang lain
-        $other = $this->makeUser('Kasir', 'kasir-lain-setor');
-        $this->as($this->admin);
-        $this->postJson("/api/cash-deposits/{$draft}/cancel")->assertNotFound();
-        $this->as($other);
-        $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '800000'])->assertForbidden();
+        $this->postJson("/api/shifts/{$shift}/deposits", ['counted_amount' => '800000'])->assertNotFound();
+        $this->getJson("/api/shifts/{$shift}/cash-movements")->assertNotFound();
+        $this->postJson("/api/shifts/{$shift}/cash-movements", ['type' => 'in', 'amount' => '100', 'reason' => 'test'])->assertNotFound();
+        $this->getJson("/api/shifts/{$shift}")->assertOk()
+            ->assertJsonMissingPath('data.summary.cash_in')
+            ->assertJsonMissingPath('data.summary.cash_out')
+            ->assertJsonMissingPath('data.summary.partial_deposits');
     }
 
     // ------------------------------------------------------------------ kebijakan

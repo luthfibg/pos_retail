@@ -98,10 +98,10 @@ export function SalesHistoryPage() {
             <option value="payroll_credit">Kredit potong gaji</option>
           </select>
         </Field>
-        <Field label="Dari (WIB)">
+        <Field label="Transaksi (Dari)">
           <input className={inputCls} type="date" value={values.dateFrom} onChange={(event) => setValues((v) => ({ ...v, dateFrom: event.target.value }))} />
         </Field>
-        <Field label="Sampai (WIB)">
+        <Field label="Transaksi (Sampai dengan)">
           <input className={inputCls} type="date" value={values.dateTo} onChange={(event) => setValues((v) => ({ ...v, dateTo: event.target.value }))} />
         </Field>
         <div className="flex gap-2 sm:col-span-2 lg:col-span-5">

@@ -1,6 +1,6 @@
 import { api, apiDownload } from './client';
 import type {
-  Category, CategoryInput, CashDeposit, CashMovement, CashMovementType, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositKind, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
+  Category, CategoryInput, CashDeposit, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, StockCardMovement, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary, DeferredPurchaseRequisitionItem,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
@@ -605,15 +605,11 @@ export const registerApi = {
 };
 
 export const cashDepositApi = {
-  list: (f: { status?: DepositStatus; kind?: DepositKind; shift_id?: number; page?: number; per_page?: number } = {}) =>
+  list: (f: { status?: DepositStatus; shift_id?: number; page?: number; per_page?: number } = {}) =>
     api<Paginated<CashDeposit>>('/cash-deposits', { query: { ...f } }),
   get: (id: number) => api<{ data: CashDeposit }>(`/cash-deposits/${id}`).then((r) => r.data),
-  createPartial: (shiftId: number, input: { counted_amount: string; note?: string }) =>
-    api<{ data: CashDeposit }>(`/shifts/${shiftId}/deposits`, { method: 'POST', body: input }).then((r) => r.data),
   submit: (id: number) =>
     api<{ data: CashDeposit }>(`/cash-deposits/${id}/submit`, { method: 'POST' }).then((r) => r.data),
-  cancel: (id: number, reason?: string) =>
-    api<{ data: { id: number; cancelled: boolean } }>(`/cash-deposits/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }).then((r) => r.data),
   receive: (id: number, input: { received_amount: string; note?: string }) =>
     api<{ data: CashDeposit }>(`/cash-deposits/${id}/receive`, { method: 'POST', body: input }).then((r) => r.data),
   correct: (id: number, reason: string) =>
@@ -625,13 +621,6 @@ export const floatPolicyApi = {
   list: () => api<{ data: FloatPolicies }>('/float-policies').then((r) => r.data),
   update: (scope: FloatPolicyScope, input: FloatPolicyInput) =>
     api<{ data: FloatPolicies['petty_cash'] }>('/float-policies/' + scope, { method: 'PUT', body: input }).then((r) => r.data),
-};
-
-export const cashMovementApi = {
-  list: (shiftId: number, page = 1, perPage = 25) =>
-    api<Paginated<CashMovement>>(`/shifts/${shiftId}/cash-movements`, { query: { page, per_page: perPage } }),
-  create: (shiftId: number, input: { type: CashMovementType; amount: string; reason: string }) =>
-    api<{ data: CashMovement }>(`/shifts/${shiftId}/cash-movements`, { method: 'POST', body: input }).then((r) => r.data),
 };
 
 export interface SaleFilters {
