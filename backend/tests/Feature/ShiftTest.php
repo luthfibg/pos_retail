@@ -14,7 +14,7 @@ class ShiftTest extends SeededTestCase
 
         $this->getJson('/api/shifts/current')->assertOk()->assertJsonPath('data', null);
 
-        $response = $this->postJson('/api/shifts/open', ['counted_opening_cash' => '0'])->assertCreated();
+        $response = $this->postJson('/api/shifts/open', ['added_opening_cash' => '0'])->assertCreated();
         $date = now('Asia/Jakarta')->format('dmY');
 
         $response->assertJsonPath('data.doc_number', "KASIR-JAGA-{$date}-kasir-uji")
@@ -72,12 +72,24 @@ class ShiftTest extends SeededTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'shift.close', 'entity_id' => $shiftId, 'reason' => 'uang kembalian kurang']);
         $this->postJson("/api/shifts/{$shiftId}/close", ['counted_cash' => '44000'])->assertUnprocessable();
 
-        // shift berikutnya: saldo awal = endapan shift sebelumnya
-        $this->postJson('/api/shifts/open', ['counted_opening_cash' => '43000'])->assertCreated()
-            ->assertJsonPath('data.opening_balance', '44000.00');
+        $this->getJson('/api/registers/available')->assertOk()
+            ->assertJsonPath('data.0.opening_balance', '44000.00');
+
+        // saldo berikutnya mewarisi endapan, lalu menerima penambahan saat buka.
+        $next = $this->postJson('/api/shifts/open', ['added_opening_cash' => '6000'])->assertCreated()
+            ->assertJsonPath('data.opening_balance', '50000.00');
+        $nextId = $next->json('data.id');
+        $this->assertDatabaseHas('fund_ledger_entries', [
+            'ref_type' => 'cash_shift',
+            'ref_id' => $nextId,
+            'entry_type' => 'shift_opening_addition',
+            'amount' => '6000.00',
+        ]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'shift.open']);
         $opened = DB::table('audit_logs')->where('action', 'shift.open')->orderByDesc('id')->first();
-        $this->assertStringContainsString('-1000.00', (string) $opened->after_json);
+        $auditData = json_decode((string) $opened->after_json, true);
+        $this->assertSame('6000.00', $auditData['opening_balance_added']);
+        $this->assertSame('44000.00', $auditData['opening_balance_previous_float']);
     }
 
     public function test_exact_count_needs_no_note(): void

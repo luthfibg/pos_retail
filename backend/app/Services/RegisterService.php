@@ -46,6 +46,11 @@ class RegisterService
             ->get(['r.id', 'r.name'])
             ->map(function ($row) {
                 $shift = $this->activeShift((int) $row->id);
+                $openingBalance = DB::table('cash_shifts')
+                    ->where('register_id', $row->id)
+                    ->whereIn('status', ['closed', 'reviewed'])
+                    ->orderByDesc('id')
+                    ->value('float_kept');
                 $pendingDeposit = DB::table('cash_deposits as d')
                     ->join('cash_shifts as s', 's.id', '=', 'd.shift_id')
                     ->where('s.register_id', $row->id)
@@ -58,6 +63,7 @@ class RegisterService
                 return [
                     'id' => (int) $row->id,
                     'name' => $row->name,
+                    'opening_balance' => $openingBalance ?? '0.00',
                     'is_available' => $reason === null,
                     'unavailable_reason' => $reason,
                 ];

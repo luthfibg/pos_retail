@@ -582,7 +582,7 @@ export const shiftApi = {
   /** Shift aktif (open/counting) milik pengguna; data = null bila belum ada. */
   current: () => api<{ data: Shift | null }>('/shifts/current').then((r) => r.data),
   get: (id: number) => api<{ data: Shift }>(`/shifts/${id}`).then((r) => r.data),
-  open: (input: { register_id: number; counted_opening_cash?: string }) =>
+  open: (input: { register_id: number; added_opening_cash?: string }) =>
     api<{ data: Shift }>('/shifts/open', { method: 'POST', body: input }).then((r) => r.data),
   availableRegisters: () => api<{ data: AvailableRegister[] }>('/registers/available').then((r) => r.data),
   startCount: (id: number) =>

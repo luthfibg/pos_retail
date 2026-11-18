@@ -8,6 +8,7 @@ import { Field, inputCls } from '@/components/ui/Field';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { validateMoney } from '@/features/customers/customerForm';
 import { normalizeDecimal } from '@/features/products/productForm';
+import { centsToMoney, moneyToCents } from '@/lib/money';
 import { ShiftFigures, ShiftStatusBadge } from './ShiftParts';
 import { formatRupiah } from '@/lib/format';
 import { canOpenNextShift } from './shiftLogic';
@@ -93,16 +94,23 @@ export function ShiftPage() {
 function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
   const registers = useQuery({ queryKey: ['registers', 'available'], queryFn: shiftApi.availableRegisters });
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
-  const [counted, setCounted] = useState('');
+  const [openingAddition, setOpeningAddition] = useState('');
   const [error, setError] = useState<string | undefined>();
   const selectedRegister = selectedRegisterId || String(registers.data?.find((register) => register.is_available)?.id ?? '');
+  const selectedRegisterData = registers.data?.find((register) => String(register.id) === selectedRegister);
+  const previousFloat = selectedRegisterData?.opening_balance ?? '0.00';
+  const previousFloatCents = moneyToCents(previousFloat);
+  const normalizedAddition = normalizeDecimal(openingAddition) || '0';
+  const additionCents = moneyToCents(normalizedAddition);
+  const totalOpening = !selectedRegisterData || previousFloatCents === null || additionCents === null
+    ? null
+    : centsToMoney(previousFloatCents + additionCents);
 
   const mutation = useMutation({
     mutationFn: () => {
-      const v = normalizeDecimal(counted);
       return shiftApi.open({
         register_id: Number(selectedRegister),
-        ...(v ? { counted_opening_cash: v } : {}),
+        added_opening_cash: normalizeDecimal(openingAddition) || '0',
       });
     },
     onSuccess: async () => {
@@ -117,7 +125,7 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
     e.preventDefault();
     if (mutation.isPending) return;
     mutation.reset();
-    const msg = validateMoney(counted, false);
+    const msg = validateMoney(openingAddition, false);
     setError(msg);
     if (msg) return;
     mutation.mutate();
@@ -138,7 +146,12 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
           className={inputCls}
           required
           value={selectedRegister}
-          onChange={(event) => setSelectedRegisterId(event.target.value)}
+          onChange={(event) => {
+            setSelectedRegisterId(event.target.value);
+            setOpeningAddition('');
+            setError(undefined);
+            mutation.reset();
+          }}
           disabled={registers.isLoading || !registers.data?.length}
         >
           <option value="">{registers.isLoading ? 'Memuat mesin kasir…' : 'Pilih mesin kasir'}</option>
@@ -151,11 +164,31 @@ function OpenShiftCard({ onOpened }: { onOpened: () => void }) {
       </Field>
       {registers.data?.length === 0 && <p className="text-sm text-amber-800">Belum ada mesin kasir aktif.</p>}
 
-      <Field
-        label="Uang di laci saat ini (opsional)"
-        error={error ?? server.counted_opening_cash?.[0]}
-      >
-        <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={counted} onChange={(e) => setCounted(e.target.value)} placeholder="Rp" autoFocus />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Saldo awal">
+          <input
+            className={`${inputCls} tabular-nums`}
+            value={selectedRegisterData ? formatRupiah(previousFloat) : ''}
+            disabled
+          />
+        </Field>
+        <Field label="Penambahan saldo" error={error ?? server.added_opening_cash?.[0]}>
+          <input
+            className={`${inputCls} tabular-nums`}
+            inputMode="decimal"
+            value={openingAddition}
+            onChange={(event) => setOpeningAddition(event.target.value)}
+            placeholder="Rp"
+            autoFocus
+          />
+        </Field>
+      </div>
+      <Field label="Total saldo awal">
+        <input
+          className={`${inputCls} tabular-nums`}
+          value={totalOpening === null ? '' : formatRupiah(totalOpening)}
+          disabled
+        />
       </Field>
 
       <button type="submit" disabled={mutation.isPending || !selectedRegister || registers.data?.find((register) => String(register.id) === selectedRegister)?.is_available !== true} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">

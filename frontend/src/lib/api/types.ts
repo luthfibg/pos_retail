@@ -1298,6 +1298,7 @@ export interface Register {
 export interface AvailableRegister {
   id: number;
   name: string;
+  opening_balance: Decimal;
   is_available: boolean;
   unavailable_reason: string | null;
 }

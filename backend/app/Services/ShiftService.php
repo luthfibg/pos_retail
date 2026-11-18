@@ -30,10 +30,10 @@ class ShiftService
     ) {}
 
     /** @return array<string, mixed> */
-    public function open(User $actor, int $storeId, ?string $countedOpeningCash, ?int $registerId): array
+    public function open(User $actor, int $storeId, ?string $addedOpeningCash, ?int $registerId): array
     {
         try {
-            $id = DB::transaction(function () use ($actor, $storeId, $countedOpeningCash, $registerId) {
+            $id = DB::transaction(function () use ($actor, $storeId, $addedOpeningCash, $registerId) {
                 DB::table('users')->where('id', $actor->id)->lockForUpdate()->first();
                 $activeRegisters = DB::table('registers')->where('store_id', $storeId)->where('is_active', true);
                 if ($registerId === null) {
@@ -74,9 +74,12 @@ class ShiftService
                 $previous = DB::table('cash_shifts')
                     ->where('store_id', $storeId)->where('register_id', $register->id)->whereIn('status', ['closed', 'reviewed'])
                     ->orderByDesc('id')->first(['float_kept']);
-                $opening = $previous?->float_kept ?? '0.00';
+                $previousFloat = Decimal::money((string) ($previous?->float_kept ?? '0.00'));
+                $addition = Decimal::money($addedOpeningCash ?? '0');
+                $opening = Decimal::moneyString($previousFloat + $addition);
 
                 $number = $this->documentNumber($storeId, $actor);
+                $openedAt = $this->now();
 
                 $id = DB::table('cash_shifts')->insertGetId([
                     'store_id' => $storeId,
@@ -85,19 +88,38 @@ class ShiftService
                     'cashier_id' => $actor->id,
                     'opening_balance' => $opening,
                     'status' => 'open',
-                    'opened_at' => $this->now(),
+                    'opened_at' => $openedAt,
                 ]);
+
+                if ($addition > 0) {
+                    $fundAccountId = DB::table('fund_accounts')
+                        ->where('store_id', $storeId)
+                        ->where('register_id', $register->id)
+                        ->where('type', 'petty_cash')
+                        ->where('is_active', true)
+                        ->value('id');
+                    abort_if($fundAccountId === null, 422, 'Akun Kas Kecil untuk mesin kasir belum tersedia.');
+
+                    DB::table('fund_ledger_entries')->insert([
+                        'fund_account_id' => $fundAccountId,
+                        'entry_type' => 'shift_opening_addition',
+                        'amount' => Decimal::moneyString($addition),
+                        'ref_type' => 'cash_shift',
+                        'ref_id' => $id,
+                        'occurred_at' => $openedAt,
+                        'created_by' => $actor->id,
+                        'note' => 'Penambahan saldo saat buka kasir jaga',
+                    ]);
+                }
 
                 $after = [
                     'doc_number' => $number,
                     'register_id' => (int) $register->id,
                     'register_name' => $register->name,
                     'opening_balance' => $opening,
+                    'opening_balance_previous_float' => Decimal::moneyString($previousFloat),
+                    'opening_balance_added' => Decimal::moneyString($addition),
                 ];
-                if ($countedOpeningCash !== null) {
-                    $after['counted_opening_cash'] = Decimal::moneyString(Decimal::money($countedOpeningCash));
-                    $after['opening_difference'] = Decimal::moneyString(Decimal::money($countedOpeningCash) - Decimal::money($opening));
-                }
                 $this->audit->log('shift.open', 'shift', $id, after: $after, storeId: $storeId, actorId: $actor->id);
 
                 return $id;

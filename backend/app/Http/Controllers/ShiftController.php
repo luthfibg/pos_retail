@@ -52,14 +52,14 @@ class ShiftController extends Controller
     public function open(OpenShiftRequest $request): JsonResponse
     {
         $user = $request->user();
-        $counted = $request->validated('counted_opening_cash');
+        $added = $request->validated('added_opening_cash');
         $registerId = $request->validated('register_id');
 
         return response()->json([
             'data' => $this->shifts->open(
                 $user,
                 $this->stores->requireIdFor($user),
-                $counted === null ? null : (string) $counted,
+                $added === null ? null : (string) $added,
                 $registerId === null ? null : (int) $registerId,
             ),
         ], 201);
