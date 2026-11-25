@@ -77,8 +77,11 @@ export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {
       </div>
 
       <div role="note" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-        Tarif, status “harga sudah termasuk PPN”, dan status PKP masih menunggu konfirmasi klien (R-04). Ubah hanya setelah nilainya pasti.
-        PPN aktif tetapi belum lengkap membuat penjualan tunai dan pembuatan invoice ditolak.
+        {values.includes
+          ? 'Model harga yang dipilih: harga jual sudah termasuk PPN.'
+          : 'Model harga yang dipilih: PPN ditambahkan di atas harga jual.'}{' '}
+        Tarif dan status PKP masih menunggu konfirmasi klien (R-04). PPN aktif tetapi belum lengkap membuat penjualan tunai dan pembuatan invoice ditolak.
+        Pengaturan ini tidak mengubah harga master produk dan tidak membulatkan total transaksi.
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">

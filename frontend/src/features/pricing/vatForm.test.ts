@@ -9,6 +9,9 @@ describe('validateVat', () => {
   it('nonaktif tidak perlu apa-apa', () => {
     expect(validateVat(valuesFromVat(off))).toEqual({});
   });
+  it('konfigurasi baru default ke harga termasuk PPN', () => {
+    expect(valuesFromVat(off).includes).toBe(true);
+  });
   it('aktif wajib tarif dan status harga termasuk PPN', () => {
     const e = validateVat({ enabled: true, rate: '', includes: null });
     expect(e.rate).toBeTruthy();

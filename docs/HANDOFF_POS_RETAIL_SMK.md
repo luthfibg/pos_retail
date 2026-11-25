@@ -113,7 +113,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 - Kredit hanya untuk **karyawan terverifikasi (Admin) yang sudah punya batas**. Karyawan baru input Kasir berstatus `pending_verification` (hanya tunai) dan memicu **notifikasi ke Admin** untuk mengisi batas. Batas dikosongkan dulu; Admin meminta nominal dari HRD (sistem tidak menyimpan gaji; aturan klien: belanja ≤ 60% gaji).
 - Melebihi batas → ditolak, tawarkan tunai; **Admin boleh beri pengecualian** (re-auth) dengan label "melebihi batas".
 - **Periode tagihan mengikuti tanggal gaji dari HRD**; Admin menutup periode secara eksplisit pada hari gaji; invoice terbit hari itu; belanja setelahnya masuk periode berikutnya. **Satu invoice gabungan ke HRD, rincian per karyawan**; semua struk bulanan tetap tersimpan dan dapat dicetak ulang berlabel "SALINAN" (tercatat). Tanpa jatuh tempo.
-- **PPN ditunda (R-04):** dihitung di invoice untuk kredit dan per transaksi untuk tunai, tetapi tarif, harga termasuk/tidak, dan status PKP **belum diketahui**. Default nonaktif; wajib selesai sebelum UAT.
+- **PPN (R-04):** keputusan klien: harga jual yang disimpan di sistem sudah termasuk PPN. PPN tunai diurai dari harga pada transaksi; PPN kredit diurai saat invoice HRD, tanpa menaikkan total harga. Tarif dan status PKP masih menunggu konfirmasi; default PPN tetap nonaktif dan konfigurasi lengkap wajib sebelum UAT. Keputusan ini tidak mengubah harga master secara otomatis dan tidak menambahkan pembulatan total tunai; harga produk perlu disetel manual bila total yang diinginkan harus mengikuti nominal tertentu.
 
 **Kas dan dana**
 - Dana operasional kas kecil dan kas besar tetap dicatat di ledger; data rekening bank hanya berupa nama bank, pemilik, dan nomor rekening untuk PO (maksimal lima).
@@ -199,7 +199,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 | ID | Hal | Dampak |
 |---|---|---|
-| R-04 | PPN: tarif, harga termasuk/tidak, status PKP, faktur pajak — menunggu klien | Wajib sebelum UAT; tidak menghambat pengembangan |
+| R-04 | PPN: tarif, status PKP, dan faktur pajak — menunggu klien; harga jual termasuk PPN sudah dipilih | Wajib sebelum UAT; tidak menghambat pengembangan |
 | R-09 | Konfirmasi: kredit ditahan selama batas belum diisi | Diterapkan sebagai asumsi |
 | WS-C | ASUMSI pembelian: PO otomatis disetujui bila total ≤ total PR; Owner = pemegang `settings.manage`; penerimaan dari PO `approved` diizinkan. Penerimaan ke gudang aktif didukung bila `warehouse_enabled=true`; validasi lokasi dan posisi rak lihat `BACKEND_PROGRESS.md` 6.3 | Konfirmasi klien sebelum UAT |
 | R-11 | Format file migrasi dari aplikasi lama | Ditunda |

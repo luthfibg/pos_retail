@@ -53,6 +53,8 @@ export function PosPage() {
   const [pending, setPending] = useState<SaleInput | null>(null);
   const [done, setDone] = useState<{ sale: Sale; replayed: boolean; previewTotal: string | null } | null>(null);
   const [thermalPaperSize, setThermalPaperSize] = useState<ThermalPaperSize>('80');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState<string | null>(null);
 
   const shiftQuery = useQuery({ queryKey: ['shifts', 'current'], queryFn: shiftApi.current });
   const opnameLock = useQuery({
@@ -213,6 +215,47 @@ export function PosPage() {
     setTimeout(() => searchRef.current?.focus(), 0);
   }
 
+  async function toggleFullscreen() {
+    setFullscreenError(null);
+    try {
+      if (document.fullscreenElement === document.documentElement) {
+        await document.exitFullscreen();
+      } else {
+        const root = document.documentElement;
+        if (typeof root.requestFullscreen !== 'function') {
+          setFullscreenError('Browser ini tidak mendukung mode layar penuh.');
+          return;
+        }
+        await root.requestFullscreen();
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? ` ${error.message}` : '';
+      setFullscreenError(`Tidak dapat mengubah mode layar penuh.${detail}`);
+    }
+  }
+
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === document.documentElement);
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    syncFullscreen();
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
+
+  const fullscreenControl = (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        aria-pressed={isFullscreen}
+        onClick={() => void toggleFullscreen()}
+        title={isFullscreen ? 'Keluar dari layar penuh' : 'Sembunyikan sidebar dan tab browser'}
+        className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+      >
+        {isFullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
+      </button>
+      {fullscreenError && <p role="alert" className="text-sm text-red-700">{fullscreenError}</p>}
+    </div>
+  );
+
   useEffect(() => { if (sellingAllowed && !done) searchRef.current?.focus(); }, [sellingAllowed, done]);
 
   useEffect(() => {
@@ -271,6 +314,7 @@ export function PosPage() {
             </p>
           )}
           <div className="flex flex-wrap items-end gap-2">
+            {fullscreenControl}
             <Field label="Ukuran kertas">
               <select className={inputCls} value={thermalPaperSize} onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}>
                 <option value="58">Thermal 58 mm</option>
@@ -301,15 +345,12 @@ export function PosPage() {
           return;
         }
         if (exceptionOpen) return;
-        if (event.key === 'F2') {
+        if (event.key === 'F2' && !event.ctrlKey && !event.altKey && !event.metaKey) {
           event.preventDefault();
-          clearCart();
-          return;
-        }
-        if (event.key === 'Escape') {
-          if (!event.repeat && !locked && lines.length > 0) {
-            event.preventDefault();
-            removeLastAddedLine();
+          if (event.shiftKey) {
+            if (!event.repeat) removeLastAddedLine();
+          } else {
+            clearCart();
           }
           return;
         }
@@ -322,7 +363,10 @@ export function PosPage() {
       <section className="min-w-0 space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">Kasir</h1>
-          {shift && <span className="font-mono text-xs text-slate-500">{shift.doc_number}</span>}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {shift && <span className="font-mono text-xs text-slate-500">{shift.doc_number}</span>}
+            {fullscreenControl}
+          </div>
         </div>
 
         <ErrorNotice error={shiftQuery.error} />
@@ -428,8 +472,8 @@ export function PosPage() {
                         disabled={locked}
                         onClick={() => removeCartLine(l.key)}
                         aria-label={`Hapus ${l.product.name}`}
-                        aria-keyshortcuts={lastAddedLineKey === l.key ? 'Escape' : undefined}
-                        title={lastAddedLineKey === l.key ? 'Shortcut: Esc' : undefined}
+                        aria-keyshortcuts={lastAddedLineKey === l.key ? 'Shift+F2' : undefined}
+                        title={lastAddedLineKey === l.key ? 'Shortcut: Shift+F2' : undefined}
                         className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
                       >✕</button>
                     </td>
@@ -565,12 +609,13 @@ export function PosPage() {
           reason={errors.fields.credit_limit ?? (quote?.credit?.exceeds_limit ? `Melebihi sisa batas kredit (sisa ${formatRupiah(quote.credit.remaining_before)}).` : customer?.credit_state === 'exhausted' ? 'Sisa batas kredit karyawan sudah habis.' : undefined)}
           errors={errors.fields}
           busy={mutation.isPending}
+          closeOnEscape={false}
           onSubmit={(ex) => { if (!mutation.isPending) mutation.mutate(buildInput(ex)); }}
           onCancel={() => { setExceptionOpen(false); setErrors(NO_ERRORS); changeMode('cash'); }}
         />
       )}
       {confirmPayment && (
-        <Modal title="Selesaikan transaksi" onClose={() => setConfirmPayment(false)}>
+        <Modal title="Selesaikan transaksi" onClose={() => setConfirmPayment(false)} closeOnEscape={false}>
           <div className="space-y-4 p-5">
             <p className="text-sm text-slate-700">Pastikan pembayaran dan daftar barang sudah benar.</p>
             <p className="rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-900">
@@ -581,11 +626,9 @@ export function PosPage() {
             <button
               type="button"
               onClick={() => setConfirmPayment(false)}
-              aria-keyshortcuts="Escape"
-              title="Shortcut: Esc"
               className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
             >
-              Batal (Esc)
+              Batal
             </button>
             <button
               type="button"

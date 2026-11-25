@@ -25,16 +25,30 @@ export function AppLayout() {
   )?.label;
   const [expandedGroup, setExpandedGroup] = useState(activeGroup ?? dropdowns[0]?.label ?? '');
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [posFullscreen, setPosFullscreen] = useState(false);
 
   useEffect(() => {
     if (activeGroup) setExpandedGroup(activeGroup);
   }, [activeGroup]);
 
+  useEffect(() => {
+    const syncFullscreen = () => {
+      setPosFullscreen(location.pathname === '/pos' && document.fullscreenElement === document.documentElement);
+    };
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    syncFullscreen();
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, [location.pathname]);
+
   if (me?.platform_operator) return <Navigate to="/platform/stores" replace />;
 
   return (
     <div className="flex h-dvh overflow-hidden">
-      <aside className="no-print flex h-full w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <aside
+        className="no-print flex h-full w-56 shrink-0 flex-col border-r border-slate-200 bg-white"
+        style={{ display: posFullscreen ? 'none' : undefined }}
+        aria-hidden={posFullscreen}
+      >
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-4">
           <div className="min-w-0">
             <div className="text-sm font-semibold">POS Retail SMK</div>

@@ -102,13 +102,6 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.ctrlKey) { e.preventDefault(); void onEnter(); }
-          if (e.key === 'Escape') {
-            setOpen(false);
-            if (!e.ctrlKey && open && text.trim()) {
-              e.preventDefault();
-              e.stopPropagation();
-            }
-          }
         }}
       />
       {busy && (

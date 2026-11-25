@@ -3,16 +3,18 @@ import { useEffect, type ReactNode } from 'react';
 interface Props {
   title: string;
   onClose: () => void;
+  closeOnEscape?: boolean;
   children: ReactNode;
 }
 
-/** Dialog sederhana. Klik latar TIDAK menutup (mencegah data form hilang tak sengaja); Esc menutup. */
-export function Modal({ title, onClose, children }: Props) {
+/** Dialog sederhana. Klik latar tidak menutup agar data form tidak hilang tak sengaja. */
+export function Modal({ title, onClose, closeOnEscape = true, children }: Props) {
   useEffect(() => {
+    if (!closeOnEscape) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, closeOnEscape]);
 
   return (
     <div className="no-print fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4">

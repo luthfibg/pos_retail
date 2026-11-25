@@ -9,6 +9,7 @@ interface Props {
   reason: string | undefined;
   errors: SaleErrors['fields'];
   busy: boolean;
+  closeOnEscape?: boolean;
   onSubmit: (ex: CreditExceptionInput) => void;
   onCancel: () => void;
 }
@@ -17,7 +18,7 @@ interface Props {
  * Pengecualian kredit melebihi batas. ADMIN mengetik username dan passwordnya sendiri di sini;
  * Kasir tidak pernah memegang kredensial itu. State hanya hidup selama dialog terbuka.
  */
-export function CreditExceptionDialog({ reason, errors, busy, onSubmit, onCancel }: Props) {
+export function CreditExceptionDialog({ reason, errors, busy, closeOnEscape, onSubmit, onCancel }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [note, setNote] = useState('');
@@ -37,7 +38,7 @@ export function CreditExceptionDialog({ reason, errors, busy, onSubmit, onCancel
   }
 
   return (
-    <Modal title="Melebihi batas kredit" onClose={() => { if (!busy) onCancel(); }}>
+    <Modal title="Melebihi batas kredit" onClose={() => { if (!busy) onCancel(); }} closeOnEscape={closeOnEscape}>
       <form onSubmit={submit} noValidate>
         <div className="space-y-4 p-5">
           {reason && <p role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{reason}</p>}

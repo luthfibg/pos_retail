@@ -430,7 +430,7 @@ Pengecualian berhasil → `over_limit: true` pada struk (label "melebihi batas" 
 
 ### Catatan perilaku
 - Stok FEFO: Kasir tidak memilih batch; batch kadaluarsa tidak terjual (stok tampak "ada" di `stock_sellable` tetapi bisa ditolak `items.N.qty`).
-- PPN tunai hanya aktif bila Admin mengaktifkan (`vat_enabled`) dan tarif dikonfigurasi (R-04 belum dikonfirmasi klien); default mati.
+- PPN tunai hanya aktif bila Admin mengaktifkan (`vat_enabled`) dan tarif dikonfigurasi; default mati. Keputusan klien: harga jual termasuk PPN. Saat mode inklusif aktif, PPN diurai dari harga tanpa menaikkan total; untuk kredit, penguraian dilakukan pada invoice HRD. Pembulatan total tunai tidak diterapkan.
 - Tunai masuk ledger kas kecil otomatis; kredit tidak menyentuh laci.
 - Tidak ada endpoint pencarian produk baru: pakai pencarian/`by-barcode` produk yang sudah ada dan pemilih karyawan (`GET /api/customers?q=`, perhatikan `credit_state`).
 
@@ -701,7 +701,7 @@ Pencatatan kas masuk/keluar nonpenjualan dan setoran parsial tidak lagi tersedia
 | PUT | `/api/settings/warehouse` | `settings.manage` | `{ enabled }`; mengubah flag warehouse dan status aktif lokasi Gudang secara atomik |
 
 - Diskon: tanggal `YYYY-MM-DD` (WIB); mulai = awal hari, berakhir = akhir hari; `starts_at` kosong = mulai sekarang. `value` > 0, maks 2 desimal; persen ≤ 100. Respons memuat `target_name` dan `status` (`active` · `scheduled` · `expired` · `inactive`; tampilkan sebagai teks, bukan hanya warna). Tidak ada hapus; nonaktifkan lewat `is_active`. Di kasir, diskon terbaik yang sedang berlaku dipilih otomatis (produk vs kategori).
-- PPN: default nonaktif. Mengaktifkan wajib mengisi tarif (0–100, 2 desimal) dan "harga sudah termasuk PPN". Perubahan tarif/mode membuat versi baru yang berlaku mulai hari ini (WIB); nilai yang sama tidak membuat versi baru; menonaktifkan tidak menghapus riwayat tarif. PPN aktif tapi konfigurasi tidak lengkap membuat penjualan tunai dan pembuatan invoice ditolak (R-04: tarif/PKP menunggu klien).
+- PPN: default nonaktif. Keputusan klien untuk toko ini adalah harga jual sudah termasuk PPN; konfigurasi baru di UI memilih mode inklusif secara default. Admin tetap wajib mengisi tarif (0–100, 2 desimal) sebelum mengaktifkan. Perubahan tarif/mode membuat versi baru yang berlaku mulai hari ini (WIB); nilai yang sama tidak membuat versi baru; menonaktifkan tidak menghapus riwayat tarif. Tarif dan status PKP masih menunggu konfirmasi klien (R-04); PPN aktif tapi konfigurasi tidak lengkap membuat penjualan tunai dan pembuatan invoice ditolak. Harga master tidak diubah otomatis dan tidak ada pembulatan transaksi.
 - Gudang: default nonaktif. Admin dapat mengaktifkan/nonaktifkan lewat `/settings/warehouse`; perubahan mengaktifkan/nonaktifkan lokasi Gudang tenant dalam transaksi dan dicatat ke audit. Menonaktifkan tidak menghapus saldo maupun riwayat stok; penerimaan dan transfer yang melibatkan Gudang tetap dibatasi oleh `warehouse_enabled`.
 - Layar pengaturan yang tersedia (Admin): daftar + form diskon, pengaturan PPN, dan saklar Pengaturan Gudang dengan konfirmasi sebelum mengubah status.
 

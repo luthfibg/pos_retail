@@ -14,7 +14,7 @@ export type VatErrors = Partial<Record<'rate' | 'price_includes_tax', string>>;
 export const valuesFromVat = (s: VatSetting): VatFormValues => ({
   enabled: s.enabled,
   rate: s.rate ?? '',
-  includes: s.price_includes_tax,
+  includes: s.price_includes_tax ?? true,
 });
 
 const RATE_RE = /^\d{1,3}(\.\d{1,2})?$/;
