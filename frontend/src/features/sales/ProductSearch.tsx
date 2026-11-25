@@ -20,7 +20,7 @@ interface Props {
 }
 
 /**
- * Kolom scan/cari kasir. Enter hanya menambahkan hasil barcode persis; hasil pencarian nama/SKU dipilih manual.
+ * Kolom scan/cari kasir. Enter memilih hasil pencarian atau menambahkan barcode persis.
  */
 export function ProductSearch({ onPick, inputRef, disabled }: Props) {
   const [text, setText] = useState('');
@@ -58,6 +58,18 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
   async function onEnter() {
     const code = text.trim();
     if (!code || busy || disabled) return;
+    if (debounced === code) {
+      const exactBarcode = options.find((p) => p.barcode.toLowerCase() === code.toLowerCase());
+      if (exactBarcode) {
+        accept(exactBarcode, 'scan');
+        return;
+      }
+      const firstOption = options[0];
+      if (firstOption) {
+        accept(firstOption, 'search');
+        return;
+      }
+    }
     setBusy(true);
     setMessage(null);
     try {
@@ -89,7 +101,7 @@ export function ProductSearch({ onPick, inputRef, disabled }: Props) {
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); void onEnter(); }
+          if (e.key === 'Enter' && !e.ctrlKey) { e.preventDefault(); void onEnter(); }
           if (e.key === 'Escape') setOpen(false);
         }}
       />

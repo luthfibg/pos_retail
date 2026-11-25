@@ -102,7 +102,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Dashboard',
       'Permintaan Pembelian',
       'Inventory > Penerimaan Barang, Stok Barang, Retur Barang, Pergerakan Stok',
-      'Penjualan > Kasir Jaga, Kasir, Penjualan',
+      'Penjualan > Kasir Jaga, Kasir, Data struk penjualan',
       'Karyawan',
     ]);
   });
@@ -150,7 +150,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Dashboard',
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Retur Barang, Stok Opname, Pergerakan Stok',
-      'Penjualan',
+      'Data struk penjualan',
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang, Laporan Keuangan',
       'Data Master > Kategori, Supplier, Karyawan',
       'Pengaturan',

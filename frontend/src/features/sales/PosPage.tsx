@@ -31,10 +31,12 @@ export function PosPage() {
   const qc = useQueryClient();
   const { can } = useAuth();
   const searchRef = useRef<HTMLInputElement>(null);
+  const tenderedRef = useRef<HTMLInputElement>(null);
   const qtyInputRefs = useRef(new Map<number, HTMLInputElement>());
 
   const [lines, setLines] = useState<CartLine[]>([]);
   const [scanQuantityProductId, setScanQuantityProductId] = useState<number | null>(null);
+  const [focusTenderedAfterScan, setFocusTenderedAfterScan] = useState(false);
   const [mode, setMode] = useState<PaymentMode>('cash');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [tendered, setTendered] = useState('');
@@ -182,12 +184,19 @@ export function PosPage() {
     setScanQuantityProductId(null);
   }, [lines, scanQuantityProductId]);
 
+  useEffect(() => {
+    if (!focusTenderedAfterScan) return;
+    (mode === 'cash' ? tenderedRef.current : searchRef.current)?.focus();
+    setFocusTenderedAfterScan(false);
+  }, [focusTenderedAfterScan, lines, mode]);
+
   function pick(p: CartProduct, source: 'scan' | 'search' = 'search') {
     const existing = lines.some((line) => line.product.id === p.id);
     const nextLines = addProduct(lines, p);
     if (nextLines === lines) return 'limit';
     setLines(nextLines);
-    if (source === 'scan' && !existing) setScanQuantityProductId(p.id);
+    if (source === 'scan') setFocusTenderedAfterScan(true);
+    else setScanQuantityProductId(p.id);
     setErrors(NO_ERRORS);
     setTopError(null);
     searchRef.current?.focus();
@@ -240,7 +249,15 @@ export function PosPage() {
   const change = mode === 'cash' && total !== null && !validateTendered(tendered, total) ? subtractMoney(tendered.trim().replace(',', '.'), total) : null;
 
   return (
-    <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_30rem]">
+    <div
+      className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_30rem]"
+      onKeyDown={(event) => {
+        if (event.ctrlKey && event.key === 'Enter' && !exceptionOpen) {
+          event.preventDefault();
+          startPay();
+        }
+      }}
+    >
       <section className="min-w-0 space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">Kasir</h1>
@@ -328,9 +345,9 @@ export function PosPage() {
                         disabled={locked}
                         onChange={(value) => { setLines((ls) => setQty(ls, l.key, value)); setErrors(NO_ERRORS); }}
                         onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
+                          if (event.key === 'Enter' && !event.ctrlKey) {
                             event.preventDefault();
-                            searchRef.current?.focus();
+                            (mode === 'cash' ? tenderedRef.current : searchRef.current)?.focus();
                           }
                         }}
                       />
@@ -430,11 +447,18 @@ export function PosPage() {
           <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
             <Field label="Uang diterima (Rp)" error={tenderedError ?? errors.fields.amount_tendered}>
               <input
+                ref={tenderedRef}
                 className={`${inputCls} text-lg tabular-nums`}
                 inputMode="decimal"
                 value={tendered}
                 disabled={locked}
                 onChange={(e) => { setTendered(e.target.value); setTenderedError(undefined); setErrors(NO_ERRORS); }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.ctrlKey) {
+                    event.preventDefault();
+                    searchRef.current?.focus();
+                  }
+                }}
               />
             </Field>
             {change !== null && (
@@ -454,6 +478,8 @@ export function PosPage() {
           type="button"
           disabled={locked || !sellingAllowed || lines.length === 0}
           onClick={startPay}
+          aria-keyshortcuts="Control+Enter"
+          title="Shortcut: Ctrl+Enter"
           className="w-full rounded-md bg-emerald-700 px-4 py-3 text-base font-semibold text-white disabled:opacity-50"
         >
           {mutation.isPending ? 'Memproses…' : creditNeedsException ? 'Minta pengecualian Admin' : 'Bayar'}
