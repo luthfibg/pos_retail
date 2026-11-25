@@ -11,6 +11,7 @@ import { CREDIT_HINT, canUseCredit } from '@/features/customers/creditState';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
+import { Modal } from '@/components/ui/Modal';
 import { formatQty, formatRupiah } from '@/lib/format';
 import { milliToQty, moneyToCents, qtyToMilli, subtractMoney } from '@/lib/money';
 import {
@@ -35,6 +36,7 @@ export function PosPage() {
   const qtyInputRefs = useRef(new Map<number, HTMLInputElement>());
 
   const [lines, setLines] = useState<CartLine[]>([]);
+  const [lastAddedLineKey, setLastAddedLineKey] = useState<number | null>(null);
   const [scanQuantityProductId, setScanQuantityProductId] = useState<number | null>(null);
   const [focusTenderedAfterScan, setFocusTenderedAfterScan] = useState(false);
   const [mode, setMode] = useState<PaymentMode>('cash');
@@ -46,6 +48,7 @@ export function PosPage() {
   const [errors, setErrors] = useState<SaleErrors>(NO_ERRORS);
   const [topError, setTopError] = useState<unknown>(null);
   const [exceptionOpen, setExceptionOpen] = useState(false);
+  const [confirmPayment, setConfirmPayment] = useState(false);
   /** Permintaan yang hasilnya tidak diketahui (jaringan putus/5xx). Keranjang dikunci; kirim ulang memakai kunci yang sama. */
   const [pending, setPending] = useState<SaleInput | null>(null);
   const [done, setDone] = useState<{ sale: Sale; replayed: boolean; previewTotal: string | null } | null>(null);
@@ -96,6 +99,7 @@ export function PosPage() {
     onSuccess: (res) => {
       setDone({ sale: res.data, replayed: res.replayed, previewTotal: quote?.total ?? null });
       setLines([]);
+      setLastAddedLineKey(null);
       setCustomer(null);
       setTendered('');
       setTenderedError(undefined);
@@ -131,7 +135,8 @@ export function PosPage() {
     },
   });
 
-  const locked = mutation.isPending || pending !== null;
+  const requestLocked = mutation.isPending || pending !== null;
+  const locked = requestLocked || confirmPayment;
 
   const creditNeedsException =
     mode === 'payroll_credit' && customer !== null &&
@@ -164,7 +169,42 @@ export function PosPage() {
       if (msg) return;
       setErrors(NO_ERRORS);
     }
+    setConfirmPayment(true);
+  }
+
+  function confirmPay() {
+    if (!confirmPayment || requestLocked) return;
+    setConfirmPayment(false);
     mutation.mutate(buildInput());
+  }
+
+  function clearCart() {
+    if (locked || lines.length === 0) return;
+    setLines([]);
+    setLastAddedLineKey(null);
+    setErrors(NO_ERRORS);
+    setTenderedError(undefined);
+    setCartKey(newIdempotencyKey());
+  }
+
+  function removeCartLine(lineKey: number) {
+    if (locked) return;
+    const activeElement = document.activeElement;
+    const focusWasInRemovedLine = activeElement instanceof HTMLElement
+      && activeElement.closest('[data-pos-line-key]')?.getAttribute('data-pos-line-key') === String(lineKey);
+    const remaining = removeLine(lines, lineKey);
+    if (remaining.length === lines.length) return;
+    setLines(remaining);
+    setLastAddedLineKey((current) => (
+      current === lineKey ? remaining[remaining.length - 1]?.key ?? null : current
+    ));
+    setErrors(NO_ERRORS);
+    if (focusWasInRemovedLine) setTimeout(() => searchRef.current?.focus(), 0);
+  }
+
+  function removeLastAddedLine() {
+    const lastAdded = lines.find((line) => line.key === lastAddedLineKey) ?? lines[lines.length - 1];
+    if (lastAdded) removeCartLine(lastAdded.key);
   }
 
   function reset() {
@@ -195,6 +235,7 @@ export function PosPage() {
     const nextLines = addProduct(lines, p);
     if (nextLines === lines) return 'limit';
     setLines(nextLines);
+    setLastAddedLineKey(nextLines.find((line) => line.product.id === p.id)?.key ?? null);
     if (source === 'scan') setFocusTenderedAfterScan(true);
     else setScanQuantityProductId(p.id);
     setErrors(NO_ERRORS);
@@ -252,6 +293,26 @@ export function PosPage() {
     <div
       className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_30rem]"
       onKeyDown={(event) => {
+        if (confirmPayment) {
+          if (event.key === 'Enter' && !event.ctrlKey) {
+            event.preventDefault();
+            confirmPay();
+          }
+          return;
+        }
+        if (exceptionOpen) return;
+        if (event.key === 'F2') {
+          event.preventDefault();
+          clearCart();
+          return;
+        }
+        if (event.key === 'Escape') {
+          if (!event.repeat && !locked && lines.length > 0) {
+            event.preventDefault();
+            removeLastAddedLine();
+          }
+          return;
+        }
         if (event.ctrlKey && event.key === 'Enter' && !exceptionOpen) {
           event.preventDefault();
           startPay();
@@ -319,7 +380,7 @@ export function PosPage() {
                 const overStock = qtyMilli !== null && stockMilli !== null && qtyMilli > stockMilli;
                 const hasDiscount = ql !== undefined && (moneyToCents(ql.discount_amount) ?? 0n) !== 0n;
                 return (
-                  <tr key={l.key}>
+                  <tr key={l.key} data-pos-line-key={l.key}>
                     <td className="px-3 py-2">
                       <div>{l.product.name}</div>
                       <div className="font-mono text-xs text-slate-400">{l.product.sku}</div>
@@ -365,8 +426,10 @@ export function PosPage() {
                       <button
                         type="button"
                         disabled={locked}
-                        onClick={() => { setLines((ls) => removeLine(ls, l.key)); setErrors(NO_ERRORS); }}
+                        onClick={() => removeCartLine(l.key)}
                         aria-label={`Hapus ${l.product.name}`}
+                        aria-keyshortcuts={lastAddedLineKey === l.key ? 'Escape' : undefined}
+                        title={lastAddedLineKey === l.key ? 'Shortcut: Esc' : undefined}
                         className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
                       >✕</button>
                     </td>
@@ -482,15 +545,17 @@ export function PosPage() {
           title="Shortcut: Ctrl+Enter"
           className="w-full rounded-md bg-emerald-700 px-4 py-3 text-base font-semibold text-white disabled:opacity-50"
         >
-          {mutation.isPending ? 'Memproses…' : creditNeedsException ? 'Minta pengecualian Admin' : 'Bayar'}
+          {mutation.isPending ? 'Memproses…' : `${creditNeedsException ? 'Minta pengecualian Admin' : 'Bayar'} (Ctrl + ENTER)`}
         </button>
         {lines.length > 0 && !locked && (
           <button
             type="button"
-            onClick={() => { setLines([]); setErrors(NO_ERRORS); setTenderedError(undefined); setCartKey(newIdempotencyKey()); }}
+            onClick={clearCart}
+            aria-keyshortcuts="F2"
+            title="Shortcut: F2"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
           >
-            Kosongkan keranjang
+            Kosongkan keranjang (F2)
           </button>
         )}
       </aside>
@@ -503,6 +568,35 @@ export function PosPage() {
           onSubmit={(ex) => { if (!mutation.isPending) mutation.mutate(buildInput(ex)); }}
           onCancel={() => { setExceptionOpen(false); setErrors(NO_ERRORS); changeMode('cash'); }}
         />
+      )}
+      {confirmPayment && (
+        <Modal title="Selesaikan transaksi" onClose={() => setConfirmPayment(false)}>
+          <div className="space-y-4 p-5">
+            <p className="text-sm text-slate-700">Pastikan pembayaran dan daftar barang sudah benar.</p>
+            <p className="rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-900">
+              Tekan ENTER untuk menyelesaikan transaksi dan menampilkan struk.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+            <button
+              type="button"
+              onClick={() => setConfirmPayment(false)}
+              aria-keyshortcuts="Escape"
+              title="Shortcut: Esc"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              Batal (Esc)
+            </button>
+            <button
+              type="button"
+              autoFocus
+              onClick={confirmPay}
+              className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white"
+            >
+              Selesaikan transaksi
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );
