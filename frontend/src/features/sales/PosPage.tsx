@@ -38,7 +38,6 @@ export function PosPage() {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [lastAddedLineKey, setLastAddedLineKey] = useState<number | null>(null);
   const [scanQuantityProductId, setScanQuantityProductId] = useState<number | null>(null);
-  const [focusTenderedAfterScan, setFocusTenderedAfterScan] = useState(false);
   const [mode, setMode] = useState<PaymentMode>('cash');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [tendered, setTendered] = useState('');
@@ -267,20 +266,13 @@ export function PosPage() {
     setScanQuantityProductId(null);
   }, [lines, scanQuantityProductId]);
 
-  useEffect(() => {
-    if (!focusTenderedAfterScan) return;
-    (mode === 'cash' ? tenderedRef.current : searchRef.current)?.focus();
-    setFocusTenderedAfterScan(false);
-  }, [focusTenderedAfterScan, lines, mode]);
-
   function pick(p: CartProduct, source: 'scan' | 'search' = 'search') {
     const existing = lines.some((line) => line.product.id === p.id);
     const nextLines = addProduct(lines, p);
     if (nextLines === lines) return 'limit';
     setLines(nextLines);
     setLastAddedLineKey(nextLines.find((line) => line.product.id === p.id)?.key ?? null);
-    if (source === 'scan') setFocusTenderedAfterScan(true);
-    else setScanQuantityProductId(p.id);
+    if (source === 'search') setScanQuantityProductId(p.id);
     setErrors(NO_ERRORS);
     setTopError(null);
     searchRef.current?.focus();
@@ -322,7 +314,15 @@ export function PosPage() {
               </select>
             </Field>
             <button type="button" onClick={() => window.print()} className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Cetak struk</button>
-            <button type="button" onClick={reset} className="h-10 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Transaksi baru</button>
+            <button
+              type="button"
+              autoFocus
+              onClick={reset}
+              aria-keyshortcuts="Enter"
+              className="h-10 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+            >
+              Transaksi baru
+            </button>
           </div>
         </div>
         <ReceiptView sale={done.sale} paperSize={thermalPaperSize} />
@@ -345,6 +345,22 @@ export function PosPage() {
           return;
         }
         if (exceptionOpen) return;
+        if (
+          event.key === 'Enter' &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.metaKey &&
+          !event.shiftKey &&
+          event.target === searchRef.current &&
+          searchRef.current.value.trim() === ''
+        ) {
+          const lastAdded = lines.find((line) => line.key === lastAddedLineKey) ?? lines[lines.length - 1];
+          if (lastAdded) {
+            event.preventDefault();
+            qtyInputRefs.current.get(lastAdded.product.id)?.focus();
+          }
+          return;
+        }
         if (event.key === 'F2' && !event.ctrlKey && !event.altKey && !event.metaKey) {
           event.preventDefault();
           if (event.shiftKey) {
