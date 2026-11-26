@@ -34,6 +34,7 @@ export function PosPage() {
   const searchRef = useRef<HTMLInputElement>(null);
   const tenderedRef = useRef<HTMLInputElement>(null);
   const qtyInputRefs = useRef(new Map<number, HTMLInputElement>());
+  const autoPrintedSaleIdRef = useRef<number | null>(null);
 
   const [lines, setLines] = useState<CartLine[]>([]);
   const [lastAddedLineKey, setLastAddedLineKey] = useState<number | null>(null);
@@ -51,6 +52,7 @@ export function PosPage() {
   /** Permintaan yang hasilnya tidak diketahui (jaringan putus/5xx). Keranjang dikunci; kirim ulang memakai kunci yang sama. */
   const [pending, setPending] = useState<SaleInput | null>(null);
   const [done, setDone] = useState<{ sale: Sale; replayed: boolean; previewTotal: string | null } | null>(null);
+  const [autoPrintSaleId, setAutoPrintSaleId] = useState<number | null>(null);
   const [thermalPaperSize, setThermalPaperSize] = useState<ThermalPaperSize>('80');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
@@ -99,6 +101,7 @@ export function PosPage() {
     mutationFn: (input: SaleInput) => saleApi.post(input),
     onSuccess: (res) => {
       setDone({ sale: res.data, replayed: res.replayed, previewTotal: quote?.total ?? null });
+      if (!res.replayed) setAutoPrintSaleId(res.data.id);
       setLines([]);
       setLastAddedLineKey(null);
       setCustomer(null);
@@ -240,6 +243,16 @@ export function PosPage() {
     return () => document.removeEventListener('fullscreenchange', syncFullscreen);
   }, []);
 
+  useEffect(() => {
+    if (!done || autoPrintSaleId !== done.sale.id || autoPrintedSaleIdRef.current === done.sale.id) return;
+    autoPrintedSaleIdRef.current = done.sale.id;
+    const timer = window.setTimeout(() => {
+      setAutoPrintSaleId(null);
+      window.print();
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [autoPrintSaleId, done]);
+
   const fullscreenControl = (
     <div className="flex flex-wrap items-center gap-2">
       <button
@@ -297,7 +310,12 @@ export function PosPage() {
           <h1 className="text-xl font-semibold">Transaksi tersimpan</h1>
           {done.replayed && (
             <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-              Struk ini sudah tercatat sebelumnya; permintaan ulang tidak membuat transaksi ganda.
+              Struk ini sudah tercatat sebelumnya; permintaan ulang tidak membuat transaksi ganda dan cetak otomatis dilewati untuk mencegah struk ganda.
+            </p>
+          )}
+          {!done.replayed && (
+            <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
+              Transaksi tersimpan. Perintah cetak otomatis telah dikirim; jika struk belum keluar, gunakan Cetak ulang.
             </p>
           )}
           {salePreviewChanged(done.previewTotal, done.sale.total) && (
@@ -313,7 +331,7 @@ export function PosPage() {
                 <option value="80">Thermal 80 mm</option>
               </select>
             </Field>
-            <button type="button" onClick={() => window.print()} className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Cetak struk</button>
+            <button type="button" onClick={() => window.print()} className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Cetak ulang</button>
             <button
               type="button"
               autoFocus
@@ -381,6 +399,18 @@ export function PosPage() {
           <h1 className="text-xl font-semibold">Kasir</h1>
           <div className="flex flex-wrap items-center justify-end gap-3">
             {shift && <span className="font-mono text-xs text-slate-500">{shift.doc_number}</span>}
+            <label className="flex items-center gap-2 text-sm">
+              Ukuran struk
+              <select
+                className={inputCls}
+                aria-label="Ukuran kertas struk"
+                value={thermalPaperSize}
+                onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}
+              >
+                <option value="58">58 mm</option>
+                <option value="80">80 mm</option>
+              </select>
+            </label>
             {fullscreenControl}
           </div>
         </div>
@@ -631,11 +661,11 @@ export function PosPage() {
         />
       )}
       {confirmPayment && (
-        <Modal title="Selesaikan transaksi" onClose={() => setConfirmPayment(false)} closeOnEscape={false}>
+        <Modal title="Simpan transaksi dan cetak struk?" onClose={() => setConfirmPayment(false)} closeOnEscape={false}>
           <div className="space-y-4 p-5">
             <p className="text-sm text-slate-700">Pastikan pembayaran dan daftar barang sudah benar.</p>
             <p className="rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-900">
-              Tekan ENTER untuk menyelesaikan transaksi dan menampilkan struk.
+              Tekan ENTER untuk menyimpan transaksi. Setelah tersimpan, perintah cetak struk akan dikirim dan struk tampil di layar.
             </p>
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
@@ -652,7 +682,7 @@ export function PosPage() {
               onClick={confirmPay}
               className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white"
             >
-              Selesaikan transaksi
+              Simpan &amp; cetak struk
             </button>
           </div>
         </Modal>
