@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
-import { RequireAnyPermission, RequireAuth, RequirePermission, RequirePlatformOperator } from '@/features/auth/guards';
+import { RequireAnyPermission, RequireAnyRole, RequireAuth, RequirePermission, RequirePlatformOperator } from '@/features/auth/guards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
@@ -14,6 +14,7 @@ import { AdjustmentOpnamePage, AdjustmentOpnameRedirect } from '@/features/inven
 import { CustomersPage } from '@/features/customers/CustomersPage';
 import { PosPage } from '@/features/sales/PosPage';
 const SalesHistoryPage = lazy(() => import('@/features/sales/SalesHistoryPage').then((module) => ({ default: module.SalesHistoryPage })));
+const CashierSettingsPage = lazy(() => import('@/features/sales/CashierSettingsPage').then((module) => ({ default: module.CashierSettingsPage })));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 import { LEGACY_REDIRECTS, SETTINGS_PERMISSIONS } from '@/features/settings/settingsSections';
 const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module) => ({ default: module.ShiftPage })));
@@ -58,6 +59,10 @@ export const router = createBrowserRouter([
           {
             element: <RequirePermission permission="shift.open" />,
             children: [{ path: 'shift', element: <LazyPage><ShiftPage /></LazyPage> }],
+          },
+          {
+            element: <RequireAnyRole roles={['Kasir']} />,
+            children: [{ path: 'cashier-settings', element: <LazyPage><CashierSettingsPage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="shift.review" />,

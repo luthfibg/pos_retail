@@ -13,6 +13,11 @@ body { @apply bg-slate-50 text-slate-900 antialiased; }
   margin: 2mm;
 }
 
+@page receipt76 {
+  size: 76mm auto;
+  margin: 3mm;
+}
+
 @page receipt80 {
   size: 80mm auto;
   margin: 3mm;
@@ -25,10 +30,21 @@ body { @apply bg-slate-50 text-slate-900 antialiased; }
   body { background: white; }
   .receipt { break-inside: auto; border: 0 !important; max-width: none !important; overflow-wrap: anywhere; }
   .receipt-58 { page: receipt58; width: 54mm; font-size: 9pt; line-height: 1.25; }
+  .receipt-76 { page: receipt76; width: 48mm; font-size: 9pt; line-height: 1.2; }
   .receipt-80 { page: receipt80; width: 74mm; font-size: 10pt; line-height: 1.35; }
+  .print-test-only { display: none !important; }
+  body.receipt-test-printing #root { visibility: hidden !important; }
+  body.receipt-test-printing .print-test-only {
+    display: block !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    visibility: visible !important;
+  }
 }
 
 .print-only { display: none; }
+.print-test-only { display: none; }
 
 /* Cetak PR/PO dan invoice (A4). Layar lain memakai .no-print; lembar cetak memakai .print-only.print-doc. */
 @page printA4 {

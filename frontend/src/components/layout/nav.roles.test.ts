@@ -45,7 +45,7 @@ function menuFor(role: string): string[] {
 describe('menu per role (model standar retail)', () => {
   it('Kasir melihat menu operasional toko', () => {
     expect(menuFor('Kasir')).toEqual([
-      '/customers', '/dashboard', '/goods-receipts', '/inventory/movements',
+      '/cashier-settings', '/customers', '/dashboard', '/goods-receipts', '/inventory/movements',
       '/pos', '/products', '/purchase-requisitions', '/sales', '/shift', '/supplier-returns',
     ]);
   });
@@ -78,9 +78,12 @@ describe('menu per role (model standar retail)', () => {
     expect(owner).not.toContain('/billing');
   });
 
-  it('hanya pemegang izin pengaturan yang melihat menu Pengaturan', () => {
-    for (const role of ['Kasir', 'Finance', 'Purchasing', 'Accounting']) {
+  it('Kasir hanya melihat pengaturan perangkat, sedangkan pengaturan toko butuh izin', () => {
+    expect(menuFor('Kasir')).toContain('/cashier-settings');
+    expect(menuFor('Kasir')).not.toContain('/settings');
+    for (const role of ['Finance', 'Purchasing', 'Accounting']) {
       expect(menuFor(role)).not.toContain('/settings');
+      expect(menuFor(role)).not.toContain('/cashier-settings');
     }
   });
 });
@@ -104,6 +107,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Inventory > Penerimaan Barang, Stok Barang, Retur Barang, Pergerakan Stok',
       'Penjualan > Kasir Jaga, Kasir, Data struk penjualan',
       'Karyawan',
+      'Pengaturan',
     ]);
   });
 

@@ -51,7 +51,7 @@ export function RequireAnyRole({ roles }: { roles: string[] }) {
     return (
       <div className="p-8">
         <h1 className="text-lg font-semibold">Tidak ada akses</h1>
-        <p className="mt-1 text-sm text-slate-600">Menu ini hanya tersedia untuk Admin, Owner, atau Kasir.</p>
+        <p className="mt-1 text-sm text-slate-600">Menu ini hanya tersedia untuk {roles.join(', ')}.</p>
       </div>
     );
   }

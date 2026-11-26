@@ -91,7 +91,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Pengaturan',
     // Satu layar untuk semua pengaturan; bagiannya tampil sesuai izin (lihat features/settings/settingsSections.ts).
-    items: [{ to: '/settings', label: 'Pengaturan', permission: SETTINGS_PERMISSIONS }],
+    items: [
+      { to: '/settings', label: 'Pengaturan', permission: SETTINGS_PERMISSIONS },
+      { to: '/cashier-settings', label: 'Pengaturan', roles: ['Kasir'] },
+    ],
   },
 ];
 

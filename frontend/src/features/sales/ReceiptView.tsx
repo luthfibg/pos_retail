@@ -1,8 +1,7 @@
 import type { Sale } from '@/lib/api/types';
 import { formatDateTime, formatQty, formatRupiah } from '@/lib/format';
 import { moneyToCents } from '@/lib/money';
-
-export type ThermalPaperSize = '58' | '80';
+import type { ThermalPaperSize } from './receiptPrintSettings';
 
 const nonZero = (v: string): boolean => (moneyToCents(v) ?? 0n) !== 0n;
 

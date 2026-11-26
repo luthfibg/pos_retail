@@ -22,7 +22,8 @@ import {
 import { CreditExceptionDialog } from './CreditExceptionDialog';
 import { CustomerPicker } from './CustomerPicker';
 import { ProductSearch } from './ProductSearch';
-import { ReceiptView, type ThermalPaperSize } from './ReceiptView';
+import { ReceiptView } from './ReceiptView';
+import { loadReceiptPaperSize, RECEIPT_PAPER_LABELS, type ThermalPaperSize } from './receiptPrintSettings';
 
 const NO_ERRORS: SaleErrors = { lines: {}, fields: {} };
 const MODE_LABEL: Record<PaymentMode, string> = { cash: 'Tunai', payroll_credit: 'Kredit potong gaji' };
@@ -34,7 +35,7 @@ export function PosPage() {
   const searchRef = useRef<HTMLInputElement>(null);
   const tenderedRef = useRef<HTMLInputElement>(null);
   const qtyInputRefs = useRef(new Map<number, HTMLInputElement>());
-  const autoPrintedSaleIdRef = useRef<number | null>(null);
+  const printedSaleIdRef = useRef<number | null>(null);
 
   const [lines, setLines] = useState<CartLine[]>([]);
   const [lastAddedLineKey, setLastAddedLineKey] = useState<number | null>(null);
@@ -52,8 +53,10 @@ export function PosPage() {
   /** Permintaan yang hasilnya tidak diketahui (jaringan putus/5xx). Keranjang dikunci; kirim ulang memakai kunci yang sama. */
   const [pending, setPending] = useState<SaleInput | null>(null);
   const [done, setDone] = useState<{ sale: Sale; replayed: boolean; previewTotal: string | null } | null>(null);
-  const [autoPrintSaleId, setAutoPrintSaleId] = useState<number | null>(null);
-  const [thermalPaperSize, setThermalPaperSize] = useState<ThermalPaperSize>('80');
+  const [showPrintPrompt, setShowPrintPrompt] = useState(false);
+  const [printRequestSaleId, setPrintRequestSaleId] = useState<number | null>(null);
+  const [thermalPaperSize] = useState<ThermalPaperSize>(() => loadReceiptPaperSize());
+  const [printError, setPrintError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
 
@@ -101,7 +104,7 @@ export function PosPage() {
     mutationFn: (input: SaleInput) => saleApi.post(input),
     onSuccess: (res) => {
       setDone({ sale: res.data, replayed: res.replayed, previewTotal: quote?.total ?? null });
-      if (!res.replayed) setAutoPrintSaleId(res.data.id);
+      setShowPrintPrompt(!res.replayed);
       setLines([]);
       setLastAddedLineKey(null);
       setCustomer(null);
@@ -244,14 +247,34 @@ export function PosPage() {
   }, []);
 
   useEffect(() => {
-    if (!done || autoPrintSaleId !== done.sale.id || autoPrintedSaleIdRef.current === done.sale.id) return;
-    autoPrintedSaleIdRef.current = done.sale.id;
+    if (!done || printRequestSaleId !== done.sale.id || printedSaleIdRef.current === done.sale.id) return;
+    printedSaleIdRef.current = done.sale.id;
+    const clearPrintRequest = () => setPrintRequestSaleId(null);
+    window.addEventListener('afterprint', clearPrintRequest, { once: true });
     const timer = window.setTimeout(() => {
-      setAutoPrintSaleId(null);
-      window.print();
+      try {
+        window.print();
+      } catch (error) {
+        window.removeEventListener('afterprint', clearPrintRequest);
+        setPrintRequestSaleId(null);
+        setPrintError(error instanceof Error ? `Gagal membuka cetak struk: ${error.message}` : 'Gagal membuka cetak struk.');
+      }
     }, 80);
-    return () => window.clearTimeout(timer);
-  }, [autoPrintSaleId, done]);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('afterprint', clearPrintRequest);
+    };
+  }, [done, printRequestSaleId]);
+
+  function skipReceiptPrint() {
+    setShowPrintPrompt(false);
+  }
+
+  function printReceipt() {
+    if (!done) return;
+    setShowPrintPrompt(false);
+    setPrintRequestSaleId(done.sale.id);
+  }
 
   const fullscreenControl = (
     <div className="flex flex-wrap items-center gap-2">
@@ -310,12 +333,12 @@ export function PosPage() {
           <h1 className="text-xl font-semibold">Transaksi tersimpan</h1>
           {done.replayed && (
             <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-              Struk ini sudah tercatat sebelumnya; permintaan ulang tidak membuat transaksi ganda dan cetak otomatis dilewati untuk mencegah struk ganda.
+              Struk ini sudah tercatat sebelumnya; permintaan ulang tidak membuat transaksi ganda. Cetak ulang hanya jika diperlukan.
             </p>
           )}
           {!done.replayed && (
             <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
-              Transaksi tersimpan. Perintah cetak otomatis telah dikirim; jika struk belum keluar, gunakan Cetak ulang.
+              Transaksi berhasil disimpan.
             </p>
           )}
           {salePreviewChanged(done.previewTotal, done.sale.total) && (
@@ -325,12 +348,6 @@ export function PosPage() {
           )}
           <div className="flex flex-wrap items-end gap-2">
             {fullscreenControl}
-            <Field label="Ukuran kertas">
-              <select className={inputCls} value={thermalPaperSize} onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}>
-                <option value="58">Thermal 58 mm</option>
-                <option value="80">Thermal 80 mm</option>
-              </select>
-            </Field>
             <button type="button" onClick={() => window.print()} className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Cetak ulang</button>
             <button
               type="button"
@@ -343,7 +360,24 @@ export function PosPage() {
             </button>
           </div>
         </div>
+        {printError && <p role="alert" className="no-print rounded-md bg-red-50 p-3 text-sm text-red-800">{printError}</p>}
         <ReceiptView sale={done.sale} paperSize={thermalPaperSize} />
+        {showPrintPrompt && (
+          <Modal title="Cetak struk?" onClose={skipReceiptPrint} closeOnEscape={false} showCloseButton={false}>
+            <div className="space-y-4 p-5">
+              <p className="text-sm text-slate-700">Transaksi sudah tersimpan. Apakah struk ingin dicetak sekarang?</p>
+              <p className="text-xs text-slate-500">Ukuran aktif: {RECEIPT_PAPER_LABELS[thermalPaperSize]}</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <button type="button" onClick={skipReceiptPrint} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+                Lewati
+              </button>
+              <button type="button" autoFocus onClick={printReceipt} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">
+                Cetak
+              </button>
+            </div>
+          </Modal>
+        )}
       </div>
     );
   }
@@ -399,18 +433,6 @@ export function PosPage() {
           <h1 className="text-xl font-semibold">Kasir</h1>
           <div className="flex flex-wrap items-center justify-end gap-3">
             {shift && <span className="font-mono text-xs text-slate-500">{shift.doc_number}</span>}
-            <label className="flex items-center gap-2 text-sm">
-              Ukuran struk
-              <select
-                className={inputCls}
-                aria-label="Ukuran kertas struk"
-                value={thermalPaperSize}
-                onChange={(event) => setThermalPaperSize(event.target.value as ThermalPaperSize)}
-              >
-                <option value="58">58 mm</option>
-                <option value="80">80 mm</option>
-              </select>
-            </label>
             {fullscreenControl}
           </div>
         </div>
@@ -661,11 +683,11 @@ export function PosPage() {
         />
       )}
       {confirmPayment && (
-        <Modal title="Simpan transaksi dan cetak struk?" onClose={() => setConfirmPayment(false)} closeOnEscape={false}>
+        <Modal title="Selesaikan transaksi" onClose={() => setConfirmPayment(false)} closeOnEscape={false}>
           <div className="space-y-4 p-5">
             <p className="text-sm text-slate-700">Pastikan pembayaran dan daftar barang sudah benar.</p>
             <p className="rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-900">
-              Tekan ENTER untuk menyimpan transaksi. Setelah tersimpan, perintah cetak struk akan dikirim dan struk tampil di layar.
+              Tekan ENTER untuk menyimpan transaksi. Setelah berhasil, Anda dapat memilih untuk mencetak struk atau melewatinya.
             </p>
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
@@ -682,7 +704,7 @@ export function PosPage() {
               onClick={confirmPay}
               className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white"
             >
-              Simpan &amp; cetak struk
+              Selesaikan transaksi
             </button>
           </div>
         </Modal>
