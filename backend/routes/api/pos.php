@@ -32,7 +32,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('sales', [SaleController::class, 'index'])->middleware('can.any:sales.create,shift.review');
     Route::get('sales/{sale}', [SaleController::class, 'show'])->whereNumber('sale')->middleware('can.any:sales.create,shift.review');
     Route::post('sales/{sale}/reprint', [SaleController::class, 'reprint'])->whereNumber('sale')->middleware('can:receipt.reprint');
-    Route::post('sales/{sale}/void', [SaleController::class, 'void'])->whereNumber('sale')->middleware('can:sales.void');
 
     // Setoran kasir (Kas Kecil -> Kas Besar) dan kebijakan endapan
     // Kasir (create) dan Finance (receive) perlu membaca antrean setoran.

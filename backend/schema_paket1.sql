@@ -822,7 +822,6 @@ CREATE TABLE sales (
   tax_rate_snapshot DECIMAL(5,2) NULL,              -- snapshot tarif PPN saat transaksi bila aktif
   tax_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
   total DECIMAL(18,2) NOT NULL DEFAULT 0,
-  status ENUM('draft','posted','voided') NOT NULL DEFAULT 'draft',
   billing_status ENUM('not_applicable','unbilled','invoiced','paid') NOT NULL DEFAULT 'not_applicable',
   billing_period_id BIGINT UNSIGNED NULL,
   invoice_id BIGINT UNSIGNED NULL,
@@ -896,20 +895,6 @@ CREATE TABLE payments (
   KEY idx_payments_shift (shift_id),
   CONSTRAINT fk_pay_sale FOREIGN KEY (sale_id) REFERENCES sales (id),
   CONSTRAINT fk_pay_shift FOREIGN KEY (shift_id) REFERENCES cash_shifts (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE sale_voids (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  sale_id BIGINT UNSIGNED NOT NULL,
-  reason VARCHAR(500) NOT NULL,
-  requested_by BIGINT UNSIGNED NOT NULL,
-  approved_by BIGINT UNSIGNED NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_sv_sale (sale_id),
-  CONSTRAINT fk_sv_sale FOREIGN KEY (sale_id) REFERENCES sales (id),
-  CONSTRAINT fk_sv_req FOREIGN KEY (requested_by) REFERENCES users (id),
-  CONSTRAINT fk_sv_app FOREIGN KEY (approved_by) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Arsip struk tetap di sistem; cetak ulang berlabel SALINAN dan tercatat

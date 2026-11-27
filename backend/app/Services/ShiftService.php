@@ -294,7 +294,7 @@ class ShiftService
      */
     public function summary(int $shiftId, string $openingBalance): array
     {
-        $sales = DB::table('sales')->where('shift_id', $shiftId)->where('status', 'posted')
+        $sales = DB::table('sales')->where('shift_id', $shiftId)
             ->selectRaw('payment_mode, count(*) as c, coalesce(sum(total), 0) as t')->groupBy('payment_mode')->get()->keyBy('payment_mode');
         $cash = Decimal::money((string) ($sales['cash']->t ?? '0'));
 

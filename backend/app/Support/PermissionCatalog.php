@@ -55,7 +55,6 @@ final class PermissionCatalog
             'inventory.adjust.approve' => 'Menyetujui write-off retur supplier',
             'sales.create' => 'Melakukan penjualan',
             'sales.credit_exception' => 'Memberi pengecualian kredit melebihi batas',
-            'sales.void' => 'Membatalkan penjualan terposting',
             'receipt.reprint' => 'Mencetak ulang struk (berlabel salinan)',
             'shift.open' => 'Membuka shift kas',
             'shift.close' => 'Menutup shift kas',
@@ -129,7 +128,7 @@ final class PermissionCatalog
             'opname.view', 'opname.count', 'opname.create', 'opname.cancel', 'opname.settings.manage',
             'opname.review', 'opname.post', 'opname.approve', 'opname.view_value',
             'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
-            'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
+            'purchase_requisition.approve', 'sales.credit_exception', 'receipt.reprint',
             'shift.review', 'register.manage', 'float.configure', 'reports.view', 'reports.profit.view', 'financial.report.view',
         ];
     }

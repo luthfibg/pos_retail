@@ -15,9 +15,6 @@ export function ReceiptView({ sale, paperSize = '80' }: { sale: Sale; paperSize?
 
   return (
     <div className={`receipt receipt-${paperSize} mx-auto w-full max-w-[22rem] rounded-lg border border-slate-200 bg-white p-4 font-mono text-xs leading-5`}>
-      {r.is_void && (
-        <div className="mb-2 border-2 border-red-700 py-1 text-center text-sm font-bold text-red-700">{r.void_label ?? 'DIBATALKAN'}</div>
-      )}
       {r.is_copy && (
         <div className="mb-2 border border-slate-700 py-0.5 text-center font-bold">{r.copy_label ?? 'SALINAN'}</div>
       )}

@@ -99,12 +99,13 @@ class SaleTest extends SeededTestCase
             ->assertJsonPath('data.doc_number', "SALE-{$period}-000001")
             ->assertJsonPath('data.subtotal', '27500.00')
             ->assertJsonPath('data.total', '27500.00')
-            ->assertJsonPath('data.status', 'posted')
+            ->assertJsonMissingPath('data.status')
             ->assertJsonPath('data.billing_status', 'not_applicable')
             ->assertJsonPath('data.payment.amount_tendered', '50000.00')
             ->assertJsonPath('data.payment.change_given', '22500.00')
             ->assertJsonCount(2, 'data.items')
-            ->assertJsonPath('data.receipt.is_copy', false);
+            ->assertJsonPath('data.receipt.is_copy', false)
+            ->assertJsonMissingPath('data.receipt.is_void');
 
         $saleId = $response->json('data.id');
         $this->assertSame('8.000', $this->onHand($a));
@@ -442,6 +443,10 @@ class SaleTest extends SeededTestCase
         $this->getJson('/api/sales')->assertOk()->assertJsonPath('total', 2);
         $this->getJson('/api/sales?payment_mode=payroll_credit')->assertOk()->assertJsonPath('total', 0);
         $this->getJson("/api/sales/{$mine}")->assertOk()->assertJsonPath('data.id', $mine);
-        $this->getJson('/api/sales?status=bogus')->assertUnprocessable();
+        $this->getJson('/api/sales')->assertOk()
+            ->assertJsonMissingPath('data.0.status')
+            ->assertJsonMissingPath('data.0.receipt.is_void');
+        $this->getJson('/api/sales?status=voided')->assertOk()->assertJsonPath('total', 2);
+        $this->postJson("/api/sales/{$theirs}/void", ['reason' => 'salah'])->assertNotFound();
     }
 }

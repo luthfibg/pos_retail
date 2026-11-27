@@ -77,23 +77,11 @@ class StockCardMovementsTest extends SeededTestCase
             'shift_id' => $shiftId,
             'cashier_id' => $this->cashier->id,
             'payment_mode' => 'cash',
-            'status' => 'posted',
             'idempotency_key' => (string) Str::uuid(),
             'posted_at' => $now->copy()->subDay()->format('Y-m-d H:i:s.v'),
         ]);
         $this->insertMovement($productId, 'sale', 'sale', $saleId, '3.000', $now->copy()->subDay());
 
-        $voidedSaleId = DB::table('sales')->insertGetId([
-            'store_id' => $this->storeId(),
-            'doc_number' => 'SALE-CARD-VOID',
-            'shift_id' => $shiftId,
-            'cashier_id' => $this->cashier->id,
-            'payment_mode' => 'cash',
-            'status' => 'voided',
-            'idempotency_key' => (string) Str::uuid(),
-            'posted_at' => $now->format('Y-m-d H:i:s.v'),
-        ]);
-        $this->insertMovement($productId, 'sale', 'sale', $voidedSaleId, '9.000', $now);
         $this->insertMovement($productId, 'write_off', 'stock_opname', 1, '4.000', $now);
 
         $this->getJson("/api/inventory/products/{$productId}/stock-movements?per_page=2")

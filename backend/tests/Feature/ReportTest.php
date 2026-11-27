@@ -30,7 +30,7 @@ class ReportTest extends SeededTestCase
         ]);
     }
 
-    private function sale(string $mode, string $total, string $postedAt, string $status = 'posted'): int
+    private function sale(string $mode, string $total, string $postedAt): int
     {
         $customerId = null;
         if ($mode === 'payroll_credit') {
@@ -51,7 +51,6 @@ class ReportTest extends SeededTestCase
             'discount_total' => '0.00',
             'tax_amount' => '0.00',
             'total' => $total,
-            'status' => $status,
             'billing_status' => $mode === 'payroll_credit' ? 'unbilled' : 'not_applicable',
             'idempotency_key' => (string) Str::uuid(),
             'posted_at' => $postedAt,
@@ -78,7 +77,6 @@ class ReportTest extends SeededTestCase
 
         $this->sale('cash', '100.00', '2026-10-28 02:00:00');
         $this->sale('payroll_credit', '40.00', '2026-10-28 03:00:00');
-        $this->sale('cash', '999.00', '2026-10-28 04:00:00', 'voided');
 
         $low = $this->product('LOW');
         $expiring = $this->product('EXP', ['track_expiry' => true]);
@@ -158,7 +156,7 @@ class ReportTest extends SeededTestCase
         DB::table('sales')->insert([
             'store_id' => $this->storeId(), 'doc_number' => 'RPT-OTHER', 'shift_id' => $otherShift,
             'cashier_id' => $other->id, 'payment_mode' => 'cash', 'subtotal' => '999.00',
-            'discount_total' => '0.00', 'tax_amount' => '0.00', 'total' => '999.00', 'status' => 'posted',
+            'discount_total' => '0.00', 'tax_amount' => '0.00', 'total' => '999.00',
             'billing_status' => 'not_applicable', 'idempotency_key' => (string) Str::uuid(), 'posted_at' => '2026-10-28 03:00:00',
         ]);
 
@@ -210,7 +208,7 @@ class ReportTest extends SeededTestCase
         DB::table('sales')->insert([
             'store_id' => $foreignStore, 'doc_number' => 'RPT-FOREIGN', 'shift_id' => $foreignShift,
             'cashier_id' => $foreignCashier->id, 'payment_mode' => 'cash', 'subtotal' => '555.00',
-            'discount_total' => '0.00', 'tax_amount' => '0.00', 'total' => '555.00', 'status' => 'posted',
+            'discount_total' => '0.00', 'tax_amount' => '0.00', 'total' => '555.00',
             'billing_status' => 'not_applicable', 'idempotency_key' => (string) Str::uuid(), 'posted_at' => '2026-10-28 02:00:00',
         ]);
 

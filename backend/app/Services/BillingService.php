@@ -123,7 +123,7 @@ class BillingService
     }
 
     /**
-     * Tutup periode: struk kredit terposting yang belum terikat (dan sudah terposting sampai saat ini) diikat ke periode ini.
+     * Tutup periode: struk kredit yang belum terikat (dan sudah terposting sampai saat ini) diikat ke periode ini.
      * Periode berikutnya dibuka otomatis; struk kredit baru otomatis masuk ke sana.
      *
      * @return array<string, mixed>
@@ -141,7 +141,7 @@ class BillingService
             $now = $this->now();
 
             $bound = DB::table('sales')
-                ->where('store_id', $storeId)->where('payment_mode', 'payroll_credit')->where('status', 'posted')
+                ->where('store_id', $storeId)->where('payment_mode', 'payroll_credit')
                 ->whereNull('billing_period_id')->where('posted_at', '<=', $now)
                 ->update(['billing_period_id' => $id]);
 
@@ -178,13 +178,11 @@ class BillingService
                 ->where('store_id', $storeId)
                 ->where('billing_period_id', $id)
                 ->where('payment_mode', 'payroll_credit')
-                ->where('status', 'posted')
                 ->exists();
             $hasUnboundSales = $period->status === 'open' && DB::table('sales')
                 ->where('store_id', $storeId)
                 ->whereNull('billing_period_id')
                 ->where('payment_mode', 'payroll_credit')
-                ->where('status', 'posted')
                 ->exists();
 
             if ($hasInvoice || $hasBoundSales || $hasUnboundSales) {
@@ -212,7 +210,7 @@ class BillingService
     // ------------------------------------------------------------------ invoice
 
     /**
-     * Buat invoice gabungan dari periode tertutup (status draft). Struk ditandai invoiced agar tidak dapat di-void.
+     * Buat invoice gabungan dari periode tertutup (status draft).
      *
      * @param  array<string, mixed>  $data  bill_to?
      * @return array<string, mixed>
@@ -234,7 +232,7 @@ class BillingService
             }
 
             $sales = DB::table('sales')
-                ->where('billing_period_id', $periodId)->where('payment_mode', 'payroll_credit')->where('status', 'posted')
+                ->where('billing_period_id', $periodId)->where('payment_mode', 'payroll_credit')
                 ->orderBy('customer_id')->orderBy('id')->lockForUpdate()
                 ->get(['id', 'customer_id', 'tax_rate_snapshot', 'tax_amount', 'total']);
 
@@ -402,7 +400,6 @@ class BillingService
             ->join('billing_periods as p', 'p.id', '=', 's.billing_period_id')
             ->where('s.store_id', $storeId)
             ->where('s.payment_mode', 'payroll_credit')
-            ->where('s.status', 'posted')
             ->whereYear('p.period_month', '>=', 2000)
             ->whereYear('p.period_month', '<=', $currentYear)
             ->distinct()
@@ -452,7 +449,6 @@ class BillingService
             ->join('customers as c', 'c.id', '=', 's.customer_id')
             ->where('s.store_id', $storeId)
             ->where('s.payment_mode', 'payroll_credit')
-            ->where('s.status', 'posted')
             ->whereBetween('p.period_month', [$year.'-01-01', $periodEnd])
             ->groupBy('c.id', 'c.customer_no', 'c.name', 'c.department')
             ->orderBy('c.name')
@@ -857,8 +853,8 @@ class BillingService
             ->where('p.store_id', $storeId)
             ->selectRaw(
                 'p.*, '.
-                "(select count(*) from sales s where s.store_id = p.store_id and s.payment_mode = 'payroll_credit' and s.status = 'posted' and (s.billing_period_id = p.id or (p.status = 'open' and s.billing_period_id is null))) as sales_count, ".
-                "(select coalesce(sum(s.total), 0) from sales s where s.store_id = p.store_id and s.payment_mode = 'payroll_credit' and s.status = 'posted' and (s.billing_period_id = p.id or (p.status = 'open' and s.billing_period_id is null))) as sales_total, ".
+                "(select count(*) from sales s where s.store_id = p.store_id and s.payment_mode = 'payroll_credit' and (s.billing_period_id = p.id or (p.status = 'open' and s.billing_period_id is null))) as sales_count, ".
+                "(select coalesce(sum(s.total), 0) from sales s where s.store_id = p.store_id and s.payment_mode = 'payroll_credit' and (s.billing_period_id = p.id or (p.status = 'open' and s.billing_period_id is null))) as sales_total, ".
                 '(select i.id from receivable_invoices i where i.billing_period_id = p.id limit 1) as invoice_id'
             );
     }
@@ -873,7 +869,7 @@ class BillingService
 
         $sales = DB::table('sales as s')
             ->join('customers as c', 'c.id', '=', 's.customer_id')
-            ->where('s.store_id', $period->store_id)->where('s.payment_mode', 'payroll_credit')->where('s.status', 'posted');
+            ->where('s.store_id', $period->store_id)->where('s.payment_mode', 'payroll_credit');
         if ($period->status === 'open') {
             $sales->whereNull('s.billing_period_id');
         } else {

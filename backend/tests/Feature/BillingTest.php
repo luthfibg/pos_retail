@@ -39,11 +39,11 @@ class BillingTest extends SeededTestCase
         ]);
     }
 
-    private function sale(?int $customerId, string $total, string $mode = 'payroll_credit', string $status = 'posted', ?int $period = null): int
+    private function sale(?int $customerId, string $total, string $mode = 'payroll_credit', ?int $period = null): int
     {
         return DB::table('sales')->insertGetId([
             'store_id' => $this->storeId(), 'doc_number' => 'S-'.Str::random(8), 'shift_id' => $this->shiftId, 'cashier_id' => $this->cashier->id,
-            'customer_id' => $customerId, 'payment_mode' => $mode, 'subtotal' => $total, 'total' => $total, 'status' => $status,
+            'customer_id' => $customerId, 'payment_mode' => $mode, 'subtotal' => $total, 'total' => $total,
             'billing_status' => $mode === 'payroll_credit' ? 'unbilled' : 'not_applicable', 'billing_period_id' => $period,
             'idempotency_key' => (string) Str::uuid(), 'posted_at' => now()->subSecond(),
         ]);
@@ -55,7 +55,7 @@ class BillingTest extends SeededTestCase
             ->assertCreated()->assertJsonPath('data.status', 'open')->json('data.id');
     }
 
-    /** Dua karyawan, tiga struk kredit (+ tunai dan batal yang tidak ikut), periode ditutup. @return array{int, int, int} [periode, budi, sari] */
+    /** Dua karyawan dan tiga struk kredit, periode ditutup. @return array{int, int, int} [periode, budi, sari] */
     private function closedPeriodWithSales(): array
     {
         $budi = $this->employee('NIK-1', 'Budi');
@@ -66,7 +66,6 @@ class BillingTest extends SeededTestCase
         $this->sale($budi, '50000.50');
         $this->sale($sari, '25000.00');
         $this->sale(null, '999000.00', 'cash');
-        $this->sale($sari, '888000.00', 'payroll_credit', 'voided');
 
         $this->postJson("/api/billing-periods/{$period}/close")->assertOk();
 
@@ -309,13 +308,12 @@ class BillingTest extends SeededTestCase
         $this->getJson('/api/billing-periods')->assertForbidden();
     }
 
-    public function test_close_binds_only_posted_credit_sales_and_opens_next_period(): void
+    public function test_close_binds_credit_sales_and_opens_next_period(): void
     {
         $budi = $this->employee('NIK-1', 'Budi');
         $id = $this->openPeriod();
         $credit = $this->sale($budi, '100000.00');
         $cash = $this->sale(null, '50000.00', 'cash');
-        $voided = $this->sale($budi, '70000.00', 'payroll_credit', 'voided');
 
         $this->postJson("/api/billing-periods/{$id}/close")->assertOk()
             ->assertJsonPath('data.status', 'closed')->assertJsonPath('data.sales_count', 1)->assertJsonPath('data.sales_total', '100000.00')
@@ -323,7 +321,6 @@ class BillingTest extends SeededTestCase
 
         $this->assertSame($id, (int) DB::table('sales')->where('id', $credit)->value('billing_period_id'));
         $this->assertNull(DB::table('sales')->where('id', $cash)->value('billing_period_id'));
-        $this->assertNull(DB::table('sales')->where('id', $voided)->value('billing_period_id'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'billing_period.close', 'entity_id' => $id, 'actor_id' => $this->admin->id]);
 
         $next = $this->getJson('/api/billing-periods/current')->assertOk()->json('data');
@@ -530,18 +527,6 @@ class BillingTest extends SeededTestCase
             'amount' => '50000.00',
             'created_by' => $finance->id,
         ]);
-    }
-
-    public function test_billed_credit_sale_cannot_be_voided_after_invoice(): void
-    {
-        $budi = $this->employee('NIK-1', 'Budi');
-        $id = $this->openPeriod();
-        $sale = $this->sale($budi, '100000.00');
-        $this->postJson("/api/billing-periods/{$id}/close")->assertOk();
-        $this->postJson("/api/billing-periods/{$id}/invoice")->assertCreated();
-
-        $this->postJson("/api/sales/{$sale}/void", ['reason' => 'salah'])->assertUnprocessable()->assertJsonValidationErrors(['status']);
-        $this->assertSame('posted', DB::table('sales')->where('id', $sale)->value('status'));
     }
 
     public function test_cashier_and_guest_have_no_access(): void

@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
  *  - Admin memverifikasi (customer.verify) dan menetapkan batas kredit bulanan (customer.set_limit)
  *  - kredit ditahan selama batas belum diisi (R-09, ASUMSI); batas disimpan sebagai riwayat, yang berlaku = terbaru
  *  - nilai batas hanya terlihat oleh pemegang customer.set_limit; Kasir hanya melihat credit_state dan sisa batas
- *  - pemakaian = total struk payroll_credit berstatus posted yang belum ditagih (PPN diestimasi nanti, R-04)
+ *  - pemakaian = total struk payroll_credit yang belum ditagih (PPN diestimasi nanti, R-04)
  */
 class CustomerService
 {
@@ -292,7 +292,7 @@ class CustomerService
                 '(select l.limit_amount from customer_credit_limits l where l.customer_id = customers.id '.
                 'order by l.effective_from desc, l.id desc limit 1) as credit_limit, '.
                 "(select coalesce(sum(s.total), 0) from sales s where s.customer_id = customers.id ".
-                "and s.payment_mode = 'payroll_credit' and s.status = 'posted' and s.billing_period_id is null) as credit_used"
+                "and s.payment_mode = 'payroll_credit' and s.billing_period_id is null) as credit_used"
             );
     }
 

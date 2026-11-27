@@ -2,7 +2,7 @@ import { api, apiDownload } from './client';
 import type {
   Category, CategoryInput, CashDeposit, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, StockCardMovement, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
-  PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleStatus, SaleSummary, DeferredPurchaseRequisitionItem,
+  PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleSummary, DeferredPurchaseRequisitionItem,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
   GoodsReceipt, GoodsReceiptAttachment, GoodsReceiptItemInput, GoodsReceiptLocation, GoodsReceiptSummary, InventoryExpiryMonitoring, InventoryFifoMonitoring, PurchaseOrder, PurchaseOrderInput, PurchaseOrderSummary,
   PurchaseOrderRequisitionItem, PurchaseRequisition, PurchaseRequisitionInput, PurchaseRequisitionStatus, PurchaseRequisitionSummary,
@@ -627,7 +627,6 @@ export interface SaleFilters {
   q?: string; // awalan nomor struk
   shift_id?: number;
   customer_id?: number;
-  status?: SaleStatus;
   payment_mode?: PaymentMode;
   date_from?: string; // YYYY-MM-DD (WIB)
   date_to?: string;
@@ -645,9 +644,6 @@ export const saleApi = {
   get: (id: number) => api<{ data: Sale }>(`/sales/${id}`).then((r) => r.data),
   /** Struk sama dengan receipt.is_copy = true (SALINAN); tercatat di log cetak. */
   reprint: (id: number) => api<{ data: Sale }>(`/sales/${id}/reprint`, { method: 'POST' }).then((r) => r.data),
-  /** Admin saja (sales.void). Alasan wajib. */
-  void: (id: number, reason: string) =>
-    api<{ data: Sale }>(`/sales/${id}/void`, { method: 'POST', body: { reason } }).then((r) => r.data),
   /** Pratinjau read-only: total, diskon, PPN, stok FEFO, dan batas kredit. */
   preview: (input: SalePreviewInput, signal?: AbortSignal) =>
     api<{ data: SalePreview }>('/sales/preview', { method: 'POST', body: input, signal }).then((r) => r.data),

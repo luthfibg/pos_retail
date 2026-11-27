@@ -26,9 +26,6 @@ use Illuminate\Validation\ValidationException;
  *    tidak boleh melebihi batas, kecuali pengecualian Admin (re-auth, catatan wajib, bertanda over_limit_flag, R-02);
  *    PPN dihitung saat penjualan untuk tunai maupun kredit, berdasarkan snapshot tarif saat transaksi
  *  - stok kurang -> seluruh transaksi gagal (anti-negatif), pesan di items.N.qty
- *  - VOID (sales.void, Admin): dokumen sale_voids + status 'voided', bukan hapus. Stok kembali ke batch asal (voidSale),
- *    kredit hanya bila belum ditagihkan, tunai hanya selama shift struk itu masih open (uang kembali dari laci yang sama,
- *    ledger Kas Kecil dibalik) [ASUMSI]; struk tunai dari shift yang sudah ditutup = retur pelanggan (Paket 2)
  */
 class SaleService
 {
@@ -179,8 +176,6 @@ class SaleService
                 'is_copy' => $asCopy,
                 'copy_label' => $asCopy ? 'SALINAN' : null,
                 'note' => $sale->payment_mode === 'payroll_credit' ? 'Belum dibayar. Ditagihkan lewat potong gaji.' : null,
-                'is_void' => $sale->status === 'voided',
-                'void_label' => $sale->status === 'voided' ? 'DIBATALKAN' : null,
             ],
         ];
     }
@@ -202,86 +197,6 @@ class SaleService
         return $receipt;
     }
 
-    /**
-     * Batalkan penjualan terposting (dokumen reversal). Stok kembali, kas/kredit dikoreksi, semua atomik.
-     *
-     * @return array<string, mixed>
-     */
-    public function void(User $actor, int $storeId, int $id, string $reason): array
-    {
-        DB::transaction(function () use ($actor, $storeId, $id, $reason) {
-            $sale = DB::table('sales')->where('store_id', $storeId)->where('id', $id)->lockForUpdate()->first();
-            abort_if($sale === null, 404, 'Penjualan tidak ditemukan.');
-
-            if ($sale->status !== 'posted') {
-                throw ValidationException::withMessages(['status' => ['Struk ini bukan penjualan terposting atau sudah dibatalkan.']]);
-            }
-
-            $isCredit = $sale->payment_mode === 'payroll_credit';
-            $shift = DB::table('cash_shifts')->where('id', $sale->shift_id)->lockForUpdate()->first();
-
-            if ($isCredit) {
-                if ($sale->billing_period_id !== null || $sale->billing_status !== 'unbilled') {
-                    throw ValidationException::withMessages(['status' => ['Struk kredit ini sudah ditagihkan; pembatalan memerlukan credit note (belum tersedia).']]);
-                }
-                // karyawan dikunci agar pemeriksaan batas kredit transaksi lain konsisten
-                if ($sale->customer_id !== null) {
-                    DB::table('customers')->where('id', $sale->customer_id)->lockForUpdate()->first();
-                }
-            } elseif ($shift->status !== 'open') {
-                throw ValidationException::withMessages(['status' => ['Struk tunai dari shift yang sudah ditutup tidak dapat dibatalkan; gunakan retur pelanggan (belum tersedia).']]);
-            }
-
-            // kembalikan stok ke batch/saldo asal
-            $locationId = $this->inventory->sellingLocationId($storeId);
-            $rows = DB::table('sale_item_batches as b')->join('sale_items as i', 'i.id', '=', 'b.sale_item_id')
-                ->where('i.sale_id', $id)->orderBy('i.product_id')->orderBy('b.id')
-                ->get(['i.product_id', 'i.cost_snapshot', 'b.batch_id', 'b.shelf_position_id', 'b.qty']);
-
-            $allocations = [];
-            foreach ($rows as $row) {
-                $balance = DB::table('inventory_balances')->where('product_id', $row->product_id)->where('location_id', $locationId)
-                    ->whereRaw('position_key = ?', [$row->shelf_position_id ?? 0])->whereRaw('batch_key = ?', [$row->batch_id ?? 0])->first();
-                abort_if($balance === null, 422, 'Saldo stok asal tidak ditemukan; pembatalan dihentikan.');
-
-                $allocations[] = [
-                    'product_id' => (int) $row->product_id, 'balance_id' => (int) $balance->id,
-                    'batch_id' => $row->batch_id === null ? null : (int) $row->batch_id, 'location_id' => $locationId,
-                    'shelf_position_id' => $row->shelf_position_id === null ? null : (int) $row->shelf_position_id,
-                    'qty' => $row->qty, 'unit_cost' => $row->cost_snapshot,
-                ];
-            }
-            $this->inventory->voidSale($storeId, $allocations, 'sale', $id, $actor->id);
-            $this->inventory->synchronizeAutomaticPurchaseRequisitions(
-                $actor,
-                $storeId,
-                array_values(array_unique(array_column($allocations, 'product_id'))),
-            );
-
-            // tunai: balikkan ledger Kas Kecil (uang kembali ke pembeli dari laci shift yang sama)
-            if (! $isCredit) {
-                $fundId = DB::table('fund_accounts')->where('store_id', $storeId)->where('type', 'petty_cash')
-                    ->where('register_id', $shift->register_id)->where('is_active', 1)->value('id');
-                abort_if($fundId === null, 422, 'Akun kas kecil untuk kasir ini belum tersedia.');
-
-                DB::table('fund_ledger_entries')->insert([
-                    'fund_account_id' => $fundId, 'entry_type' => 'sale_void', 'amount' => Decimal::moneyString(-Decimal::money($sale->total)),
-                    'ref_type' => 'sale', 'ref_id' => $id, 'occurred_at' => $this->now(), 'created_by' => $actor->id,
-                ]);
-            }
-
-            DB::table('sale_voids')->insert(['sale_id' => $id, 'reason' => $reason, 'requested_by' => $actor->id, 'approved_by' => $actor->id]);
-            DB::table('sales')->where('id', $id)->update(['status' => 'voided']);
-
-            $this->audit->log('sale.void', 'sale', $id,
-                before: ['status' => 'posted', 'total' => $sale->total],
-                after: ['status' => 'voided', 'payment_mode' => $sale->payment_mode],
-                reason: $reason, storeId: $storeId, actorId: $actor->id);
-        });
-
-        return $this->find($actor, $storeId, $id, true) ?? [];
-    }
-
     /** @param array<string, mixed> $filters */
     public function search(User $actor, int $storeId, array $filters, int $perPage, bool $canSeeAll): LengthAwarePaginator
     {
@@ -295,7 +210,7 @@ class SaleService
                 $query->where("s.{$field}", (int) $filters[$field]);
             }
         }
-        foreach (['status', 'payment_mode'] as $field) {
+        foreach (['payment_mode'] as $field) {
             if (! empty($filters[$field])) {
                 $query->where("s.{$field}", $filters[$field]);
             }
@@ -387,7 +302,6 @@ class SaleService
             'tax_rate_snapshot' => $taxRate,
             'tax_amount' => Decimal::moneyString($taxAmount),
             'total' => Decimal::moneyString($total),
-            'status' => 'posted',
             'billing_status' => $isCredit ? 'unbilled' : 'not_applicable',
             'over_limit_flag' => $overLimit ? 1 : 0,
             'credit_exception_by' => $overLimit ? $approver->id : null,
@@ -597,7 +511,7 @@ class SaleService
         }
 
         $used = DB::table('sales')->where('customer_id', $customer->id)->where('payment_mode', 'payroll_credit')
-            ->where('status', 'posted')->whereNull('billing_period_id')->sum('total');
+            ->whereNull('billing_period_id')->sum('total');
         $remainingBefore = max(0, Decimal::money((string) $limit) - Decimal::money((string) $used));
         $exceeds = $total > $remainingBefore;
 
@@ -723,7 +637,6 @@ class SaleService
             'tax_rate' => $row->tax_rate_snapshot,
             'tax_amount' => $row->tax_amount,
             'total' => $row->total,
-            'status' => $row->status,
             'billing_status' => $row->billing_status,
             'over_limit' => (bool) $row->over_limit_flag,
             'posted_at' => $row->posted_at,

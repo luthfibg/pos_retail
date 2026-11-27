@@ -152,7 +152,7 @@ class CustomerTest extends SeededTestCase
         $this->assertArrayNotHasKey('credit_limit', $list->json('data.0'));
     }
 
-    public function test_remaining_limit_subtracts_unbilled_posted_credit_sales(): void
+    public function test_remaining_limit_subtracts_unbilled_credit_sales(): void
     {
         [, $customer] = $this->createAs('Kasir');
         $id = $customer['id'];
@@ -164,22 +164,21 @@ class CustomerTest extends SeededTestCase
             'store_id' => $this->storeId(), 'doc_number' => 'SHIFT-TEST', 'register_id' => $registerId, 'cashier_id' => $admin->id,
             'opening_balance' => 0, 'status' => 'open', 'opened_at' => now(),
         ]);
-        $sale = fn (string $total, string $status, ?int $period = null) => DB::table('sales')->insert([
+        $sale = fn (string $total, ?int $period = null) => DB::table('sales')->insert([
             'store_id' => $this->storeId(), 'doc_number' => 'S-'.uniqid(), 'shift_id' => $shiftId, 'cashier_id' => $admin->id,
             'customer_id' => $id, 'payment_mode' => 'payroll_credit', 'subtotal' => $total, 'total' => $total,
-            'status' => $status, 'billing_status' => 'unbilled', 'billing_period_id' => $period,
+            'billing_status' => 'unbilled', 'billing_period_id' => $period,
             'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
         ]);
-        $sale('300000.00', 'posted');
-        $sale('150000.00', 'posted');
-        $sale('999999.00', 'voided');   // tidak dihitung
+        $sale('300000.00');
+        $sale('150000.00');
 
         $this->getJson("/api/customers/{$id}")
             ->assertJsonPath('data.credit_used', '450000.00')
             ->assertJsonPath('data.credit_remaining', '550000.00')
             ->assertJsonPath('data.credit_state', 'available');
 
-        $sale('600000.00', 'posted');   // melewati batas
+        $sale('600000.00');   // melewati batas
         $this->getJson("/api/customers/{$id}")
             ->assertJsonPath('data.credit_remaining', '0.00')
             ->assertJsonPath('data.credit_state', 'exhausted');

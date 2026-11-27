@@ -67,7 +67,7 @@ Aturan isi:
 - **`lines` = hasil penggabungan** produk yang sama (seperti posting). `index` = indeks baris pertama produk itu di permintaan, supaya kunci error sama dengan posting (`items.N.…`).
 - Semua uang string desimal, bentuk dan pembulatan **persis** posting: `gross = round-half-up(unit_price × qty)`, diskon terbaik per baris (produk vs kategori), `tax_*` hanya untuk `cash`.
 - `stock_available` = qty layak jual yang **bisa dijual FEFO** saat ini (batch kedaluwarsa tidak dihitung, sama dengan `InventoryService::sell`). `stock_sufficient` = `stock_available >= qty` gabungan. Hanya informasi; **tidak** menyebabkan 422.
-- `credit.remaining_before/after` memakai rumus batas yang sama dengan `checkCreditLimit` (batas − struk kredit `posted` yang belum ditagih). **Jangan** mengirim nilai batas itu sendiri (Kasir tidak boleh melihatnya); `remaining_*` sudah boleh dilihat Kasir (`credit_remaining`). `exceeds_limit: true` bukan error: ini sinyal agar UI menawarkan tunai atau pengecualian Admin. `remaining_after` bernilai `"0.00"` bila melebihi (jangan negatif).
+- `credit.remaining_before/after` memakai rumus batas yang sama dengan `checkCreditLimit` (batas − struk kredit yang belum ditagih). **Jangan** mengirim nilai batas itu sendiri (Kasir tidak boleh melihatnya); `remaining_*` sudah boleh dilihat Kasir (`credit_remaining`). `exceeds_limit: true` bukan error: ini sinyal agar UI menawarkan tunai atau pengecualian Admin. `remaining_after` bernilai `"0.00"` bila melebihi (jangan negatif).
 
 Kesalahan (422, kunci sama dengan posting agar pemeta error frontend dipakai ulang):
 
@@ -92,7 +92,7 @@ Tidak menjadi galat di pratinjau: stok kurang (→ `stock_sufficient: false`), m
 - Tidak ada baris baru di `sales`, `sale_items`, `payments`, `fund_ledger_entries`, `audit_logs`, dan `number_sequences` tidak berubah setelah pratinjau.
 - Produk yang sama di dua baris digabung; `lines[].index` = indeks baris pertama.
 - Stok kurang → 200 dengan `stock_sufficient: false`; batch kedaluwarsa tidak dihitung di `stock_available`.
-- Kredit: `remaining_before/after` benar dan memperhitungkan struk kredit `posted` yang belum ditagih (struk `voided` tidak); melebihi batas → `exceeds_limit: true`, `remaining_after: "0.00"`, nilai batas tidak ada di respons.
+- Kredit: `remaining_before/after` benar dan memperhitungkan struk kredit yang belum ditagih; melebihi batas → `exceeds_limit: true`, `remaining_after: "0.00"`, nilai batas tidak ada di respons.
 - 422 untuk produk `pending_price`/`inactive`, karyawan `pending_verification`/`inactive`/batas belum diisi, kredit tanpa `customer_id`.
 - 401 untuk tamu; 403 untuk pengguna tanpa `sales.create`.
 

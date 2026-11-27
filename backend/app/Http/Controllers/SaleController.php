@@ -42,7 +42,6 @@ class SaleController extends Controller
             'q' => ['nullable', 'string', 'max:40'],
             'shift_id' => ['nullable', 'integer'],
             'customer_id' => ['nullable', 'integer'],
-            'status' => ['nullable', Rule::in(['posted', 'voided'])],
             'payment_mode' => ['nullable', Rule::in(['cash', 'payroll_credit'])],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
@@ -64,15 +63,6 @@ class SaleController extends Controller
         abort_if($found === null, 404, 'Penjualan tidak ditemukan.');
 
         return response()->json(['data' => $found]);
-    }
-
-    /** Batalkan penjualan terposting (Admin). */
-    public function void(Request $request, int $sale): JsonResponse
-    {
-        $data = $request->validate(['reason' => ['required', 'string', 'max:500']]);
-        $user = $request->user();
-
-        return response()->json(['data' => $this->sales->void($user, $this->stores->requireIdFor($user), $sale, $data['reason'])]);
     }
 
     public function reprint(Request $request, int $sale): JsonResponse

@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-****Diperbarui:** 10 November 2026 · Handoff #7: endpoint batch hitungan dan indeks offline; `OpnameCountTest` 7/128 lulus. Handoff #8: riwayat, ekspor, pengingat, dan filter tersedia; kontrak dan batas validasi ada di `docs/ROADMAP_PROGRESS.md`, status suite penuh dan UAT masih terbuka. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan; kas nonpenjualan sudah dihapus), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+****Diperbarui:** 27 November 2026 · Status dan pembatalan struk penjualan dihapus; migrasi `2026_11_13_000082` membersihkan struk batal lama dan menghapus kolom/tabel terkait. Tes backend terarah: 84 lulus; migrasi produksi masih perlu diterapkan. Handoff #7: endpoint batch hitungan dan indeks offline; `OpnameCountTest` 7/128 lulus. Handoff #8: riwayat, ekspor, pengingat, dan filter tersedia; kontrak dan batas validasi ada di `docs/ROADMAP_PROGRESS.md`, status suite penuh dan UAT masih terbuka. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan; kas nonpenjualan sudah dihapus), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 Progres implementasi Adjustment langsung Handoff #1: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #1”.
 Sesi opname Handoff #2 (skema, service, endpoint, izin, test, dan kontrak UI): lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #2”.
@@ -148,7 +148,7 @@ Kesalahan 422 menunjuk baris: `errors["items.1.product_id"]` (produk tidak ada /
 
 Query `per_page` opsional (1–100, default 25). Respons berpaginasi; tiap baris menggabungkan satu dokumen per tanggal kedaluwarsa dengan `occurred_at`, `reference_no`, `reference_type`, `reference_id`, `expiry_date`, `good_in`, `damaged_in`, `return_out`, dan `sale_out`.
 - Penerimaan terposting memakai `goods_receipt_items.qty_received` sebagai barang bagus masuk dan `qty_damaged` sebagai barang rusak masuk; rusak yang langsung diretur tetap tercatat.
-- Retur keluar hanya mencakup retur ke supplier yang sudah diposting. Penjualan hanya mencakup transaksi berstatus `posted` (struk void tidak dihitung).
+- Retur keluar hanya mencakup retur ke supplier yang sudah diposting. Setiap baris penjualan adalah transaksi selesai; tidak ada status struk.
 - Mutasi selain penerimaan, retur supplier, dan penjualan tidak ditampilkan dalam tabel kartu stok.
 
 `GET /api/inventory/expiry-monitoring` memakai ambang toko `expiry_warning_days` (default 30 hari). Tanpa filter produk, respons memberi jumlah batch layak jual yang sudah kedaluwarsa dan yang akan kedaluwarsa dalam ambang. Dengan `product_ids[]`, respons juga memberi status per produk; prioritas tampilan: expired → near_expiry → tanpa tanggal → ok → tanpa stok → tidak dilacak. Snackbar global menampilkan jumlah tersebut dan dapat ditutup sampai sesi aplikasi berakhir.
@@ -218,7 +218,7 @@ Body POST menerima `product_id`, `type` (`increase|decrease`), integer `quantity
 Adjustment langsung hanya dapat digunakan Admin, Owner, atau Kasir pada toko aktif. Izin `inventory.adjust.request` dan relasi grant/override-nya dihapus melalui migration. Izin `inventory.adjust.approve` tetap dipakai untuk write-off retur supplier. Migration pembersihan menghapus header dan item adjustment legacy yang `reason_code`-nya `NULL`; adjustment baru serta data opname dengan reason code, audit log, dan riwayat movement tetap dipertahankan.
 
 ### Yang belum ada untuk Inventory
-Denah rak ⏳. Retur supplier dan write-off kini tersedia di bagian 15. `InventoryService` menyediakan penerimaan, penjualan FEFO, void penjualan, transfer, dan pencatatan stok adjustment langsung; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
+Denah rak ⏳. Retur supplier dan write-off kini tersedia di bagian 15. `InventoryService` menyediakan penerimaan, penjualan FEFO, transfer, dan pencatatan stok adjustment langsung; penerimaan dari PO sudah melalui alur Pembelian (bagian 6).
 
 ---
 
@@ -256,7 +256,7 @@ Untuk **Admin** ditambah: `"credit_limit": "1500000.00"` (null bila belum diisi)
 | `exhausted` | Sisa batas habis (`credit_remaining` = `"0.00"`) | Tawarkan tunai; pengecualian hanya Admin |
 | `inactive` | Karyawan nonaktif | Tidak bisa dipilih untuk kredit |
 
-`credit_remaining` bernilai `null` kecuali status `available`/`exhausted`. Pemakaian dihitung dari total struk kredit terposting yang belum ditagih; pratinjau menghitung total, termasuk PPN bila aktif, tanpa mengubah data.
+`credit_remaining` bernilai `null` kecuali status `available`/`exhausted`. Pemakaian dihitung dari total struk kredit yang belum ditagih; pratinjau menghitung total, termasuk PPN bila aktif, tanpa mengubah data.
 
 ### POST `/api/customers`
 `{ "customer_no": "NIK-100", "name": "Budi", "department": "Produksi" }` → 201 `{data}` status `pending_verification`.
@@ -341,11 +341,11 @@ Respons shift (`data`):
 |---|---|---|---|
 | POST | `/api/sales/preview` | `sales.create` | Pratinjau read-only: total, diskon, PPN, stok FEFO, dan batas kredit (FR-01) |
 | POST | `/api/sales` | `sales.create` | **Posting penjualan** (tunai atau kredit potong gaji) |
-| GET | `/api/sales` | `sales.create` | Riwayat. Kasir: hanya miliknya; Admin: semua. Filter `q` (nomor struk), `shift_id`, `customer_id`, `status`, `payment_mode`, `date_from`, `date_to`, `per_page` |
+| GET | `/api/sales` | `sales.create` | Riwayat. Kasir: hanya miliknya; Admin: semua. Filter `q` (nomor struk), `shift_id`, `customer_id`, `payment_mode`, `date_from`, `date_to`, `per_page` |
 | GET | `/api/sales/{id}` | `sales.create` | Struk lengkap (item, pembayaran, `receipt`) |
 | POST | `/api/sales/{id}/reprint` | `receipt.reprint` | Cetak ulang: struk sama dengan `receipt.is_copy = true`, `copy_label = "SALINAN"`; tercatat di log cetak + audit |
 
-Void: lihat bagian 7.2. Retur pelanggan dan credit note ⏳ (Paket 2).
+Tidak ada status atau endpoint pembatalan struk. Retur pelanggan dan credit note ⏳ (Paket 2).
 
 ### POST `/api/sales/preview` ✅ FR-01
 
@@ -404,7 +404,7 @@ Respons (`data`):
   "customer_id": null, "customer_name": null, "customer_no": null,
   "payment_mode": "cash", "subtotal": "27500.00", "discount_total": "0.00",
   "tax_rate": null, "tax_amount": "0.00", "total": "27500.00",
-  "status": "posted", "billing_status": "not_applicable", "over_limit": false, "posted_at": "2026-10-23 03:10:00.000",
+  "billing_status": "not_applicable", "over_limit": false, "posted_at": "2026-10-23 03:10:00.000",
   "items": [ { "id": 40, "product_id": 12, "sku": "P-000012", "name": "Air Mineral 600ml", "unit_name": "pcs",
                "qty": "2.000", "unit_price": "10000.00", "discount_amount": "0.00", "line_total": "20000.00" } ],
   "payment": { "method": "cash", "amount_tendered": "50000.00", "change_given": "22500.00", "amount_applied": "27500.00" },
@@ -620,22 +620,14 @@ Status: `draft` → `submitted` → `received` (cocok) atau `discrepancy` (berbe
 
 Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + endapan + `float_flags`), tombol "Serahkan setoran", antrean "Setoran masuk" untuk Finance/Admin (terima/selisih/koreksi), halaman kebijakan endapan (Admin), kartu saldo Kas Kecil/Kas Besar.
 
-### 7.2 Void penjualan
+### 7.2 Status struk penjualan
 
-| Method | Path | Izin | Fungsi |
-|---|---|---|---|
-| POST | `/api/sales/{id}/void` | `sales.void` (**Admin saja**) | `{ "reason": "salah input" }` (wajib) → struk lengkap dengan `status: "voided"` |
-
-- Efek (atomik): status `voided` (bukan hapus; dokumen `sale_voids` + audit `sale.void`), stok kembali ke **batch asal**, penjualan tunai membalik ledger Kas Kecil, karyawan mendapat kembali sisa batas kredit.
-- **Syarat (422 `errors.status`):** struk harus `posted`; **struk tunai hanya bisa di-void selama shift-nya masih `open`** (uang dikembalikan dari laci yang sama; shift yang sudah ditutup → gunakan retur pelanggan, belum ada); **struk kredit hanya bila belum ditagihkan** (setelah masuk invoice perlu credit note, belum ada). Alasan kosong → `errors.reason`. Kasir → 403.
-- Struk voided: `receipt.is_void = true`, `receipt.void_label = "DIBATALKAN"` (cetak ulang dan layar riwayat harus menampilkannya). Daftar penjualan dapat difilter `?status=voided`.
-- Struk voided tidak dihitung di ringkasan shift, kas diharapkan, maupun pemakaian batas kredit.
+Status struk dan jalur pembatalan telah dihapus. Struk yang sebelumnya berstatus batal dihapus permanen oleh migrasi `2026_11_13_000082_remove_sales_status_and_voids`; migrasi berhenti dengan pesan eksplisit bila menemukan penjualan draft atau struk batal yang terkait invoice. Kolom `sales.status`, tabel `sale_voids`, permission `sales.void`, endpoint void, serta filter dan penanda batal pada respons API tidak lagi digunakan. Ledger stok/kas dan audit historis tetap dipertahankan.
 
 ### 7.3 ASUMSI dan batasan
-1. Void hanya Admin (Kasir belum diberi kewenangan; menunggu P-12 klien). Tanpa autentikasi ulang tambahan (Admin sudah login).
-2. Void tunai dibatasi shift yang masih terbuka; refund dari shift lain/ditutup menunggu retur pelanggan (Paket 2).
-3. Endapan Kas Besar, setoran bank, dan usulan endapan oleh Kasir (`float_proposals`) belum ada ⏳; saat ini kebijakan hanya ditetapkan Admin.
-4. Kasir tidak bisa mengubah angka endapan atau setoran; sistem yang menghitung dari kebijakan.
+1. Retur pelanggan dan pengembalian dana penjualan belum tersedia (Paket 2).
+2. Endapan Kas Besar, setoran bank, dan usulan endapan oleh Kasir (`float_proposals`) belum ada ⏳; saat ini kebijakan hanya ditetapkan Admin.
+3. Kasir tidak bisa mengubah angka endapan atau setoran; sistem yang menghitung dari kebijakan.
 5. Pembulatan mengikuti `rounding_unit` kebijakan (bawaan 1.000), bukan setting `float_rounding_unit`.
 
 ---
@@ -665,10 +657,10 @@ Pencatatan kas masuk/keluar nonpenjualan dan setoran parsial tidak lagi tersedia
 | POST | `/api/invoices/{id}/payments` | `invoice.record_payment` | Finance/Accounting/Admin mencatat pembayaran HRD: `amount`, `received_on?`, `reference?`, `note?`; penerimaan masuk ke akun `main_cash` |
 
 ### Perilaku
-- **Tutup periode** mengikat semua struk kredit terposting yang belum terikat ke periode itu, lalu **periode berikutnya otomatis dibuka**; struk kredit baru masuk ke sana. Karena struk terikat tidak lagi dihitung sebagai pemakaian, **sisa batas kredit karyawan pulih** setelah tutup periode. Struk tunai dan struk batal tidak ikut.
+- **Tutup periode** mengikat semua struk kredit yang belum terikat ke periode itu, lalu **periode berikutnya otomatis dibuka**; struk kredit baru masuk ke sana. Karena struk terikat tidak lagi dihitung sebagai pemakaian, **sisa batas kredit karyawan pulih** setelah tutup periode. Struk tunai tidak ikut.
 - Nama default periode menggunakan `Periode [Nama Bulan]` dalam bahasa Indonesia. Periode pertama/manual memakai bulan berjalan; setelah periode ditutup, periode otomatis berikutnya memakai bulan kalender setelah `period_month` periode yang ditutup (misalnya Oktober → November). Admin dapat mengubah bulan/tahun periode (`period_month`) saat masih terbuka; bila label masih memakai nama default, label mengikuti perubahan bulan. Label khusus tetap dapat diedit terpisah. Periode tertutup tidak dapat diubah agar riwayat struk tidak bergeser. Jika periode kosong dibatalkan lalu dibuka lagi, bulan periode terakhir yang dibatalkan dipakai kembali (tidak melompat bulan).
 - Periode kosong dapat dibatalkan dengan alasan, baik masih terbuka maupun sudah ditutup, selama tidak memiliki invoice. Periode aktif yang dibatalkan tidak otomatis diganti; Admin harus membuka periode yang benar sebelum transaksi kredit dilanjutkan. Periode berisi struk kredit atau yang sudah memiliki invoice tidak dapat dibatalkan. Keterikatan transaksi dijaga agar pembatalan tidak balapan dengan posting kredit.
-- **Invoice**: satu per periode tertutup, satu baris per struk dengan nilai dasar sebelum PPN. Subtotal = jumlah dasar struk, PPN = jumlah snapshot pajak struk, dan total = jumlah total struk. Invoice tidak menggunakan tarif atau status PPN terkini untuk menghitung ulang. PPN aktif tetapi konfigurasi tarif/harga belum lengkap membuat transaksi kasir (tunai maupun kredit) ditolak. Struk ditandai `billing_status: "invoiced"` dan **tidak dapat di-void lagi** (422 `status`, perlu credit note).
+- **Invoice**: satu per periode tertutup, satu baris per struk dengan nilai dasar sebelum PPN. Subtotal = jumlah dasar struk, PPN = jumlah snapshot pajak struk, dan total = jumlah total struk. Invoice tidak menggunakan tarif atau status PPN terkini untuk menghitung ulang. PPN aktif tetapi konfigurasi tarif/harga belum lengkap membuat transaksi kasir (tunai maupun kredit) ditolak. Struk ditandai `billing_status: "invoiced"`.
 - **Status invoice**: `draft` → `issued` → `handed_to_hr` → `partially_paid` → `paid`. Pembayaran hanya untuk `issued`/`handed_to_hr`/`partially_paid`; jumlah > 0 dan ≤ `amount_remaining` (422 `amount`). Saat lunas, semua struk menjadi `billing_status: "paid"`.
 - Finance mencatat pembayaran HRD sebagai konfirmasi penerimaan dana. Transaksi pembayaran dan ledger `invoice_payment_in` pada akun kas besar toko dibuat atomik; referensi ledger menunjuk baris `invoice_payments`. Permission `invoice.record_payment` tersedia untuk Finance dan Admin (serta role lain yang secara eksplisit diberi izin).
 - Bentuk invoice: `id, document_no (INV-YYYYMM-000001), billing_period_id, period_label, bill_to, subtotal, tax_rate, tax_amount, total, amount_paid, amount_remaining, status, issued_at, handed_at, created_at`. Semua uang string desimal.
@@ -1020,7 +1012,7 @@ Sinkronisasi dipanggil atomik dari stok awal, penjualan/void, penerimaan barang,
 - **2026-10-25** — Seluruh suite dijalankan pengguna: **184 test lulus**. Bagian 8 (Tagihan HRD) kini ✅.
 - **2026-10-24 (4)** — WS-E: Tagihan HRD — periode (buka/ubah/tutup), invoice gabungan per periode dengan rincian per karyawan dan PPN opsional, terbit/serah ke HRD, pembayaran HRD (boleh sebagian). Status: 🟡 menunggu test (`BillingTest`).
 - **2026-10-24 (uji 2)** — Pengguna menjalankan seluruh suite: **174 test lulus (1.333 assertion)**. Bagian 7 (setoran, endapan, void) kini ✅. Tagihan HRD belum ada kode di repo (percobaan sebelumnya terputus).
-- **2026-10-24 (3)** — WS-D lanjutan: kebijakan endapan berversi, setoran akhir (otomatis saat tutup shift) dan parsial, penerimaan Finance + selisih/koreksi, saldo dana dari ledger; void penjualan (Admin). `ShiftService` kini memanggil `CashDepositService` (respons tutup shift menambah `deposit`/`float_flags`). Status: 🟡 menunggu test (`CashDepositTest`, `SaleVoidTest`).
+- **2026-10-24 (3)** — WS-D lanjutan: kebijakan endapan berversi, setoran akhir (otomatis saat tutup shift) dan parsial, penerimaan Finance + selisih/koreksi, saldo dana dari ledger; saat itu termasuk void penjualan (fitur tersebut kemudian dihapus, lihat 7.2). `ShiftService` kini memanggil `CashDepositService` (respons tutup shift menambah `deposit`/`float_flags`).
 - **2026-10-24 (uji)** — Pengguna menjalankan seluruh suite: **154 test lulus (1.080 assertion)**. Semua bagian 1–6 berstatus ✅.
 - **2026-10-24** — WS-C: pembelian lengkap — PR (draft, ajukan, periksa Finance, persetujuan Owner dengan autentikasi ulang, tanda swa-persetujuan), PO (dari PR, otomatis/konfirmasi Owner, kirim, batal, tutup), penerimaan barang (posting menambah stok lewat `InventoryService::receive`, selisih/rusak, verifikasi surat jalan + faktur). Status: ✅ lulus test (24 Okt 2026).
 - **2026-10-23 (2)** — WS-D: shift (buka/hitung/tutup/tinjau, hitung buta, saldo awal = endapan sebelumnya) dan posting penjualan (tunai + kredit, FEFO, diskon Admin, PPN opsional, batas kredit + pengecualian Admin, idempotensi, riwayat, cetak ulang SALINAN). Status: ✅ lulus test (24 Okt 2026).

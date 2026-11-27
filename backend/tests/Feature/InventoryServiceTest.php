@@ -137,21 +137,6 @@ class InventoryServiceTest extends SeededTestCase
         $this->assertSame('5.000', number_format((float) $this->sellable($a), 3, '.', ''));
     }
 
-    public function test_void_sale_restores_each_batch(): void
-    {
-        $p = $this->makeProduct(true);
-        $d = fn (int $days) => now('Asia/Jakarta')->addDays($days)->toDateString();
-        $x = $this->receive($p, '2', '1000', $d(5));
-        $y = $this->receive($p, '4', '1000', $d(20));
-
-        $allocations = $this->sell($p, '5');
-        DB::transaction(fn () => $this->inventory->voidSale($this->storeId(), $allocations, 'sale', 10, null));
-
-        $this->assertDatabaseHas('inventory_balances', ['batch_id' => $x['batch_id'], 'qty_sellable' => '2.000']);
-        $this->assertDatabaseHas('inventory_balances', ['batch_id' => $y['batch_id'], 'qty_sellable' => '4.000']);
-        $this->assertSame(2, DB::table('inventory_movements')->where('movement_type', 'sale_void')->count());
-    }
-
     public function test_unit_cost_follows_latest_stock_in_cost_and_sale_keeps_cost_snapshot(): void
     {
         $p = $this->makeProduct();
@@ -200,9 +185,7 @@ class InventoryServiceTest extends SeededTestCase
         $p = $this->makeProduct();
         $this->receive($p, '10', '1000');
         $this->receive($p, '5', '1500');
-        $allocations = $this->sell($p, '7');
-        DB::transaction(fn () => $this->inventory->voidSale($this->storeId(), [$allocations[0]], 'sale', 10, null));
-
+        $this->sell($p, '7');
         $in = (float) DB::table('inventory_movements')->where('product_id', $p)->whereNotNull('to_bucket')->sum('qty');
         $out = (float) DB::table('inventory_movements')->where('product_id', $p)->whereNotNull('from_bucket')->sum('qty');
 

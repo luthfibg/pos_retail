@@ -95,7 +95,7 @@ Role bawaan: Owner dapat meninjau, menghitung, mengubah ambang, menyetujui, dan 
 - **Adjustment dan opname:** Kasir membuat dan mengajukan snapshot hitung stok; Admin menyetujui (re-auth wajib untuk loss/expired) dan posting movement penyesuaian secara atomik. ✅
 - **Karyawan:** Kasir menambah karyawan (menunggu verifikasi, hanya tunai), Admin memverifikasi dan menetapkan batas kredit, notifikasi ke Admin. ✅
 - **Kasir:** buka shift (hitung buta), jual tunai atau kredit potong gaji (FEFO, diskon, PPN opsional, batas kredit + pengecualian Admin dengan re-auth, anti transaksi ganda), cetak ulang berlabel SALINAN, tutup shift dengan selisih kas, tinjau oleh Admin. ✅
-- **Kas dan koreksi:** kebijakan endapan (tetap/persen, min/maks, pembulatan ke bawah), setoran akhir shift, Finance menghitung ulang dan menerima (selisih → koreksi), saldo Kas Kecil/Kas Besar dari ledger, void penjualan oleh Admin (stok kembali, kas/kredit dikoreksi). ✅ Kas nonpenjualan dan setoran parsial telah dihapus atas permintaan pengguna.
+- **Kas dan koreksi:** kebijakan endapan (tetap/persen, min/maks, pembulatan ke bawah), setoran akhir shift, Finance menghitung ulang dan menerima (selisih → koreksi), saldo Kas Kecil/Kas Besar dari ledger. Status dan pembatalan struk telah dihapus; migrasi menghapus permanen struk batal lama. ✅ Kas nonpenjualan dan setoran parsial telah dihapus atas permintaan pengguna.
 - **Kas nonpenjualan:** Kasir mencatat kas masuk/keluar pada shift aktif; kas yang diharapkan dan saldo Kas Kecil diperbarui, dengan audit dan ledger. ✅
 - **Pembelian:** PR → pemeriksaan Finance → persetujuan Owner → PO → kirim → penerimaan barang ke toko atau gudang (posisi rak opsional), HPP rata-rata, verifikasi surat jalan/faktur. ✅
 - **Lampiran penerimaan:** Kasir/Admin dapat mengunggah foto surat jalan atau dokumen pendukung pada GR yang belum diverifikasi; berkas disimpan privat dan aksesnya dibatasi ke pemilik GR atau pemegang izin verifikasi. ✅
@@ -110,7 +110,7 @@ Role bawaan: Owner dapat meninjau, menghitung, mengubah ambang, menyetujui, dan 
 
 ### Belum bisa
 
-usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan dan void struk tunai dari shift yang sudah ditutup · denah rak · penyempurnaan cetak thermal 58/80 mm dan cetak invoice · koreksi/pembatalan invoice dan credit note.
+usulan endapan oleh Kasir (`float_proposals`) · retur pelanggan/pengembalian dana · denah rak · penyempurnaan cetak thermal 58/80 mm dan cetak invoice · koreksi/pembatalan invoice dan credit note.
 
 ### Langkah berikutnya (urut)
 1. ~~Pasang paket WS-C dan jalankan seluruh test~~ — **selesai 24 Okt 2026: 154 lulus.**
@@ -156,7 +156,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
 | 0.1 | Dokumen kebutuhan teknis (v0.2 + Bagian 15), matrix permission, state diagram, pertanyaan bisnis | ✅ | docs/ |
-| 0.2 | ERD + skema database Paket 1 (54 tabel) | ✅ | docs/erd_paket1.md, schema_paket1.sql |
+| 0.2 | ERD + skema database Paket 1 (53 tabel) | ✅ | docs/erd_paket1.md, schema_paket1.sql |
 
 ### Fase 1 — Fondasi backend (tahap 1a–1c)
 
@@ -193,7 +193,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | 3.1 | Shift kasir: buka, hitung buta, tutup, tinjau; saldo awal = endapan sebelumnya | ✅ | ShiftTest |
 | 3.2 | Posting penjualan atomik: tunai + kredit potong gaji, FEFO, diskon, PPN opsional, batas kredit + pengecualian Admin, idempotensi | ✅ | SaleTest |
 | 3.3 | Riwayat penjualan dan cetak ulang berlabel SALINAN | ✅ | SaleTest |
-| 3.4 | Void / pembatalan penjualan: Admin, stok kembali ke batch asal, kredit hanya bila belum ditagih, tunai hanya selama shift struk masih open | ✅ | SaleVoidTest (6) |
+| 3.4 | Status dan pembatalan struk penjualan | Dihapus | Permintaan pengguna; migrasi `2026_11_13_000082` menghapus struk batal lama, tabel `sale_voids`, dan kolom `sales.status` |
 | 3.5 | Setoran akhir dan endapan, kebijakan endapan berversi, penerimaan Finance, selisih/koreksi, saldo dana. Usulan endapan Kasir (`float_proposals`) belum | ✅ | CashDepositTest |
 | 3.6 | Kas masuk / keluar nonpenjualan (`cash_movements`) | Dihapus | Permintaan pengguna; migration menghapus tabel, entri ledger, dan data historis |
 | 3.7 | Pengaturan diskon dan PPN lewat API (Admin): CRUD diskon + saklar/tarif PPN berversi | ✅ | PricingSettingsTest |
@@ -346,7 +346,7 @@ Perintah: `php artisan test` (semua) atau `php artisan test --filter=GoodsReceip
 
 **Status:** implementasi hitungan, lookup, dan lock backend serta UI form/input telah dibuat; validasi terarah lulus. Belum selesai untuk penandaan final: UAT browser pada 375/768/1280 px belum dijalankan dan suite backend penuh belum diulang. Jangan anggap alur selesai produksi sebelum UAT dan seluruh jalur mutasi diuji.
 
-**Pemeriksaan awal:** perubahan saldo dan movement tetap dipusatkan di `InventoryService`; alur retur pemasok membaca saldo langsung tetapi mengubahnya melalui service ini. POS/checkout, void penjualan, penerimaan GR, penerimaan barang pengganti, opening balance, adjustment, retur supplier, dan transfer memakai jalur guard inventory. `all` mencakup produk yang dibuat setelah sesi dimulai; cakupan `categories` hanya mengunci item sesi.
+**Pemeriksaan awal:** perubahan saldo dan movement tetap dipusatkan di `InventoryService`; alur retur pemasok membaca saldo langsung tetapi mengubahnya melalui service ini. POS/checkout, penerimaan GR, penerimaan barang pengganti, opening balance, adjustment, retur supplier, dan transfer memakai jalur guard inventory. `all` mencakup produk yang dibuat setelah sesi dimulai; cakupan `categories` hanya mengunci item sesi.
 
 **Backend:**
 - `OpnameLockService` mengunci sesi `in_progress` dan `pending_approval`, melepas lock untuk `cancelled`/`posted`, mengembalikan nama produk + nomor sesi tanpa jumlah stok, dan membatasi pengecualian `stock_adjustment` ke referensi opname aktif yang benar-benar mencakup produk.

@@ -1014,47 +1014,6 @@ class InventoryService
     }
 
     /**
-     * Mengembalikan stok sesuai alokasi hasil sell() (pembatalan penjualan). Tiap batch kembali
-     * ke baris saldo asalnya.
-     *
-     * @param  list<array<string, mixed>>  $allocations
-     */
-    public function voidSale(int $storeId, array $allocations, string $refType, int $refId, ?int $actorId = null): void
-    {
-        $this->requireTransaction();
-
-        // kunci berurutan: produk dulu (urut id), lalu baris saldo
-        $productIds = collect($allocations)->pluck('product_id')->unique()->sort()->values()->all();
-        DB::table('products')->where('store_id', $storeId)->whereIn('id', $productIds)->orderBy('id')->lockForUpdate()->get(['id']);
-        $this->assertStockUnlocked($storeId, $productIds, $refType, $refId);
-
-        $now = $this->now();
-
-        foreach ($allocations as $allocation) {
-            $units = Decimal::qty($allocation['qty']);
-
-            DB::table('inventory_balances')->where('id', $allocation['balance_id'])->lockForUpdate()->first();
-            $this->increaseBalance((int) $allocation['balance_id'], 'sellable', $units);
-
-            DB::table('inventory_movements')->insert([
-                'store_id' => $storeId,
-                'product_id' => $allocation['product_id'],
-                'batch_id' => $allocation['batch_id'],
-                'to_location_id' => $allocation['location_id'],
-                'to_position_id' => $allocation['shelf_position_id'],
-                'to_bucket' => 'sellable',
-                'qty' => Decimal::qtyString($units),
-                'movement_type' => 'sale_void',
-                'unit_cost' => $allocation['unit_cost'],
-                'ref_type' => $refType,
-                'ref_id' => $refId,
-                'occurred_at' => $now,
-                'created_by' => $actorId,
-            ]);
-        }
-    }
-
-    /**
      * Memindahkan stok layak jual antarposisi/lokasi. Setiap baris menghasilkan movement keluar
      * dan masuk; batch dan HPP tetap sama.
      *
@@ -1464,7 +1423,6 @@ class InventoryService
             ->where('m.ref_type', 'sale')
             ->where('m.movement_type', 'sale')
             ->where('s.store_id', $storeId)
-            ->where('s.status', 'posted')
             ->selectRaw(
                 "MAX(m.occurred_at) as occurred_at, s.doc_number as reference_no, 'sale' as reference_type, ".
                 's.id as reference_id, pb.expiry_date, '.

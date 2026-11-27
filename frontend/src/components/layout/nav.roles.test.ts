@@ -30,7 +30,7 @@ const PERMISSIONS: Record<string, string[]> = {
   Owner: [
     'user.manage', 'role.manage', 'settings.manage', 'audit_log.view', 'inventory.opening_balance', 'product.activate', 'price.change', 'discount.manage',
     'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve', 'customer.select', 'customer.update',
-    'customer.verify', 'customer.set_limit', 'purchase_requisition.approve', 'sales.credit_exception', 'sales.void', 'receipt.reprint',
+    'customer.verify', 'customer.set_limit', 'purchase_requisition.approve', 'sales.credit_exception', 'receipt.reprint',
     'shift.review', 'float.configure', 'reports.view', 'financial.report.view', 'opname.view', 'opname.create', 'opname.cancel',
   ],
 };

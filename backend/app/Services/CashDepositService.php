@@ -111,7 +111,7 @@ class CashDepositService
 
         $base = $counted;
         if ($policy->mode === 'percent' && $policy->percent_base === 'cash_sales_shift') {
-            $base = Decimal::money((string) DB::table('sales')->where('shift_id', $shiftId)->where('payment_mode', 'cash')->where('status', 'posted')->sum('total'));
+            $base = Decimal::money((string) DB::table('sales')->where('shift_id', $shiftId)->where('payment_mode', 'cash')->sum('total'));
         }
 
         $float = $policy->mode === 'fixed'

@@ -18,7 +18,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Area | Status | Verifikasi |
 |---|---|---|
 | Dokumen kebutuhan (ERD, matrix permission, state diagram, pertanyaan bisnis) | Selesai, v0.5 + Bagian 15 | — |
-| Skema database Paket 1 (54 tabel) + ERD | Selesai | **Lolos** `migrate:fresh` di mesin pengguna |
+| Skema database Paket 1 (53 tabel) + ERD | Selesai | **Lolos** `migrate:fresh` di mesin pengguna |
 | Migration Laravel (55 file, urut FK) | Selesai | **Lolos** di mesin pengguna |
 | Seeder (toko, role, 47 permission, register, akun dana, setting, akun admin) | Selesai | **Lolos** test |
 | Auth: login/logout/me (Sanctum, throttle, audit) | Selesai | **Lolos** test |
@@ -35,7 +35,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Shift kasir (buka/hitung/tutup/tinjau) dan posting penjualan (tunai, kredit, FEFO, diskon, PPN opsional, pengecualian kredit, idempotensi, riwayat, cetak ulang) | Selesai | **Lolos** test (24 Okt 2026) |
 | Kas masuk/keluar nonpenjualan pada shift aktif, ledger Kas Kecil, dan audit | Selesai | **Lolos** test (`CashMovementTest`, suite 204 test; 26 Okt 2026); UI sudah diuji pengguna |
 | PR → pemeriksaan Finance → persetujuan Owner (re-auth) → PO (otomatis/konfirmasi) | Selesai | **Lolos** test (24 Okt 2026) |
-| Setoran kasir + kebijakan endapan (parsial/final, penerimaan Finance, selisih/koreksi, saldo dana) dan void penjualan | Selesai | **Lolos** test (24 Okt 2026) |
+| Setoran kasir + kebijakan endapan (final, penerimaan Finance, selisih/koreksi, saldo dana); status struk penjualan sudah dihapus | Selesai | Validasi migrasi terbaru masih perlu dijalankan |
 | Manajemen pengguna (CRUD akun, aktif/nonaktif, reset/ganti sandi) | Selesai | **Lolos** test (`UserManagementTest`, 26 Okt 2026) |
 | Model administrasi toko (simple / standar retail; role Owner, Finance, Purchasing, Accounting; validasi akun per role; `can.any`) | Ditulis | 🟡 Belum dijalankan (`AdminModelTest`, 8 test); kontrak: `BACKEND_PROGRESS.md` bagian 12 |
 | Matriks kewenangan stok per toko (stok awal, penerimaan, transfer, ajuan/persetujuan adjustment; lingkup toko/gudang; permission `inventory.opening_balance`; FR-04) | Ditulis | 🟡 Belum dijalankan (`StockAuthorityTest`, 12 test); kontrak: `BACKEND_PROGRESS.md` bagian 13 |
@@ -44,7 +44,7 @@ Aplikasi web POS retail untuk **satu toko, satu kasir, satu laci** di dalam pabr
 | Frontend: penyerahan setoran akhir Kasir dan konfigurasi kebijakan endapan Admin | Selesai | `npm run typecheck`, `npm test` dan build lulus; lihat riwayat `docs/FRONTEND_PROGRESS.md` |
 | Frontend: kas masuk/keluar nonpenjualan | Selesai | Otomatisasi lulus dan pengguna sudah menguji alur klik |
 | Frontend: setoran akhir/antrean Finance | Implementasi tersedia; uji sebagian | Setoran parsial sudah dihapus; setoran akhir dan Finance tetap tersedia |
-| Frontend: riwayat penjualan | Selesai; diuji pengguna | Daftar/filter, detail, cetak SALINAN, void |
+| Frontend: riwayat penjualan | Selesai; diuji pengguna | Daftar/filter pembayaran, detail, cetak SALINAN; tanpa status atau pembatalan struk |
 | Frontend: penerimaan barang | Implementasi tersedia; menunggu uji klik | PO receivable, qty diterima/rusak, batch/kedaluwarsa, Draft/posting/pembatalan, verifikasi dokumen Admin |
 | Frontend: PR Kasir | Implementasi tersedia; menunggu uji klik | Buat/ubah Draft/returned, ajukan, detail dan batalkan |
 | Frontend: pemeriksaan PR/PO, adjustment, tagihan HRD, manajemen pengguna, transfer stok | Belum lengkap | Backlog frontend; kontrak backend tersedia |
@@ -89,7 +89,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 6. **Audit:** setiap aksi penting memanggil `AuditLogger::log('<entitas>.<kata_kerja>', ...)` dengan before/after. Yang sudah ada: `auth.login|login_failed|logout|reauth_ok|reauth_failed`, `category.create|update`, `supplier.create|update`, `product.create|update|price_change|status_change`, `customer.create|update|status_change|verify|set_limit`, `inventory.opening_balance`, `stock_adjustment.create|request|approve|post|reject|cancel`, `shift.open|start_count|close|review`, `sale.post`, `sale.credit_exception`, `receipt.reprint`, `purchase_requisition.create|update|submit|finance_check|return|approve|reject|cancel|convert|reopen`, `purchase_order.create|update|submit|approve|confirm|send|cancel|close`, `goods_receipt.create|attach|post|verify_documents|cancel`, `authorization_key.set|delete|revoke|locked`, `settings.approval_auth|admin_model|stock_authority`. Audit historis kas nonpenjualan tetap dapat tersimpan sebagai jejak.
 7. **Dokumen terposting tidak dihapus/diedit.** Koreksi lewat pembatalan, reversal, atau dokumen koreksi yang bertaut.
 8. **Penomoran dokumen:** `NumberSequence::next($storeId, $jenis, $periode)` — hanya di dalam transaksi — lalu `DocumentNumber::format('SALE', $n, '202610')` → `SALE-202610-000123` (sudah ada; stok awal memakai `OPEN-000001`).
-9. **Stok:** saldo (`inventory_balances`) turunan dari `inventory_movements` (append-only). Stok negatif **dilarang**. Perubahan stok dilakukan lewat alur `InventoryService` (`receive`, `sell` FEFO, `voidSale`, `transfer`, atau `recordDirectAdjustment` melalui `StockAdjustmentService`), **wajib di dalam `DB::transaction` pemanggil**; produk dikunci berurutan id. Hitung qty/uang dengan `App\Support\Decimal` (integer), bukan float.
+9. **Stok:** saldo (`inventory_balances`) turunan dari `inventory_movements` (append-only). Stok negatif **dilarang**. Perubahan stok dilakukan lewat alur `InventoryService` (`receive`, `sell` FEFO, `transfer`, atau `recordDirectAdjustment` melalui `StockAdjustmentService`), **wajib di dalam `DB::transaction` pemanggil**; produk dikunci berurutan id. Hitung qty/uang dengan `App\Support\Decimal` (integer), bukan float.
 10. **Migration yang sudah di-merge tidak diedit**; perubahan skema = migration baru.
 11. **Test:** feature test memperluas `Tests\SeededTestCase`; helper `signIn('Admin'|'Kasir', $username)` memakai Sanctum. Setiap fitur wajib punya test (izin, validasi, jalur gagal, audit).
 12. **Format respons:** sukses `{ "data": ... }`, paginasi bawaan Laravel (`data`, `total`, `links`, ...), validasi 422 `{ message, errors }`, 403/404 `{ message }`. Frontend wajib mengirim `Accept: application/json`.
@@ -143,7 +143,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 
 **Endpoint POS (WS-D, lolos test):** `GET /api/shifts/current`, `POST /api/shifts/open`, `GET /api/shifts/{id}`, `POST /api/shifts/{id}/start-count|close|review`, `GET /api/shifts` · `POST|GET /api/sales`, `GET /api/sales/{id}`, `POST /api/sales/{id}/reprint`.
 
-**Endpoint setoran/endapan/void (belum dijalankan):** `GET /api/float-policies`, `PUT /api/float-policies/{scope}` · `POST /api/shifts/{id}/deposits` · `GET /api/cash-deposits`, `GET /api/cash-deposits/{id}`, `POST /api/cash-deposits/{id}/submit|cancel|receive|correct` · `GET /api/fund-accounts` · `POST /api/sales/{id}/void`. Kontrak: `docs/BACKEND_PROGRESS.md` bagian 7.
+**Endpoint setoran/endapan:** `GET /api/float-policies`, `PUT /api/float-policies/{scope}` · `POST /api/shifts/{id}/deposits` · `GET /api/cash-deposits`, `GET /api/cash-deposits/{id}`, `POST /api/cash-deposits/{id}/submit|cancel|receive|correct` · `GET /api/fund-accounts`. Status dan pembatalan struk telah dihapus. Kontrak: `docs/BACKEND_PROGRESS.md` bagian 7.
 
 **Berkas penting** (di folder keluaran proyek): `schema_paket1.sql`, `erd_paket1.md`, zip migration, zip tahap1b (seeder/auth/RBAC), zip tahap1c (master data), `SETUP.md`, `SETUP_AUTH_RBAC.md`, `PANDUAN_MASTER_DATA.md`.
 
@@ -167,7 +167,7 @@ php artisan test                                     # butuh .env.testing -> DB_
 | **F. Frontend** | scaffold (Vite + React + TS), klien API bertipe, login/layout/guard permission, layar master data, **layar kasir (prioritas)**, penerimaan, PR/PO, shift/setoran, tagihan | kontrak API dari A–E (mulai dari yang sudah ada) |
 | **G. Cetak** | struk thermal 58/80 mm via CSS print browser, paket cetak invoice + struk | D, E |
 
-**Kontrak antar-workstream yang perlu disepakati sebelum paralel:** tanda tangan `InventoryService` (mis. `receive(...)`, `sell(...)` yang mengembalikan alokasi batch FEFO, `voidSale(...)`, `transfer(...)`, `adjust(...)`), pembentuk nomor dokumen, dan bentuk respons POS (keranjang, total, struk).
+**Kontrak antar-workstream yang perlu disepakati sebelum paralel:** tanda tangan `InventoryService` (mis. `receive(...)`, `sell(...)` yang mengembalikan alokasi batch FEFO, `transfer(...)`, `adjust(...)`), pembentuk nomor dokumen, dan bentuk respons POS (keranjang, total, struk).
 
 ### Jadwal usulan (4 minggu)
 

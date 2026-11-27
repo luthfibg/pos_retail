@@ -1591,7 +1591,6 @@ export interface GoodsReceiptItemInput {
   note?: string | null;
 }
 
-export type SaleStatus = 'posted' | 'voided';
 export type BillingStatus = 'not_applicable' | 'unbilled' | 'invoiced' | 'paid';
 
 export interface SaleItemInput {
@@ -1640,8 +1639,6 @@ export interface SaleReceiptInfo {
   is_copy: boolean;
   copy_label: string | null;
   note: string | null;
-  is_void: boolean;
-  void_label: string | null;
 }
 
 /** Bentuk baris pada `GET /sales` (tanpa item). */
@@ -1661,13 +1658,12 @@ export interface SaleSummary {
   tax_rate: Decimal | null;
   tax_amount: Decimal;
   total: Decimal;
-  status: SaleStatus;
   billing_status: BillingStatus;
   over_limit: boolean;
   posted_at: string | null; // UTC
 }
 
-/** Struk lengkap (`POST /sales`, `GET /sales/{id}`, reprint, void). */
+/** Struk lengkap (`POST /sales`, `GET /sales/{id}`, reprint). */
 export interface Sale extends SaleSummary {
   items: SaleLine[];
   payment: SalePayment | null;

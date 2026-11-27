@@ -29,7 +29,6 @@ class ReportService
 
         $query = DB::table('sales as s')
             ->where('s.store_id', $storeId)
-            ->where('s.status', 'posted')
             ->whereBetween('s.posted_at', [$start, $end]);
 
         if ($cashierId !== null) {
@@ -118,7 +117,6 @@ class ReportService
         [$start, $end] = $this->boundaries($filters);
         $sales = DB::table('sales')
             ->where('store_id', $storeId)
-            ->where('status', 'posted')
             ->whereBetween('posted_at', [$start, $end])
             ->orderBy('id')
             ->get(['id', 'payment_mode', 'invoice_id']);
@@ -284,7 +282,7 @@ class ReportService
         $cashierId = $this->cashierId($actor, $filters, $canSeeAll);
 
         $sales = DB::table('sales')
-            ->where('store_id', $storeId)->where('status', 'posted')
+            ->where('store_id', $storeId)
             ->whereBetween('posted_at', [$start, $end]);
         $deposits = DB::table('cash_deposits as d')->join('cash_shifts as s', 's.id', '=', 'd.shift_id')
             ->where('d.store_id', $storeId)->whereBetween('d.created_at', [$start, $end]);

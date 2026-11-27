@@ -69,7 +69,6 @@ erDiagram
   sale_items ||--o{ sale_item_batches : "FEFO allocation"
   product_batches ||--o{ sale_item_batches : from
   sales ||--o| payments : "cash only"
-  sales ||--o| sale_voids : voided
   sales ||--o{ receipt_print_logs : "original / copy"
   billing_periods ||--o{ sales : "period (credit)"
   billing_periods ||--o| receivable_invoices : "1 invoice per period"
