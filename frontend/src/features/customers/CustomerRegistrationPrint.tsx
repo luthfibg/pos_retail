@@ -25,7 +25,7 @@ export function CustomerRegistrationPrint({ customer }: { customer: Customer }) 
 
   return (
     <article className="print-only print-doc customer-registration-print text-black">
-      <header className="mb-6 border-b-2 border-black pb-3 text-center">
+      <header className="mb-10 border-b-2 border-black pb-3 text-center">
         <h1 className="text-xl font-bold">FORMULIR PENDAFTARAN DEBITUR</h1>
         <p className="mt-1 text-sm">Pelanggan Toko — Pemotongan Gaji Tiap Bulan</p>
       </header>
@@ -34,21 +34,21 @@ export function CustomerRegistrationPrint({ customer }: { customer: Customer }) 
         <tbody>
           {rows.map(([labelA, valueA, labelB, valueB]) => (
             <tr key={labelA}>
-              <th className="w-[20%]">{labelA}</th>
+              <th className="w-[20%]">{labelA}:</th>
               <td className="w-[30%]">{valueA}</td>
-              <th className="w-[20%]">{labelB}</th>
+              <th className="w-[20%]">{labelB}:</th>
               <td className="w-[30%]">{valueB}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <p className="mt-5 text-justify text-xs leading-5">
+      {/* <p className="mt-5 text-justify text-xs leading-5">
         Dengan ini saya mengajukan pendaftaran sebagai debitur/pelanggan toko dan menyatakan data yang dicantumkan benar.
         Saya menyetujui pembayaran transaksi kredit melalui pemotongan gaji setiap bulan sesuai ketentuan perusahaan.
-      </p>
+      </p> */}
 
-      <section className="mt-8 grid grid-cols-4 gap-3 text-center text-xs">
+      <section className="mt-auto grid grid-cols-4 gap-3 text-center text-xs">
         {signatures.map((signature) => (
           <div key={signature.role} className="flex flex-col items-center">
             <div className="min-h-8 font-medium">{signature.role}</div>
@@ -57,6 +57,10 @@ export function CustomerRegistrationPrint({ customer }: { customer: Customer }) 
           </div>
         ))}
       </section>
+
+      <footer className="mt-5 border-black pt-3 text-center text-xs font-medium">
+        Data yang sudah diisi dan ditanda tangani adalah benar dan dapat dipertanggungjawabkan dengan semestinya
+      </footer>
     </article>
   );
 }

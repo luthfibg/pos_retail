@@ -50,9 +50,12 @@ export function AppLayout() {
         aria-hidden={posFullscreen}
       >
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-4">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold">POS Retail SMK</div>
-            <div className="truncate text-xs text-slate-500">{me?.store?.name}</div>
+          <div className="flex min-w-0 items-center gap-2">
+            <img src="/logo.png" alt="Logo POS Retail SMK" className="size-10 shrink-0 rounded-md object-contain" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">POS Retail SMK</div>
+              <div className="truncate text-xs text-slate-500">{me?.store?.name}</div>
+            </div>
           </div>
           <NotificationBell />
         </div>

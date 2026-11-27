@@ -65,6 +65,15 @@ body { @apply bg-slate-50 text-slate-900 antialiased; }
   .print-doc th, .print-doc td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
   .print-doc th { background: #f1f5f9; text-align: left; }
   .print-doc tr { break-inside: avoid; }
+  .customer-registration-print th,
+  .customer-registration-print td { border: 0; padding: 3px 6px; }
+  .customer-registration-print th { background: transparent; }
+  .customer-registration-print {
+    display: flex !important;
+    flex-direction: column;
+    min-height: 273mm;
+    padding-bottom: 3mm;
+  }
 }
 
 @media print {

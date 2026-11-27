@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Customer } from '@/lib/api/types';
 import {
   buildCustomerCreate, buildCustomerUpdate, emptyCustomer, PAYMENT_STATUS, validateCustomer,
-  validateMoney, valuesFromCustomer,
+  validateMoney, valuesFromCustomer, type CustomerFormValues,
 } from './customerForm';
 
 const customer: Customer = {
@@ -26,7 +26,7 @@ const customer: Customer = {
   credit_remaining: '900000.00',
 };
 
-const validValues = () => ({
+const validValues = (): CustomerFormValues => ({
   ...emptyCustomer(),
   customer_no: ' NIK-100 ',
   ktp_no: ' 3201234567890001 ',
@@ -67,7 +67,7 @@ describe('validateCustomer', () => {
     expect(errors.ktp_no).toBeTruthy();
     expect(errors.customer_no).toBeTruthy();
     expect(errors.phone).toBeTruthy();
-    expect(errors.employment_start_date).toBeUndefined();
+    expect(errors.employment_start_date).toBeTruthy();
   });
 });
 

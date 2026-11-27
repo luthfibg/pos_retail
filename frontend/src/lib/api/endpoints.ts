@@ -546,7 +546,7 @@ export const inventoryApi = {
 
 export const customerApi = {
   list: (f: { q?: string; archived?: boolean; page?: number; per_page?: number } = {}) =>
-    api<Paginated<Customer>>('/customers', { query: { ...f } }),
+    api<Paginated<Customer>>('/customers', { query: { ...f, archived: f.archived ? 1 : undefined } }),
   get: (id: number) => api<{ data: Customer }>(`/customers/${id}`).then((r) => r.data),
   create: (input: CustomerInput) =>
     api<{ data: Customer }>('/customers', { method: 'POST', body: input }).then((r) => r.data),
