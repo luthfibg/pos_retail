@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
  * Tagihan HRD (kredit potong gaji).
  *  - periode: satu terbuka per toko; Admin menutup pada hari gaji; menutup = mengikat semua struk kredit terposting
  *    yang belum terikat (billing_period_id) ke periode itu, lalu periode berikutnya langsung dibuka
- *  - invoice: satu per periode tertutup, satu baris per struk (receivable_invoice_lines), dikelompokkan per karyawan saat tampil
+ *  - invoice: satu per periode tertutup, satu baris per struk (receivable_invoice_lines), dikelompokkan per debitur saat tampil
  *  - PPN kredit memakai snapshot yang dihitung saat penjualan; invoice hanya merangkum dasar pajak dan PPN struk
  *  - alur status invoice: draft -> issued -> handed_to_hr -> partially_paid -> paid (pembayaran HRD boleh sebagian [ASUMSI])
  *  - struk yang sudah di-invoice tidak dapat di-void (butuh credit note, Paket 2)

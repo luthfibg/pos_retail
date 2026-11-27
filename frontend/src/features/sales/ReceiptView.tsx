@@ -29,7 +29,7 @@ export function ReceiptView({ sale, paperSize = '80' }: { sale: Sale; paperSize?
 
       {credit && sale.customer_name && (
         <div className="mt-2 border-t border-dashed border-slate-400 pt-2">
-          Karyawan: {sale.customer_name}
+          Debitur: {sale.customer_name}
           {sale.customer_no ? ` (${sale.customer_no})` : ''}
         </div>
       )}

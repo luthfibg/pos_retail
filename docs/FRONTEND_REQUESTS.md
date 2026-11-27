@@ -75,7 +75,7 @@ Kesalahan (422, kunci sama dengan posting agar pemeta error frontend dipakai ula
 |---|---|
 | `items.N.product_id` | produk tidak ada / bukan `active` / belum berharga |
 | `items.N.qty`, `items`, `payment_mode` | validasi bentuk; `payment_mode` juga bila konfigurasi PPN belum lengkap (sama dengan posting) |
-| `customer_id` | kredit tanpa karyawan; karyawan belum diverifikasi, nonaktif, atau batas belum diisi (sama dengan `assertCreditCustomer`) |
+| `customer_id` | kredit tanpa debitur; debitur belum diverifikasi, nonaktif, atau batas belum diisi (sama dengan `assertCreditCustomer`) |
 
 Tidak menjadi galat di pratinjau: stok kurang (→ `stock_sufficient: false`), melebihi batas kredit (→ `exceeds_limit: true`), shift belum dibuka / sedang `counting` (frontend memeriksanya lewat `GET /api/shifts/current`).
 
@@ -93,7 +93,7 @@ Tidak menjadi galat di pratinjau: stok kurang (→ `stock_sufficient: false`), m
 - Produk yang sama di dua baris digabung; `lines[].index` = indeks baris pertama.
 - Stok kurang → 200 dengan `stock_sufficient: false`; batch kedaluwarsa tidak dihitung di `stock_available`.
 - Kredit: `remaining_before/after` benar dan memperhitungkan struk kredit yang belum ditagih; melebihi batas → `exceeds_limit: true`, `remaining_after: "0.00"`, nilai batas tidak ada di respons.
-- 422 untuk produk `pending_price`/`inactive`, karyawan `pending_verification`/`inactive`/batas belum diisi, kredit tanpa `customer_id`.
+- 422 untuk produk `pending_price`/`inactive`, debitur yang belum memiliki batas atau sudah diarsipkan, kredit tanpa `customer_id`.
 - 401 untuk tamu; 403 untuk pengguna tanpa `sales.create`.
 
 ### Di luar cakupan (sengaja tidak diminta)

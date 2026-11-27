@@ -89,7 +89,7 @@ function AnnualReportSummary({ report }: { report: AnnualReceivableReport }) {
         <table className="w-full text-left text-sm">
           <thead className="text-xs text-slate-500">
             <tr>
-              <th className="py-2 pr-3">Karyawan</th>
+              <th className="py-2 pr-3">Debitur</th>
               <th className="py-2 pr-3">Divisi/Bagian</th>
               <th className="py-2 pr-3 text-right">Transaksi</th>
               <th className="py-2 pr-3 text-right">Tagihan</th>

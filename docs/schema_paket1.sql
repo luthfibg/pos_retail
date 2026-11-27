@@ -309,25 +309,36 @@ CREATE TABLE shelf_positions (
   CONSTRAINT fk_sp_shelf FOREIGN KEY (shelf_id) REFERENCES shelves (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Karyawan pabrik sebagai pelanggan. Kasir boleh membuat (pending_verification);
--- Admin memverifikasi dan menetapkan batas kredit.
+-- Debitur didaftarkan Admin; profil resmi dipertahankan saat debitur diarsipkan.
 CREATE TABLE customers (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   store_id BIGINT UNSIGNED NOT NULL,
   customer_no VARCHAR(40) NOT NULL,                 -- nomor induk karyawan
+  ktp_no VARCHAR(16) NULL,
   name VARCHAR(150) NOT NULL,
+  phone VARCHAR(30) NULL,
+  address TEXT NULL,
+  domicile TEXT NULL,
+  company_name VARCHAR(190) NULL,
+  position VARCHAR(100) NULL,
   department VARCHAR(100) NULL,
-  status ENUM('pending_verification','active','inactive') NOT NULL DEFAULT 'pending_verification',
+  employment_type ENUM('permanent','contract') NULL,
+  employment_start_date DATE NULL,
+  hrd_name VARCHAR(150) NULL,
+  hrd_phone VARCHAR(30) NULL,
+  supervisor_name VARCHAR(150) NULL,
+  supervisor_phone VARCHAR(30) NULL,
   created_by BIGINT UNSIGNED NOT NULL,
-  verified_by BIGINT UNSIGNED NULL,
-  verified_at DATETIME(3) NULL,
+  archived_at DATETIME(3) NULL,
+  archived_by BIGINT UNSIGNED NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
   UNIQUE KEY uq_customers_no (store_id, customer_no),
+  UNIQUE KEY uq_customers_ktp (store_id, ktp_no),
   KEY idx_customers_name (name),
   CONSTRAINT fk_cust_creator FOREIGN KEY (created_by) REFERENCES users (id),
-  CONSTRAINT fk_cust_verifier FOREIGN KEY (verified_by) REFERENCES users (id)
+  CONSTRAINT fk_cust_archiver FOREIGN KEY (archived_by) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Batas kredit bulanan (riwayat). Tidak ada baris = belum ada batas (kredit tertahan).

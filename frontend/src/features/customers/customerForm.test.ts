@@ -1,47 +1,110 @@
 import { describe, expect, it } from 'vitest';
 import type { Customer } from '@/lib/api/types';
 import {
-  buildCustomerCreate, buildCustomerUpdate, buildVerifyPayload, emptyCustomer, validateCustomer,
+  buildCustomerCreate, buildCustomerUpdate, emptyCustomer, PAYMENT_STATUS, validateCustomer,
   validateMoney, valuesFromCustomer,
 } from './customerForm';
 
-const active: Customer = {
-  id: 3, customer_no: 'NIK-100', name: 'Budi', department: 'Produksi', status: 'active',
-  credit_state: 'available', credit_remaining: '900000.00', verified_at: '2026-10-23 03:20:00.000',
+const customer: Customer = {
+  id: 3,
+  customer_no: 'NIK-100',
+  ktp_no: '3201234567890001',
+  name: 'Budi',
+  phone: '08123456789',
+  address: 'Jl. KTP No. 1',
+  domicile: 'Jl. Domisili No. 2',
+  company_name: 'PT Contoh',
+  position: 'Operator',
+  department: 'Produksi',
+  employment_type: 'permanent',
+  employment_start_date: '2024-01-15',
+  hrd_name: 'HRD Contoh',
+  hrd_phone: '08123456780',
+  supervisor_name: 'Atasan Contoh',
+  supervisor_phone: '08123456781',
+  credit_state: 'available',
+  credit_remaining: '900000.00',
 };
-const pending: Customer = { ...active, status: 'pending_verification', credit_state: 'not_verified', verified_at: null };
+
+const validValues = () => ({
+  ...emptyCustomer(),
+  customer_no: ' NIK-100 ',
+  ktp_no: ' 3201234567890001 ',
+  name: ' Budi ',
+  phone: ' 08123456789 ',
+  address: ' Jl. KTP No. 1 ',
+  domicile: ' Jl. Domisili No. 2 ',
+  company_name: ' PT Contoh ',
+  position: ' Operator ',
+  department: ' Produksi ',
+  employment_type: 'permanent',
+  employment_start_date: '2024-01-15',
+  hrd_name: ' HRD Contoh ',
+  hrd_phone: ' 08123456780 ',
+  supervisor_name: ' Atasan Contoh ',
+  supervisor_phone: ' 08123456781 ',
+});
 
 describe('validateCustomer', () => {
-  it('NIK dan nama wajib', () => {
-    const e = validateCustomer(emptyCustomer());
-    expect(e.customer_no).toBeTruthy();
-    expect(e.name).toBeTruthy();
+  it('requires all registration profile fields', () => {
+    const errors = validateCustomer(emptyCustomer());
+    expect(errors.customer_no).toBeTruthy();
+    expect(errors.ktp_no).toBeTruthy();
+    expect(errors.name).toBeTruthy();
+    expect(errors.employment_type).toBeTruthy();
+    expect(errors.supervisor_phone).toBeTruthy();
   });
-  it('NIK menolak spasi dan simbol asing, menerima . _ - /', () => {
-    expect(validateCustomer({ ...emptyCustomer(), name: 'A', customerNo: 'A B' }).customer_no).toBeTruthy();
-    expect(validateCustomer({ ...emptyCustomer(), name: 'A', customerNo: 'NIK-1/2_3.4' }).customer_no).toBeUndefined();
+
+  it('validates KTP number, employee number, phone and employment date', () => {
+    const values = {
+      ...validValues(),
+      ktp_no: '123',
+      customer_no: 'NIK #1',
+      phone: 'abc',
+      employment_start_date: '2024-02-31',
+    };
+    const errors = validateCustomer(values);
+    expect(errors.ktp_no).toBeTruthy();
+    expect(errors.customer_no).toBeTruthy();
+    expect(errors.phone).toBeTruthy();
+    expect(errors.employment_start_date).toBeUndefined();
   });
 });
 
-describe('payload', () => {
-  it('tambah: departemen kosong dilewati', () => {
-    expect(buildCustomerCreate({ ...emptyCustomer(), customerNo: ' N1 ', name: ' Ani ' })).toEqual({ customer_no: 'N1', name: 'Ani' });
+describe('customer payloads', () => {
+  it('trims all fields for registration', () => {
+    expect(buildCustomerCreate(validValues())).toEqual({
+      customer_no: 'NIK-100',
+      ktp_no: '3201234567890001',
+      name: 'Budi',
+      phone: '08123456789',
+      address: 'Jl. KTP No. 1',
+      domicile: 'Jl. Domisili No. 2',
+      company_name: 'PT Contoh',
+      position: 'Operator',
+      department: 'Produksi',
+      employment_type: 'permanent',
+      employment_start_date: '2024-01-15',
+      hrd_name: 'HRD Contoh',
+      hrd_phone: '08123456780',
+      supervisor_name: 'Atasan Contoh',
+      supervisor_phone: '08123456781',
+    });
   });
-  it('ubah tanpa perubahan = kosong', () => {
-    expect(buildCustomerUpdate(valuesFromCustomer(active), active)).toEqual({});
+
+  it('does not send unchanged values and sends only the edited profile field', () => {
+    expect(buildCustomerUpdate(valuesFromCustomer(customer), customer)).toEqual({});
+    expect(buildCustomerUpdate({ ...valuesFromCustomer(customer), name: 'Budi Baru' }, customer))
+      .toEqual({ name: 'Budi Baru' });
   });
-  it('mengosongkan departemen dikirim null; status berubah + alasan', () => {
-    const v = { ...valuesFromCustomer(active), department: '', status: 'inactive' as const, reason: 'resign' };
-    expect(buildCustomerUpdate(v, active)).toEqual({ department: null, status: 'inactive', reason: 'resign' });
-  });
-  it('karyawan menunggu verifikasi: status tidak pernah dikirim', () => {
-    const v = { ...valuesFromCustomer(pending), name: 'Budi S', status: 'active' as const };
-    expect(buildCustomerUpdate(v, pending)).toEqual({ name: 'Budi S' });
+
+  it('uses the fixed payroll deduction payment status', () => {
+    expect(PAYMENT_STATUS).toBe('Pemotongan Gaji Tiap Bulan');
   });
 });
 
-describe('uang', () => {
-  it('validateMoney', () => {
+describe('money', () => {
+  it('validates optional and required amounts', () => {
     expect(validateMoney('', true)).toBeTruthy();
     expect(validateMoney('', false)).toBeUndefined();
     expect(validateMoney('1500000', true)).toBeUndefined();
@@ -49,9 +112,5 @@ describe('uang', () => {
     expect(validateMoney('1.5', false)).toBeUndefined();
     expect(validateMoney('abc', true)).toBeTruthy();
     expect(validateMoney('-5', true)).toBeTruthy();
-  });
-  it('payload verifikasi: batas hanya dikirim bila berwenang', () => {
-    expect(buildVerifyPayload('1500000', 'ok', true)).toEqual({ credit_limit: '1500000', note: 'ok' });
-    expect(buildVerifyPayload('1500000', '', false)).toEqual({});
   });
 });

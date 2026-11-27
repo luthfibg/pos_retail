@@ -11,23 +11,20 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Data karyawan (customers) untuk penjualan kredit potong gaji.
- *  - Kasir menginput: status pending_verification (hanya tunai) + notifikasi ke pemegang customer.set_limit
- *  - Admin memverifikasi (customer.verify) dan menetapkan batas kredit bulanan (customer.set_limit)
- *  - kredit ditahan selama batas belum diisi (R-09, ASUMSI); batas disimpan sebagai riwayat, yang berlaku = terbaru
- *  - nilai batas hanya terlihat oleh pemegang customer.set_limit; Kasir hanya melihat credit_state dan sisa batas
+ * Data debitur (customers) untuk pendaftaran resmi dan penjualan kredit potong gaji.
+ *  - Pendaftaran dan arsip hanya dilakukan Admin; pengarsipan tidak menghapus riwayat transaksi.
+ *  - Kredit ditahan selama batas belum diisi; batas disimpan sebagai riwayat, yang berlaku = terbaru
+ *  - Nilai batas hanya terlihat oleh pemegang customer.set_limit; Kasir hanya melihat credit_state dan sisa batas
  *  - pemakaian = total struk payroll_credit yang belum ditagih (PPN diestimasi nanti, R-04)
  */
 class CustomerService
 {
-    public const NOTIFICATION_LIMIT_NEEDED = 'customer.limit_needed';
-
-    public function __construct(private AuditLogger $audit, private NotificationService $notifications)
+    public function __construct(private AuditLogger $audit)
     {
     }
 
     /** @param array<string, mixed> $filters */
-    public function search(int $storeId, array $filters, int $perPage, bool $seeLimit): LengthAwarePaginator
+    public function search(int $storeId, array $filters, int $perPage, bool $seeLimit, bool $seeProfile, bool $seeArchived): LengthAwarePaginator
     {
         $query = $this->baseQuery($storeId);
 
@@ -38,20 +35,26 @@ class CustomerService
             });
         }
 
-        if (! empty($filters['status'])) {
-            $query->where('customers.status', $filters['status']);
+        if ($seeArchived && ! empty($filters['archived'])) {
+            $query->whereNotNull('customers.archived_at');
+        } else {
+            $query->whereNull('customers.archived_at');
         }
 
         return $query->orderBy('customers.name')->paginate($perPage)
-            ->through(fn ($row) => $this->present($row, $seeLimit));
+            ->through(fn ($row) => $this->present($row, $seeLimit, $seeProfile));
     }
 
     /** @return array<string, mixed>|null */
-    public function find(int $storeId, int $id, bool $seeLimit): ?array
+    public function find(int $storeId, int $id, bool $seeLimit, bool $seeProfile, bool $includeArchived = false): ?array
     {
-        $row = $this->baseQuery($storeId)->where('customers.id', $id)->first();
+        $query = $this->baseQuery($storeId)->where('customers.id', $id);
+        if (! $includeArchived) {
+            $query->whereNull('customers.archived_at');
+        }
+        $row = $query->first();
 
-        return $row === null ? null : $this->present($row, $seeLimit);
+        return $row === null ? null : $this->present($row, $seeLimit, $seeProfile);
     }
 
     /**
@@ -65,9 +68,20 @@ class CustomerService
                 $id = DB::table('customers')->insertGetId([
                     'store_id' => $storeId,
                     'customer_no' => $data['customer_no'],
+                    'ktp_no' => $data['ktp_no'],
                     'name' => $data['name'],
-                    'department' => $data['department'] ?? null,
-                    'status' => 'pending_verification',
+                    'phone' => $data['phone'],
+                    'address' => $data['address'],
+                    'domicile' => $data['domicile'],
+                    'company_name' => $data['company_name'],
+                    'position' => $data['position'],
+                    'department' => $data['department'],
+                    'employment_type' => $data['employment_type'],
+                    'employment_start_date' => $data['employment_start_date'],
+                    'hrd_name' => $data['hrd_name'],
+                    'hrd_phone' => $data['hrd_phone'],
+                    'supervisor_name' => $data['supervisor_name'],
+                    'supervisor_phone' => $data['supervisor_phone'],
                     'created_by' => $actor->id,
                 ]);
 
@@ -75,143 +89,127 @@ class CustomerService
                     'customer.create',
                     'customer',
                     $id,
-                    after: ['customer_no' => $data['customer_no'], 'name' => $data['name'], 'department' => $data['department'] ?? null, 'status' => 'pending_verification'],
+                    after: ['customer_no' => $data['customer_no'], 'name' => $data['name'], 'department' => $data['department']],
                     storeId: $storeId,
                     actorId: $actor->id,
-                );
-
-                $this->notifications->notifyPermission(
-                    $storeId,
-                    'customer.set_limit',
-                    self::NOTIFICATION_LIMIT_NEEDED,
-                    "Karyawan baru {$data['name']} ({$data['customer_no']}) perlu diverifikasi dan diberi batas kredit.",
-                    'customer',
-                    $id,
-                    exceptUserId: $actor->id,
                 );
 
                 return $id;
             });
         } catch (UniqueConstraintViolationException) {
-            throw ValidationException::withMessages(['customer_no' => ['Nomor induk karyawan sudah terdaftar.']]);
+            $field = DB::table('customers')->where('store_id', $storeId)->where('ktp_no', $data['ktp_no'])->exists()
+                ? 'ktp_no'
+                : 'customer_no';
+            $message = $field === 'ktp_no' ? 'Nomor KTP sudah terdaftar.' : 'Nomor induk karyawan sudah terdaftar.';
+            throw ValidationException::withMessages([$field => [$message]]);
         }
 
-        return $this->find($storeId, $id, $seeLimit);
+        return $this->find($storeId, $id, $seeLimit, true)
+            ?? throw new \LogicException('Debitur yang baru dibuat tidak ditemukan.');
     }
 
     /**
-     * @param  array<string, mixed>  $data  customer_no, name, department, status (active|inactive), reason
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     public function update(User $actor, int $storeId, int $id, array $data, bool $seeLimit): array
     {
         try {
             DB::transaction(function () use ($actor, $storeId, $id, $data) {
-                $current = DB::table('customers')->where('store_id', $storeId)->where('id', $id)->lockForUpdate()->first();
-                abort_if($current === null, 404, 'Karyawan tidak ditemukan.');
+                $current = DB::table('customers')->where('store_id', $storeId)->where('id', $id)
+                    ->whereNull('archived_at')->lockForUpdate()->first();
+                abort_if($current === null, 404, 'Debitur tidak ditemukan.');
 
                 $changes = [];
-                foreach (['customer_no', 'name', 'department'] as $field) {
+                foreach ([
+                    'customer_no', 'ktp_no', 'name', 'phone', 'address', 'domicile', 'company_name',
+                    'position', 'department', 'employment_type', 'employment_start_date',
+                    'hrd_name', 'hrd_phone', 'supervisor_name', 'supervisor_phone',
+                ] as $field) {
                     if (array_key_exists($field, $data) && $data[$field] !== $current->{$field}) {
                         $changes[$field] = $data[$field];
                     }
                 }
-
-                $statusChanged = array_key_exists('status', $data) && $data['status'] !== $current->status;
-                if ($statusChanged && $current->status === 'pending_verification') {
-                    throw ValidationException::withMessages(['status' => ['Karyawan yang belum diverifikasi harus melalui verifikasi.']]);
-                }
-
-                if ($changes === [] && ! $statusChanged) {
+                if ($changes === []) {
                     return;
                 }
 
-                $columns = $changes + ($statusChanged ? ['status' => $data['status']] : []);
-                DB::table('customers')->where('id', $id)->update($columns);
+                DB::table('customers')->where('id', $id)->update($changes);
 
                 if ($changes !== []) {
-                    $before = [];
-                    foreach (array_keys($changes) as $field) {
-                        $before[$field] = $current->{$field};
-                    }
-                    $this->audit->log('customer.update', 'customer', $id, before: $before, after: $changes, storeId: $storeId, actorId: $actor->id);
-                }
-
-                if ($statusChanged) {
+                    $changedFields = array_keys($changes);
                     $this->audit->log(
-                        'customer.status_change',
+                        'customer.update',
                         'customer',
                         $id,
-                        before: ['status' => $current->status],
-                        after: ['status' => $data['status']],
-                        reason: $data['reason'] ?? null,
+                        before: ['updated_fields' => $changedFields],
+                        after: ['updated_fields' => $changedFields],
                         storeId: $storeId,
                         actorId: $actor->id,
                     );
                 }
             });
         } catch (UniqueConstraintViolationException) {
-            throw ValidationException::withMessages(['customer_no' => ['Nomor induk karyawan sudah terdaftar.']]);
+            $field = DB::table('customers')->where('store_id', $storeId)->where('ktp_no', $data['ktp_no'] ?? null)
+                ->where('id', '!=', $id)->exists() ? 'ktp_no' : 'customer_no';
+            $message = $field === 'ktp_no' ? 'Nomor KTP sudah terdaftar.' : 'Nomor induk karyawan sudah terdaftar.';
+            throw ValidationException::withMessages([$field => [$message]]);
         }
 
-        return $this->find($storeId, $id, $seeLimit);
+        return $this->find($storeId, $id, $seeLimit, true)
+            ?? throw new \LogicException('Debitur yang diperbarui tidak ditemukan.');
     }
 
-    /**
-     * Verifikasi karyawan (opsional sekaligus menetapkan batas).
-     *
-     * @return array<string, mixed>
-     */
-    public function verify(User $actor, int $storeId, int $id, ?string $limitAmount, ?string $note, bool $canSetLimit): array
+    public function archive(User $actor, int $storeId, int $id): void
     {
-        abort_if($limitAmount !== null && ! $canSetLimit, 403, 'Anda tidak berwenang menetapkan batas kredit.');
+        DB::transaction(function () use ($actor, $storeId, $id) {
+            $current = DB::table('customers')->where('store_id', $storeId)->where('id', $id)
+                ->whereNull('archived_at')->lockForUpdate()->first();
+            abort_if($current === null, 404, 'Debitur tidak ditemukan.');
 
-        DB::transaction(function () use ($actor, $storeId, $id, $limitAmount, $note) {
-            $current = DB::table('customers')->where('store_id', $storeId)->where('id', $id)->lockForUpdate()->first();
-            abort_if($current === null, 404, 'Karyawan tidak ditemukan.');
-
-            if ($current->status !== 'pending_verification') {
-                throw ValidationException::withMessages(['status' => ['Karyawan ini sudah diverifikasi.']]);
-            }
-
+            $archivedAt = $this->now();
             DB::table('customers')->where('id', $id)->update([
-                'status' => 'active',
-                'verified_by' => $actor->id,
-                'verified_at' => $this->now(),
+                'archived_at' => $archivedAt,
+                'archived_by' => $actor->id,
             ]);
+            $this->audit->log('customer.archive', 'customer', $id, after: ['archived_at' => $archivedAt], storeId: $storeId, actorId: $actor->id);
+        });
+    }
 
+    public function restore(User $actor, int $storeId, int $id): void
+    {
+        DB::transaction(function () use ($actor, $storeId, $id) {
+            $current = DB::table('customers')->where('store_id', $storeId)->where('id', $id)
+                ->whereNotNull('archived_at')->lockForUpdate()->first();
+            abort_if($current === null, 404, 'Debitur arsip tidak ditemukan.');
+
+            DB::table('customers')->where('id', $id)->update(['archived_at' => null, 'archived_by' => null]);
             $this->audit->log(
-                'customer.verify',
+                'customer.restore',
                 'customer',
                 $id,
-                before: ['status' => 'pending_verification'],
-                after: ['status' => 'active'],
+                before: ['archived_at' => $current->archived_at],
+                after: ['archived_at' => null],
                 storeId: $storeId,
                 actorId: $actor->id,
             );
-
-            if ($limitAmount !== null) {
-                $this->writeLimit($actor, $storeId, $id, $limitAmount, $note, previous: null);
-            }
         });
-
-        return $this->find($storeId, $id, true);
     }
 
     /**
-     * Menetapkan batas kredit bulanan. Hanya untuk karyawan aktif (terverifikasi). Nilai sama = tidak ada catatan baru.
+     * Menetapkan batas kredit bulanan. Nilai sama = tidak ada catatan baru.
      *
      * @return array<string, mixed>
      */
-    public function setLimit(User $actor, int $storeId, int $id, string $limitAmount, ?string $note): array
+    public function setLimit(User $actor, int $storeId, int $id, string $limitAmount, ?string $note, bool $seeProfile): array
     {
         DB::transaction(function () use ($actor, $storeId, $id, $limitAmount, $note) {
             $current = DB::table('customers')->where('store_id', $storeId)->where('id', $id)->lockForUpdate()->first();
-            abort_if($current === null, 404, 'Karyawan tidak ditemukan.');
+            abort_if($current === null, 404, 'Debitur tidak ditemukan.');
 
-            if ($current->status !== 'active') {
+            if ($current->archived_at !== null) {
                 throw ValidationException::withMessages([
-                    'limit_amount' => ['Batas kredit hanya dapat ditetapkan untuk karyawan aktif dan terverifikasi.'],
+                    'limit_amount' => ['Batas kredit tidak dapat diubah untuk debitur yang diarsipkan.'],
                 ]);
             }
 
@@ -224,13 +222,14 @@ class CustomerService
             $this->writeLimit($actor, $storeId, $id, $limitAmount, $note, $previous);
         });
 
-        return $this->find($storeId, $id, true);
+        return $this->find($storeId, $id, true, $seeProfile)
+            ?? throw new \LogicException('Debitur tidak ditemukan setelah batas kredit diperbarui.');
     }
 
     /** @return list<array<string, mixed>> */
     public function limitHistory(int $storeId, int $id): array
     {
-        abort_if(! DB::table('customers')->where('store_id', $storeId)->where('id', $id)->exists(), 404, 'Karyawan tidak ditemukan.');
+        abort_if(! DB::table('customers')->where('store_id', $storeId)->where('id', $id)->exists(), 404, 'Debitur tidak ditemukan.');
 
         return DB::table('customer_credit_limits as l')
             ->leftJoin('users as u', 'u.id', '=', 'l.set_by')
@@ -269,8 +268,6 @@ class CustomerService
             storeId: $storeId,
             actorId: $actor->id,
         );
-
-        $this->notifications->resolveForEntity($storeId, self::NOTIFICATION_LIMIT_NEEDED, 'customer', $customerId);
     }
 
     private function currentLimit(int $customerId): ?string
@@ -297,17 +294,14 @@ class CustomerService
     }
 
     /** @return array<string, mixed> */
-    private function present(object $row, bool $seeLimit): array
+    private function present(object $row, bool $seeLimit, bool $seeProfile): array
     {
-        $state = match (true) {
-            $row->status === 'pending_verification' => 'not_verified',
-            $row->status === 'inactive' => 'inactive',
-            $row->credit_limit === null => 'limit_not_set',
-            default => 'available',
-        };
+        $state = $row->archived_at !== null
+            ? 'archived'
+            : ($row->credit_limit === null ? 'limit_not_set' : 'available');
 
         $remaining = null;
-        if ($row->credit_limit !== null && $row->status === 'active') {
+        if ($row->credit_limit !== null && $row->archived_at === null) {
             $units = Decimal::money((string) $row->credit_limit) - Decimal::money((string) $row->credit_used);
             $remaining = Decimal::moneyString(max(0, $units));
             if ($units <= 0) {
@@ -320,11 +314,27 @@ class CustomerService
             'customer_no' => $row->customer_no,
             'name' => $row->name,
             'department' => $row->department,
-            'status' => $row->status,
             'credit_state' => $state,
             'credit_remaining' => $remaining,
-            'verified_at' => $row->verified_at,
         ];
+
+        if ($seeProfile) {
+            $out += [
+                'ktp_no' => $row->ktp_no,
+                'phone' => $row->phone,
+                'address' => $row->address,
+                'domicile' => $row->domicile,
+                'company_name' => $row->company_name,
+                'position' => $row->position,
+                'employment_type' => $row->employment_type,
+                'employment_start_date' => $row->employment_start_date,
+                'hrd_name' => $row->hrd_name,
+                'hrd_phone' => $row->hrd_phone,
+                'supervisor_name' => $row->supervisor_name,
+                'supervisor_phone' => $row->supervisor_phone,
+                'archived_at' => $row->archived_at,
+            ];
+        }
 
         if ($seeLimit) {
             $out['credit_limit'] = $row->credit_limit;

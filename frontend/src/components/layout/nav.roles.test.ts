@@ -11,12 +11,12 @@ import { getVisibleNavGroups, type NavGroup } from './nav';
  */
 const PERMISSIONS: Record<string, string[]> = {
   Kasir: [
-    'product.create', 'shelf_layout.view', 'inventory.view', 'customer.create', 'customer.select', 'purchase_requisition.create',
+    'product.create', 'shelf_layout.view', 'inventory.view', 'customer.select', 'purchase_requisition.create',
     'goods_receipt.create', 'supplier_return.create', 'stock_transfer.create', 'sales.create', 'receipt.reprint', 'shift.open',
     'shift.close', 'float.propose', 'cash_deposit.create', 'reports.view',
   ],
   Finance: [
-    'inventory.view', 'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit', 'purchase_requisition.finance_check',
+    'inventory.view', 'customer.select', 'customer.set_limit', 'purchase_requisition.finance_check',
     'shift.review', 'float.propose', 'cash_deposit.receive', 'financial.report.view', 'financial.transaction.create', 'receipt.reprint', 'reports.view',
   ],
   Purchasing: [
@@ -29,8 +29,8 @@ const PERMISSIONS: Record<string, string[]> = {
   ],
   Owner: [
     'user.manage', 'role.manage', 'settings.manage', 'audit_log.view', 'inventory.opening_balance', 'product.activate', 'price.change', 'discount.manage',
-    'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve', 'customer.select', 'customer.update',
-    'customer.verify', 'customer.set_limit', 'purchase_requisition.approve', 'sales.credit_exception', 'receipt.reprint',
+    'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve', 'customer.select',
+    'customer.set_limit', 'purchase_requisition.approve', 'sales.credit_exception', 'receipt.reprint',
     'shift.review', 'float.configure', 'reports.view', 'financial.report.view', 'opname.view', 'opname.create', 'opname.cancel',
   ],
 };
@@ -106,7 +106,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Permintaan Pembelian',
       'Inventory > Penerimaan Barang, Stok Barang, Retur Barang, Pergerakan Stok',
       'Penjualan > Kasir Jaga, Kasir, Data struk penjualan',
-      'Karyawan',
+      'Data Debitur',
       'Pengaturan',
     ]);
   });
@@ -117,7 +117,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Pergerakan Stok',
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Keuangan',
-      'Karyawan',
+      'Data Debitur',
     ]);
   });
 
@@ -144,7 +144,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Permintaan Pembelian',
       'Inventory > Stok Barang, Retur Barang, Stok Opname, Pergerakan Stok',
       'Keuangan > Laporan Kasir Jaga, Laporan Keuangan',
-      'Karyawan',
+      'Data Debitur',
       'Pengaturan',
     ]);
   });
@@ -156,7 +156,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Inventory > Stok Barang, Retur Barang, Stok Opname, Pergerakan Stok',
       'Data struk penjualan',
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang, Laporan Keuangan',
-      'Data Master > Kategori, Supplier, Karyawan',
+      'Data Master > Kategori, Supplier, Data Debitur',
       'Pengaturan',
     ]);
   });

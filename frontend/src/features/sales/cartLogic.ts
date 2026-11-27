@@ -102,7 +102,7 @@ export function validateTendered(raw: string, total: Decimal | null): string | u
 
 export interface PaymentChoice {
   mode: PaymentMode;
-  /** Karyawan terpilih; wajib untuk kredit, boleh ada untuk tunai. */
+  /** Debitur terpilih; wajib untuk kredit, boleh ada untuk tunai. */
   customerId: number | null;
   /** Hanya dipakai untuk tunai. */
   tendered: string;

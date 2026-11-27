@@ -7,118 +7,155 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { Modal } from '@/components/ui/Modal';
 import { Field, inputCls } from '@/components/ui/Field';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
-import { formatDateTime, formatRupiah } from '@/lib/format';
-import { CreditStateBadge, CustomerStatusBadge } from './CustomerBadges';
+import { formatDate, formatDateTime, formatRupiah } from '@/lib/format';
+import { CreditStateBadge } from './CustomerBadges';
 import { CREDIT_HINT } from './creditState';
 import { CustomerFormDialog } from './CustomerFormDialog';
-import { buildVerifyPayload, validateMoney } from './customerForm';
+import { validateMoney } from './customerForm';
 import { normalizeDecimal } from '@/features/products/productForm';
 
-type Panel = 'none' | 'verify' | 'limit';
+type Props = {
+  customerId: number;
+  onClose: () => void;
+  onPrint: (customer: Customer) => void;
+};
 
-export function CustomerDetailDialog({ customerId, onClose }: { customerId: number; onClose: () => void }) {
-  const { can } = useAuth();
-  const [panel, setPanel] = useState<Panel>('none');
+export function CustomerDetailDialog({ customerId, onClose, onPrint }: Props) {
+  const { can, me } = useAuth();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [showLimitForm, setShowLimitForm] = useState(false);
   const query = useQuery({ queryKey: ['customers', customerId], queryFn: () => customerApi.get(customerId) });
-  const c = query.data;
-
-  const isAdminView = can('customer.set_limit'); // pemilik izin ini menerima nilai batas
+  const customer = query.data;
+  const isAdmin = me?.roles.includes('Admin') === true;
+  const isArchived = Boolean(customer?.archived_at);
   const history = useQuery({
     queryKey: ['customers', customerId, 'limits'],
     queryFn: () => customerApi.limitHistory(customerId),
-    enabled: isAdminView,
+    enabled: can('customer.set_limit'),
   });
 
-  if (editing && c) return <CustomerFormDialog customer={c} onClose={() => setEditing(false)} />;
+  const archiveMutation = useMutation({
+    mutationFn: () => customerApi.archive(customerId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+      onClose();
+    },
+  });
+  const restoreMutation = useMutation({
+    mutationFn: () => customerApi.restore(customerId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+      void queryClient.invalidateQueries({ queryKey: ['customers', customerId] });
+      onClose();
+    },
+  });
+
+  if (editing && customer) {
+    return <CustomerFormDialog customer={customer} onClose={() => setEditing(false)} onPrint={onPrint} />;
+  }
 
   return (
-    <Modal title={c ? `${c.name} — ${c.customer_no}` : 'Detail karyawan'} onClose={onClose}>
+    <Modal title={customer ? `${customer.name} — ${customer.customer_no}` : 'Detail debitur'} onClose={onClose}>
       <div className="space-y-4 p-5 text-sm">
         <ErrorNotice error={query.error} />
+        <ErrorNotice error={archiveMutation.error} />
+        <ErrorNotice error={restoreMutation.error} />
         {query.isLoading && <p className="text-slate-500">Memuat…</p>}
-
-        {c && (
+        {customer && (
           <>
-            <dl className="grid grid-cols-[8rem_1fr] gap-y-2">
-              <dt className="text-slate-500">Departemen</dt><dd>{c.department ?? '—'}</dd>
-              <dt className="text-slate-500">Status</dt><dd><CustomerStatusBadge status={c.status} /></dd>
-              <dt className="text-slate-500">Diverifikasi</dt><dd>{formatDateTime(c.verified_at)}</dd>
-              <dt className="text-slate-500">Kredit</dt>
-              <dd>
-                <CreditStateBadge state={c.credit_state} />
-                <p className="mt-1 text-slate-600">{CREDIT_HINT[c.credit_state]}</p>
-              </dd>
-              {c.credit_remaining !== null && (
+            {isArchived && <p className="rounded-md bg-slate-100 p-3 font-medium text-slate-700">Debitur diarsipkan pada {formatDateTime(customer.archived_at)}.</p>}
+            <dl className="grid grid-cols-[10rem_1fr] gap-y-2">
+              <dt className="text-slate-500">Nomor Induk Karyawan</dt><dd>{customer.customer_no}</dd>
+              <dt className="text-slate-500">Nama</dt><dd>{customer.name}</dd>
+              <dt className="text-slate-500">Departemen/Divisi</dt><dd>{customer.department ?? '—'}</dd>
+              {isAdmin && (
                 <>
-                  <dt className="text-slate-500">Sisa batas</dt>
-                  <dd className="font-medium tabular-nums">{formatRupiah(c.credit_remaining)}</dd>
+                  <dt className="text-slate-500">Nomor KTP</dt><dd>{customer.ktp_no || '—'}</dd>
+                  <dt className="text-slate-500">Nomor Telepon/HP</dt><dd>{customer.phone || '—'}</dd>
+                  <dt className="text-slate-500">Alamat sesuai KTP</dt><dd>{customer.address || '—'}</dd>
+                  <dt className="text-slate-500">Domisili sekarang</dt><dd>{customer.domicile || '—'}</dd>
+                  <dt className="text-slate-500">Perusahaan</dt><dd>{customer.company_name || '—'}</dd>
+                  <dt className="text-slate-500">Jabatan</dt><dd>{customer.position || '—'}</dd>
+                  <dt className="text-slate-500">Status karyawan</dt><dd>{customer.employment_type === 'contract' ? 'Kontrak' : customer.employment_type === 'permanent' ? 'Tetap' : '—'}</dd>
+                  <dt className="text-slate-500">Mulai bekerja</dt><dd>{customer.employment_start_date ? formatDate(customer.employment_start_date) : '—'}</dd>
+                  <dt className="text-slate-500">Nama HRD</dt><dd>{customer.hrd_name || '—'}</dd>
+                  <dt className="text-slate-500">Telepon/HP HRD</dt><dd>{customer.hrd_phone || '—'}</dd>
+                  <dt className="text-slate-500">Atasan langsung</dt><dd>{customer.supervisor_name || '—'}</dd>
+                  <dt className="text-slate-500">Telepon/HP atasan</dt><dd>{customer.supervisor_phone || '—'}</dd>
                 </>
               )}
-              {isAdminView && (
+              <dt className="text-slate-500">Kredit</dt>
+              <dd><CreditStateBadge state={customer.credit_state} /><p className="mt-1 text-slate-600">{CREDIT_HINT[customer.credit_state]}</p></dd>
+              {customer.credit_remaining !== null && (
+                <><dt className="text-slate-500">Sisa batas</dt><dd className="font-medium tabular-nums">{formatRupiah(customer.credit_remaining)}</dd></>
+              )}
+              {can('customer.set_limit') && (
                 <>
-                  <dt className="text-slate-500">Batas bulanan</dt>
-                  <dd className="tabular-nums">{c.credit_limit != null ? formatRupiah(c.credit_limit) : 'Belum diisi'}</dd>
-                  <dt className="text-slate-500">Terpakai</dt>
-                  <dd className="tabular-nums">{formatRupiah(c.credit_used ?? '0')}</dd>
+                  <dt className="text-slate-500">Batas bulanan</dt><dd className="tabular-nums">{customer.credit_limit != null ? formatRupiah(customer.credit_limit) : 'Belum diisi'}</dd>
+                  <dt className="text-slate-500">Terpakai</dt><dd className="tabular-nums">{formatRupiah(customer.credit_used ?? '0')}</dd>
                 </>
               )}
             </dl>
 
-            {panel === 'verify' && <VerifyForm customer={c} onDone={() => setPanel('none')} onCancel={() => setPanel('none')} />}
-            {panel === 'limit' && <LimitForm customer={c} onDone={() => setPanel('none')} onCancel={() => setPanel('none')} />}
-
-            {panel === 'none' && (
-              <div className="flex flex-wrap gap-2">
-                {c.status === 'pending_verification' && can('customer.verify') && (
-                  <button type="button" onClick={() => setPanel('verify')} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Verifikasi</button>
-                )}
-                {c.status === 'active' && can('customer.set_limit') && (
-                  <button
-                    type="button"
-                    onClick={() => setPanel('limit')}
-                    className={`rounded-md px-3 py-2 text-sm font-medium ${c.credit_state === 'limit_not_set' ? 'bg-slate-900 text-white' : 'border border-slate-300 hover:bg-slate-50'}`}
-                  >
-                    {c.credit_state === 'limit_not_set' ? 'Isi batas kredit' : 'Ubah batas kredit'}
+            {showLimitForm && <LimitForm customer={customer} onDone={() => setShowLimitForm(false)} onCancel={() => setShowLimitForm(false)} />}
+            {confirmArchive && (
+              <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
+                <p>Arsipkan debitur ini? Riwayat transaksi dan tagihan tetap tersimpan, tetapi debitur tidak dapat dipilih untuk transaksi baru.</p>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setConfirmArchive(false)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">Batal</button>
+                  <button type="button" disabled={archiveMutation.isPending} onClick={() => archiveMutation.mutate()} className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+                    {archiveMutation.isPending ? 'Mengarsipkan…' : 'Konfirmasi arsip'}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {!showLimitForm && !confirmArchive && (
+              <div className="flex flex-wrap gap-2">
+                {isAdmin && (
+                  <>
+                    <button type="button" onClick={() => onPrint(customer)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Cetak bukti pendaftaran</button>
+                    {!isArchived && <button type="button" onClick={() => setEditing(true)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Ubah data</button>}
+                    {isArchived
+                      ? <button type="button" disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate()} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Pulihkan dari arsip</button>
+                      : <button type="button" onClick={() => setConfirmArchive(true)} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-700">Arsipkan debitur</button>}
+                  </>
                 )}
-                {can('customer.update') && (
-                  <button type="button" onClick={() => setEditing(true)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Ubah data</button>
+                {!isArchived && can('customer.set_limit') && (
+                  <button type="button" onClick={() => setShowLimitForm(true)} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">
+                    {customer.credit_state === 'limit_not_set' ? 'Isi batas kredit' : 'Ubah batas kredit'}
+                  </button>
                 )}
               </div>
             )}
 
-            {isAdminView && (
-              <div>
+            {can('customer.set_limit') && (
+              <section>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-slate-500">Riwayat batas kredit</h3>
                 {history.isLoading && <p className="text-slate-500">Memuat…</p>}
-                {history.data && history.data.length === 0 && <p className="text-slate-500">Belum ada batas yang ditetapkan.</p>}
+                {history.data?.length === 0 && <p className="text-slate-500">Belum ada batas yang ditetapkan.</p>}
                 {history.data && history.data.length > 0 && (
                   <div className="overflow-x-auto rounded-md border border-slate-200">
                     <table className="w-full text-left">
                       <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                        <tr>
-                          <th className="px-3 py-2">Berlaku sejak</th>
-                          <th className="px-3 py-2 text-right">Batas</th>
-                          <th className="px-3 py-2">Oleh</th>
-                          <th className="px-3 py-2">Catatan</th>
-                        </tr>
+                        <tr><th className="px-3 py-2">Berlaku sejak</th><th className="px-3 py-2 text-right">Batas</th><th className="px-3 py-2">Oleh</th><th className="px-3 py-2">Catatan</th></tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {history.data.map((h) => (
-                          <tr key={h.id}>
-                            <td className="whitespace-nowrap px-3 py-2">{formatDateTime(h.effective_from)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(h.limit_amount)}</td>
-                            <td className="px-3 py-2">{h.set_by_name ?? '—'}</td>
-                            <td className="px-3 py-2 text-slate-600">{h.note ?? '—'}</td>
+                        {history.data.map((item) => (
+                          <tr key={item.id}>
+                            <td className="whitespace-nowrap px-3 py-2">{formatDateTime(item.effective_from)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{formatRupiah(item.limit_amount)}</td>
+                            <td className="px-3 py-2">{item.set_by_name ?? '—'}</td>
+                            <td className="px-3 py-2 text-slate-600">{item.note ?? '—'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 )}
-              </div>
+              </section>
             )}
           </>
         )}
@@ -130,109 +167,42 @@ export function CustomerDetailDialog({ customerId, onClose }: { customerId: numb
   );
 }
 
-// ---------------------------------------------------------------- verifikasi
-
-function VerifyForm({ customer, onDone, onCancel }: { customer: Customer; onDone: () => void; onCancel: () => void }) {
-  const { can } = useAuth();
-  const qc = useQueryClient();
-  const canSetLimit = can('customer.set_limit');
-  const [limit, setLimit] = useState('');
-  const [note, setNote] = useState('');
-  const [limitError, setLimitError] = useState<string | undefined>();
-
-  const mutation = useMutation({
-    mutationFn: () => customerApi.verify(customer.id, buildVerifyPayload(limit, note, canSetLimit)),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['customers'] });
-      void qc.invalidateQueries({ queryKey: ['notifications'] });
-      onDone();
-    },
-  });
-
-  const server = mutation.error instanceof ApiError && mutation.error.status === 422 ? mutation.error.errors ?? {} : {};
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (mutation.isPending) return;
-    mutation.reset();
-    const msg = canSetLimit ? validateMoney(limit, false) : undefined;
-    setLimitError(msg);
-    if (msg) return;
-    mutation.mutate();
-  }
-
-  return (
-    <form onSubmit={submit} noValidate className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4">
-      <h3 className="font-medium">Verifikasi karyawan</h3>
-      {!(mutation.error instanceof ApiError && mutation.error.status === 422) && <ErrorNotice error={mutation.error} />}
-      {canSetLimit && (
-        <Field
-          label="Batas kredit bulanan (Rp, opsional)"
-          error={limitError ?? server.credit_limit?.[0]}
-          hint="Kosongkan bila batas belum ditetapkan; kredit tetap ditahan sampai batas diisi."
-        >
-          <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={limit} onChange={(e) => setLimit(e.target.value)} autoFocus />
-        </Field>
-      )}
-      <Field label="Catatan (opsional)" error={server.note?.[0]}>
-        <input className={inputCls} value={note} maxLength={255} onChange={(e) => setNote(e.target.value)} placeholder="mis. 60% gaji sesuai HRD" />
-      </Field>
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} disabled={mutation.isPending} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Batal</button>
-        <button type="submit" disabled={mutation.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-          {mutation.isPending ? 'Memproses…' : 'Verifikasi'}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-// ---------------------------------------------------------------- batas kredit
-
 function LimitForm({ customer, onDone, onCancel }: { customer: Customer; onDone: () => void; onCancel: () => void }) {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   const [amount, setAmount] = useState(customer.credit_limit ?? '');
   const [note, setNote] = useState('');
   const [amountError, setAmountError] = useState<string | undefined>();
-
   const mutation = useMutation({
-    mutationFn: () =>
-      customerApi.setLimit(customer.id, { limit_amount: normalizeDecimal(amount), ...(note.trim() ? { note: note.trim() } : {}) }),
+    mutationFn: () => customerApi.setLimit(customer.id, { limit_amount: normalizeDecimal(amount), ...(note.trim() ? { note: note.trim() } : {}) }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['customers'] });
-      // backend menandai notifikasi "perlu batas" terbaca saat batas diisi
-      void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
       onDone();
     },
   });
+  const serverErrors = mutation.error instanceof ApiError && mutation.error.status === 422 ? mutation.error.errors ?? {} : {};
 
-  const server = mutation.error instanceof ApiError && mutation.error.status === 422 ? mutation.error.errors ?? {} : {};
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit(event: FormEvent) {
+    event.preventDefault();
     if (mutation.isPending) return;
     mutation.reset();
-    const msg = validateMoney(amount, true);
-    setAmountError(msg);
-    if (msg) return;
-    mutation.mutate();
+    const error = validateMoney(amount, true);
+    setAmountError(error);
+    if (!error) mutation.mutate();
   }
 
   return (
     <form onSubmit={submit} noValidate className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4">
       <h3 className="font-medium">Batas kredit bulanan</h3>
-      {!(mutation.error instanceof ApiError && mutation.error.status === 422) && <ErrorNotice error={mutation.error} />}
-      <Field label="Batas (Rp)" error={amountError ?? server.limit_amount?.[0]} hint="Perubahan dicatat di riwayat dan berlaku sejak disimpan.">
-        <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+      <ErrorNotice error={mutation.error} />
+      <Field label="Batas (Rp)" error={amountError ?? serverErrors.limit_amount?.[0]}>
+        <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
       </Field>
-      <Field label="Catatan (opsional)" error={server.note?.[0]}>
-        <input className={inputCls} value={note} maxLength={255} onChange={(e) => setNote(e.target.value)} />
+      <Field label="Catatan (opsional)" error={serverErrors.note?.[0]}>
+        <input className={inputCls} value={note} maxLength={255} onChange={(event) => setNote(event.target.value)} />
       </Field>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} disabled={mutation.isPending} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">Batal</button>
-        <button type="submit" disabled={mutation.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-          {mutation.isPending ? 'Menyimpan…' : 'Simpan'}
-        </button>
+        <button type="button" onClick={onCancel} disabled={mutation.isPending} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">Batal</button>
+        <button type="submit" disabled={mutation.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">Simpan</button>
       </div>
     </form>
   );

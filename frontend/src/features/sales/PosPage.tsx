@@ -165,7 +165,7 @@ export function PosPage() {
     }
     if (mode === 'payroll_credit') {
       if (!customer || !canPayCredit) {
-        setErrors({ lines: {}, fields: { customer_id: customer ? CREDIT_HINT[customer.credit_state] : 'Pilih karyawan untuk kredit.' } });
+        setErrors({ lines: {}, fields: { customer_id: customer ? CREDIT_HINT[customer.credit_state] : 'Pilih debitur untuk kredit.' } });
         return;
       }
       setErrors(NO_ERRORS);
@@ -578,7 +578,7 @@ export function PosPage() {
             {can('customer.select') ? (
               <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); setErrors(NO_ERRORS); }} disabled={locked} />
             ) : (
-              <p className="text-sm text-slate-500">Akun ini tidak berhak memilih karyawan.</p>
+              <p className="text-sm text-slate-500">Akun ini tidak berhak memilih debitur.</p>
             )}
             {errors.fields.customer_id && <p role="alert" className="text-sm text-red-700">{errors.fields.customer_id}</p>}
             {previewErrors.fields.customer_id && !errors.fields.customer_id && <p role="alert" className="text-sm text-red-700">{previewErrors.fields.customer_id}</p>}
@@ -674,7 +674,7 @@ export function PosPage() {
 
       {exceptionOpen && (
         <CreditExceptionDialog
-          reason={errors.fields.credit_limit ?? (quote?.credit?.exceeds_limit ? `Melebihi sisa batas kredit (sisa ${formatRupiah(quote.credit.remaining_before)}).` : customer?.credit_state === 'exhausted' ? 'Sisa batas kredit karyawan sudah habis.' : undefined)}
+          reason={errors.fields.credit_limit ?? (quote?.credit?.exceeds_limit ? `Melebihi sisa batas kredit (sisa ${formatRupiah(quote.credit.remaining_before)}).` : customer?.credit_state === 'exhausted' ? 'Sisa batas kredit debitur sudah habis.' : undefined)}
           errors={errors.fields}
           busy={mutation.isPending}
           closeOnEscape={false}

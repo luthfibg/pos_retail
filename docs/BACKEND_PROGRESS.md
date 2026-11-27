@@ -2,7 +2,7 @@
 
 **Satu-satunya berkas progres backend.** Setiap pekerjaan backend baru ditambahkan di sini (entri terbaru di atas bagian "Riwayat"), agar agent frontend tahu fitur mana yang sudah bisa dibuatkan UI-nya. Agent baru cukup membaca berkas ini + `HANDOFF_POS_RETAIL_SMK.md`.
 
-****Diperbarui:** 27 November 2026 · Status dan pembatalan struk penjualan dihapus; migrasi `2026_11_13_000082` membersihkan struk batal lama dan menghapus kolom/tabel terkait. Tes backend terarah: 84 lulus; migrasi produksi masih perlu diterapkan. Handoff #7: endpoint batch hitungan dan indeks offline; `OpnameCountTest` 7/128 lulus. Handoff #8: riwayat, ekspor, pengingat, dan filter tersedia; kontrak dan batas validasi ada di `docs/ROADMAP_PROGRESS.md`, status suite penuh dan UAT masih terbuka. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data karyawan + notifikasi), WS-D (Shift + Penjualan; kas nonpenjualan sudah dihapus), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
+****Diperbarui:** 27 November 2026 · Status dan pembatalan struk penjualan dihapus; migrasi `2026_11_13_000082` membersihkan struk batal lama dan menghapus kolom/tabel terkait. Istilah pelanggan kredit di UI/API kini menggunakan “Debitur”. Tes backend terarah: 84 lulus; migrasi produksi masih perlu diterapkan. Handoff #7: endpoint batch hitungan dan indeks offline; `OpnameCountTest` 7/128 lulus. Handoff #8: riwayat, ekspor, pengingat, dan filter tersedia; kontrak dan batas validasi ada di `docs/ROADMAP_PROGRESS.md`, status suite penuh dan UAT masih terbuka. · **Dikerjakan:** WS-B (Inventory inti, transfer, adjustment/opname, retur supplier/write-off), WS-A (Data Debitur + notifikasi), WS-D (Shift + Penjualan; kas nonpenjualan sudah dihapus), WS-C (Pembelian + lampiran penerimaan), WS-F (Diskon dan PPN), WS-G (Manajemen Pengguna), Management Retail
 
 Progres implementasi Adjustment langsung Handoff #1: lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #1”.
 Sesi opname Handoff #2 (skema, service, endpoint, izin, test, dan kontrak UI): lihat `docs/ROADMAP_PROGRESS.md`, bagian 4 “Adjustment & Opname — Handoff #2”.
@@ -222,54 +222,47 @@ Denah rak ⏳. Retur supplier dan write-off kini tersedia di bagian 15. `Invento
 
 ---
 
-## 2. Data Karyawan (customers) ✅
+## 2. Data Debitur (customers) 🟡
 
-Status karyawan: `pending_verification` (input Kasir, hanya tunai) → `active` (diverifikasi Admin) ⇄ `inactive`.
+Pendaftaran debitur hanya dapat dilakukan Admin melalui formulir resmi. Formulir menyimpan nomor KTP, nomor induk karyawan, identitas dan kontak, alamat KTP dan domisili, perusahaan/jabatan/departemen, status dan tanggal mulai bekerja, serta kontak HRD dan atasan. Status pembayaran ditampilkan tetap sebagai pemotongan gaji bulanan; tidak disimpan sebagai pilihan. Data profil pribadi hanya dikirim kepada Admin. Debitur yang sudah tidak bekerja diarsipkan, bukan dihapus, agar transaksi dan tagihan historis tetap terhubung.
 
 | Method | Path | Izin | Fungsi |
 |---|---|---|---|
-| GET | `/api/customers` | `customer.select` | Daftar/cari (`q` nama atau NIK-awalan, `status`, `per_page`) |
-| GET | `/api/customers/{id}` | `customer.select` | Detail |
-| POST | `/api/customers` | `customer.create` | Tambah karyawan (Kasir atau Admin) → selalu `pending_verification` |
-| PATCH | `/api/customers/{id}` | `customer.update` (Admin) | Ubah `customer_no`, `name`, `department`; ganti `status` `active↔inactive` (+`reason`) |
-| POST | `/api/customers/{id}/verify` | `customer.verify` (Admin) | Verifikasi; boleh sekaligus `credit_limit` |
-| PUT | `/api/customers/{id}/credit-limit` | `customer.set_limit` (Admin) | Tetapkan/ubah batas kredit bulanan |
-| GET | `/api/customers/{id}/credit-limits` | `customer.set_limit` (Admin) | Riwayat batas (terbaru dulu) |
+| GET | `/api/customers` | `customer.select` | Daftar/cari (`q` nama atau nomor induk, `per_page`); Admin dapat memilih `archived=1` untuk arsip |
+| GET | `/api/customers/{id}` | `customer.select` | Detail; profil pribadi hanya untuk Admin |
+| POST | `/api/customers` | `customer.create` + role Admin | Daftarkan debitur dengan profil lengkap |
+| PATCH | `/api/customers/{id}` | `customer.update` + role Admin | Ubah data profil |
+| DELETE | `/api/customers/{id}` | `customer.archive` + role Admin | Arsipkan tanpa menghapus transaksi/tagihan |
+| POST | `/api/customers/{id}/restore` | `customer.archive` + role Admin | Pulihkan dari arsip |
+| PUT | `/api/customers/{id}/credit-limit` | `customer.set_limit` | Tetapkan/ubah batas kredit bulanan |
+| GET | `/api/customers/{id}/credit-limits` | `customer.set_limit` | Riwayat batas (terbaru dulu) |
 
 ### Bentuk respons (`data`)
-Untuk **Kasir** (tanpa `customer.set_limit`):
+Kasir menerima data ringkas untuk mencari dan memilih debitur di POS:
 ```json
 { "id": 3, "customer_no": "NIK-100", "name": "Budi", "department": "Produksi",
-  "status": "active", "credit_state": "available", "credit_remaining": "900000.00",
-  "verified_at": "2026-10-23 03:20:00.000" }
+  "credit_state": "available", "credit_remaining": "900000.00" }
 ```
-Untuk **Admin** ditambah: `"credit_limit": "1500000.00"` (null bila belum diisi) dan `"credit_used": "450000.00"`.
-**Kasir tidak pernah menerima nilai batas.**
+Admin menerima profil pendaftaran pada detail, termasuk data KTP dan kontak. Batas kredit hanya dikirim kepada pemegang `customer.set_limit`; Kasir tidak menerima nilai batas. Daftar tidak memuat data pribadi lengkap.
 
 `credit_state` — dasar untuk tombol "Kredit" di layar kasir:
 
 | Nilai | Arti | UI |
 |---|---|---|
-| `not_verified` | Belum diverifikasi Admin | Hanya tunai; beri keterangan "menunggu verifikasi" |
-| `limit_not_set` | Terverifikasi tapi batas belum diisi | Kredit **ditahan** (R-09); hanya tunai |
+| `limit_not_set` | Batas belum diisi | Kredit **ditahan** (R-09); hanya tunai |
 | `available` | Bisa kredit, ada sisa | Tampilkan `credit_remaining` |
 | `exhausted` | Sisa batas habis (`credit_remaining` = `"0.00"`) | Tawarkan tunai; pengecualian hanya Admin |
-| `inactive` | Karyawan nonaktif | Tidak bisa dipilih untuk kredit |
+| `archived` | Debitur diarsipkan | Tidak dapat dipakai untuk transaksi baru |
 
-`credit_remaining` bernilai `null` kecuali status `available`/`exhausted`. Pemakaian dihitung dari total struk kredit yang belum ditagih; pratinjau menghitung total, termasuk PPN bila aktif, tanpa mengubah data.
+`credit_remaining` bernilai `null` untuk `limit_not_set`/`archived`; selain itu berisi nilai batas yang tersisa. Pemakaian dihitung dari total struk kredit yang belum ditagih; pratinjau menghitung total, termasuk PPN bila aktif, tanpa mengubah data.
 
 ### POST `/api/customers`
-`{ "customer_no": "NIK-100", "name": "Budi", "department": "Produksi" }` → 201 `{data}` status `pending_verification`.
-422 bila `customer_no` sudah terdaftar atau mengandung karakter di luar huruf/angka/`. _ - /`.
-Backend otomatis membuat **notifikasi** untuk setiap pemegang `customer.set_limit` (kecuali pembuatnya).
-
-### POST `/api/customers/{id}/verify`
-Body opsional `{ "credit_limit": "1500000", "note": "60% gaji sesuai HRD" }`. 422 bila sudah diverifikasi. Tanpa `credit_limit` → `credit_state: "limit_not_set"`. Mengirim `credit_limit` tanpa izin `customer.set_limit` → 403.
+Semua field profil pendaftaran wajib. `customer_no` (nomor induk) dan `ktp_no` harus unik per toko; KTP terdiri dari 16 angka. Field status pembayaran tidak diterima dari klien karena metode pembayaran tetap.
 
 ### PUT `/api/customers/{id}/credit-limit`
-`{ "limit_amount": "1500000", "note": "naik gaji" }` (≥ 0, maks 2 desimal). 422 bila karyawan belum `active`. Nilai yang sama dengan yang berlaku tidak membuat catatan baru. Menyelesaikan (menandai terbaca) notifikasi "perlu batas" untuk karyawan itu.
+`{ "limit_amount": "1500000", "note": "naik gaji" }` (≥ 0, maks 2 desimal). Nilai yang sama dengan yang berlaku tidak membuat catatan baru. Batas tidak dapat diubah saat debitur diarsipkan.
 
-Layar yang bisa dibuat: daftar karyawan + filter status, form tambah (Kasir), antrean "menunggu verifikasi" (Admin), dialog verifikasi + batas, riwayat batas, pemilih karyawan di POS (memakai `credit_state`).
+Form Admin menyediakan aksi cetak bukti pendaftaran A4. Empat kolom tanda tangan satu baris (Pemohon, Diketahui Atasan, Diketahui HRD, Disetujui Perusahaan) hanya muncul pada lembar cetak, bukan pada form input.
 
 ---
 
@@ -284,7 +277,7 @@ Notifikasi milik pengguna yang login (tanpa izin khusus; hanya data sendiri).
 | POST | `/api/notifications/read-all` | Tandai semua terbaca → `{ "data": { "marked": 3 } }` |
 
 Item: `{ "id", "type", "entity_type", "entity_id", "message", "read_at", "created_at" }`.
-Tipe saat ini: `customer.limit_needed` (`entity_type: "customer"`) → arahkan klik ke detail karyawan `entity_id` untuk mengisi batas. Notifikasi ini otomatis terbaca saat batas diisi, jadi lonceng bersih sendiri. Disarankan polling ringan (mis. 60 detik) — belum ada push.
+Tipe saat ini: `customer.limit_needed` (`entity_type: "customer"`) → arahkan klik ke detail debitur `entity_id` untuk mengisi batas. Notifikasi ini otomatis terbaca saat batas diisi, jadi lonceng bersih sendiri. Disarankan polling ringan (mis. 60 detik) — belum ada push.
 
 ---
 
@@ -419,7 +412,7 @@ Kredit: `payment` = `null`, `billing_status` = `"unbilled"`, `receipt.note` = "B
 | `items.N.qty` | Stok tidak mencukupi (pesan menyebut tersedia dan diminta) | Tandai baris N; seluruh transaksi **tidak** terposting |
 | `items.N.product_id` | Produk tidak ada / belum bisa dijual | Hapus baris N |
 | `amount_tendered` | Uang diterima kurang dari total | Minta nominal baru |
-| `customer_id` | Kredit tapi karyawan belum dipilih / belum diverifikasi / nonaktif / batas belum diisi | Tawarkan tunai |
+| `customer_id` | Kredit tapi debitur belum dipilih / belum diverifikasi / nonaktif / batas belum diisi | Tawarkan tunai |
 | `credit_limit` | **Melebihi batas kredit** (pesan memuat sisa batas dan total) | Tawarkan: ganti ke tunai, atau dialog pengecualian Admin |
 | `approver_password` | Kredensial penyetuju salah / tidak berwenang / terlalu banyak percobaan | Ulangi dialog |
 | `credit_exception.note` | Catatan pengecualian kosong | Wajibkan catatan |
@@ -432,7 +425,7 @@ Pengecualian berhasil → `over_limit: true` pada struk (label "melebihi batas" 
 - Stok FEFO: Kasir tidak memilih batch; batch kadaluarsa tidak terjual (stok tampak "ada" di `stock_sellable` tetapi bisa ditolak `items.N.qty`).
 - PPN untuk tunai dan kredit hanya aktif bila Admin mengaktifkan (`vat_enabled`) dan tarif dikonfigurasi; default mati. Keputusan klien: harga jual termasuk PPN. Saat mode inklusif aktif, PPN diurai dari harga tanpa menaikkan total. Tarif dan jumlah PPN disimpan sebagai snapshot pada struk; invoice HRD menjumlahkan snapshot tersebut, tidak menghitung ulang memakai konfigurasi terbaru. Penjualan lama tanpa snapshot PPN tidak dikenai PPN retroaktif. Pembulatan total transaksi tidak diterapkan.
 - Tunai masuk ledger kas kecil otomatis; kredit tidak menyentuh laci.
-- Tidak ada endpoint pencarian produk baru: pakai pencarian/`by-barcode` produk yang sudah ada dan pemilih karyawan (`GET /api/customers?q=`, perhatikan `credit_state`).
+- Tidak ada endpoint pencarian produk baru: pakai pencarian/`by-barcode` produk yang sudah ada dan pemilih debitur (`GET /api/customers?q=`, perhatikan `credit_state`).
 
 ---
 
@@ -645,19 +638,19 @@ Pencatatan kas masuk/keluar nonpenjualan dan setoran parsial tidak lagi tersedia
 | GET | `/api/billing-periods` | `billing_period.manage` | Daftar periode (terbaru dulu, paginasi) |
 | GET | `/api/billing-periods/current` | `billing_period.manage` | Periode terbuka; `data` = null bila belum ada |
 | POST | `/api/billing-periods` | `billing_period.manage` | Buka periode: `label?`, `scheduled_close_date?` (`YYYY-MM-DD`). Nama default `Periode [Nama Bulan]`, bulan berjalan. 422 `status` bila masih ada yang terbuka |
-| GET | `/api/billing-periods/{id}` | `billing_period.manage` | Detail + `period_month` (`YYYY-MM-01`) + `customers[]` (ringkasan tagihan per karyawan) |
+| GET | `/api/billing-periods/{id}` | `billing_period.manage` | Detail + `period_month` (`YYYY-MM-01`) + `customers[]` (ringkasan tagihan per debitur) |
 | PATCH | `/api/billing-periods/{id}` | `billing_period.manage` | Ubah `label`, `period_month` (`YYYY-MM-01`), dan/atau `scheduled_close_date`; hanya periode terbuka |
 | POST | `/api/billing-periods/{id}/close` | `billing_period.close` | **Tutup periode** pada hari gaji |
 | POST | `/api/billing-periods/{id}/cancel` | `billing_period.manage` | Batalkan periode dengan `{ "reason": "..." }`; hanya open/closed tanpa struk kredit terposting dan tanpa invoice |
 | POST | `/api/billing-periods/{id}/invoice` | `invoice.generate` | Buat invoice (draft); `bill_to?` (default "HRD") |
 | GET | `/api/invoices?status=&per_page=` | `invoice.generate` | Daftar invoice |
-| GET | `/api/invoices/{id}` | `invoice.generate` | Detail: `customers[]` (per karyawan, berisi `sales[]`) dan `payments[]` |
+| GET | `/api/invoices/{id}` | `invoice.generate` | Detail: `customers[]` (per debitur, berisi `sales[]`) dan `payments[]` |
 | POST | `/api/invoices/{id}/issue` | `invoice.issue` | draft → `issued` |
 | POST | `/api/invoices/{id}/hand-over` | `invoice.issue` | `issued` → `handed_to_hr` (penanda diserahkan ke HRD) |
 | POST | `/api/invoices/{id}/payments` | `invoice.record_payment` | Finance/Accounting/Admin mencatat pembayaran HRD: `amount`, `received_on?`, `reference?`, `note?`; penerimaan masuk ke akun `main_cash` |
 
 ### Perilaku
-- **Tutup periode** mengikat semua struk kredit yang belum terikat ke periode itu, lalu **periode berikutnya otomatis dibuka**; struk kredit baru masuk ke sana. Karena struk terikat tidak lagi dihitung sebagai pemakaian, **sisa batas kredit karyawan pulih** setelah tutup periode. Struk tunai tidak ikut.
+- **Tutup periode** mengikat semua struk kredit yang belum terikat ke periode itu, lalu **periode berikutnya otomatis dibuka**; struk kredit baru masuk ke sana. Karena struk terikat tidak lagi dihitung sebagai pemakaian, **sisa batas kredit debitur pulih** setelah tutup periode. Struk tunai tidak ikut.
 - Nama default periode menggunakan `Periode [Nama Bulan]` dalam bahasa Indonesia. Periode pertama/manual memakai bulan berjalan; setelah periode ditutup, periode otomatis berikutnya memakai bulan kalender setelah `period_month` periode yang ditutup (misalnya Oktober → November). Admin dapat mengubah bulan/tahun periode (`period_month`) saat masih terbuka; bila label masih memakai nama default, label mengikuti perubahan bulan. Label khusus tetap dapat diedit terpisah. Periode tertutup tidak dapat diubah agar riwayat struk tidak bergeser. Jika periode kosong dibatalkan lalu dibuka lagi, bulan periode terakhir yang dibatalkan dipakai kembali (tidak melompat bulan).
 - Periode kosong dapat dibatalkan dengan alasan, baik masih terbuka maupun sudah ditutup, selama tidak memiliki invoice. Periode aktif yang dibatalkan tidak otomatis diganti; Admin harus membuka periode yang benar sebelum transaksi kredit dilanjutkan. Periode berisi struk kredit atau yang sudah memiliki invoice tidak dapat dibatalkan. Keterikatan transaksi dijaga agar pembatalan tidak balapan dengan posting kredit.
 - **Invoice**: satu per periode tertutup, satu baris per struk dengan nilai dasar sebelum PPN. Subtotal = jumlah dasar struk, PPN = jumlah snapshot pajak struk, dan total = jumlah total struk. Invoice tidak menggunakan tarif atau status PPN terkini untuk menghitung ulang. PPN aktif tetapi konfigurasi tarif/harga belum lengkap membuat transaksi kasir (tunai maupun kredit) ditolak. Struk ditandai `billing_status: "invoiced"`.
@@ -667,8 +660,8 @@ Pencatatan kas masuk/keluar nonpenjualan dan setoran parsial tidak lagi tersedia
 - Kunci error 422: `status` (urutan/aturan alur), `amount`, `scheduled_close_date`.
 
 ### Layar yang bisa dibuat (urut saran, Admin)
-1. Halaman "Periode tagihan": periode terbuka (jumlah struk, total, rincian per karyawan), tombol **Tutup periode** (dengan konfirmasi), ubah tanggal gaji.
-2. Dari periode tertutup: tombol **Buat invoice**, lalu tampilan invoice (per karyawan, total, PPN) siap cetak (data cetak sudah lengkap di respons).
+1. Halaman "Periode tagihan": periode terbuka (jumlah struk, total, rincian per debitur), tombol **Tutup periode** (dengan konfirmasi), ubah tanggal gaji.
+2. Dari periode tertutup: tombol **Buat invoice**, lalu tampilan invoice (per debitur, total, PPN) siap cetak (data cetak sudah lengkap di respons).
 3. Tombol **Terbitkan** → **Serahkan ke HRD** → **Catat pembayaran** (riwayat pembayaran, sisa tagihan).
 
 ### ASUMSI dan batasan
@@ -807,7 +800,7 @@ Dampak ke endpoint lain:
 | Role | Fungsi utama |
 |---|---|
 | Kasir | tidak berubah (penjualan, shift, kas masuk/keluar, setoran, PR, penerimaan, transfer, ajuan adjustment) |
-| Finance | tinjau shift, terima/koreksi setoran, periksa PR, verifikasi karyawan + batas kredit, usul endapan (baca kebijakan), laporan |
+| Finance | tinjau shift, terima/koreksi setoran, periksa PR, verifikasi debitur + batas kredit, usul endapan (baca kebijakan), laporan |
 | Purchasing | buat/ubah produk dan kategori, supplier, buat PR, buat dan kirim PO, laporan |
 | Accounting | periode tagihan + invoice HRD + pembayaran, verifikasi surat jalan/faktur, audit log, tinjau shift (baca), laporan |
 | Owner | kelola pengguna/role/pengaturan, setujui PR, setujui adjustment/stok awal, pengecualian kredit, void, harga/diskon/aktivasi produk, kebijakan endapan, denah rak, audit, laporan, tinjau shift |

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { badgeText, notificationTarget } from './notificationLink';
 
 describe('notificationTarget', () => {
-  it('batas kredit dibutuhkan -> detail karyawan', () => {
+  it('batas kredit dibutuhkan -> detail debitur', () => {
     expect(notificationTarget({ type: 'customer.limit_needed', entity_type: 'customer', entity_id: 7 })).toBe('/customers?open=7');
   });
   it('tipe tak dikenal atau tanpa entitas -> null', () => {

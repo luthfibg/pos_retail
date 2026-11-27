@@ -23,9 +23,9 @@ erDiagram
   locations ||--o{ shelves : has
   shelves ||--o{ shelf_positions : has
   customers ||--o{ customer_credit_limits : "limit history"
-  users ||--o{ customers : "created_by / verified_by"
+  users ||--o{ customers : "created_by / archived_by"
   products { varchar sku UK; varchar barcode UK; enum status; bool track_expiry; decimal unit_cost; decimal restock_quantity }
-  customers { varchar customer_no UK; enum status }
+  customers { varchar customer_no UK; varchar ktp_no UK; text address; text domicile; varchar company_name; varchar position; varchar department; enum employment_type; date employment_start_date; varchar hrd_name; varchar hrd_phone; varchar supervisor_name; varchar supervisor_phone; datetime archived_at }
   customer_credit_limits { decimal limit_amount; datetime effective_from }
 ```
 

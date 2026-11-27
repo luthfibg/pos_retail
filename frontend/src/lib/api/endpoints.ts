@@ -1,6 +1,6 @@
 import { api, apiDownload } from './client';
 import type {
-  Category, CategoryInput, CashDeposit, CreditLimitRecord, Customer, CustomerInput, CustomerStatus, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
+  Category, CategoryInput, CashDeposit, CreditLimitRecord, Customer, CustomerInput, DepositStatus, FundAccount, LoginResponse, Me, Movement, MovementType, NotificationList, OpeningBalanceInput,
   FloatPolicies, FloatPolicyInput, FloatPolicyScope, OpeningBalanceResult, Paginated, ProductStock, StockCardMovement, Product, ProductInput, ProductStatus, Shift, ShiftStatus, Supplier, SupplierInput,
   PaymentMode, PostSaleResponse, Sale, SaleInput, SalePreview, SalePreviewInput, SaleSummary, DeferredPurchaseRequisitionItem,
   Discount, DiscountInput, DiscountTarget, DiscountUpdate, VatInput, VatSetting,
@@ -545,17 +545,15 @@ export const inventoryApi = {
 };
 
 export const customerApi = {
-  list: (f: { q?: string; status?: CustomerStatus; page?: number; per_page?: number } = {}) =>
+  list: (f: { q?: string; archived?: boolean; page?: number; per_page?: number } = {}) =>
     api<Paginated<Customer>>('/customers', { query: { ...f } }),
   get: (id: number) => api<{ data: Customer }>(`/customers/${id}`).then((r) => r.data),
   create: (input: CustomerInput) =>
     api<{ data: Customer }>('/customers', { method: 'POST', body: input }).then((r) => r.data),
-  update: (
-    id: number,
-    input: Partial<CustomerInput> & { status?: 'active' | 'inactive'; reason?: string },
-  ) => api<{ data: Customer }>(`/customers/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
-  verify: (id: number, input: { credit_limit?: string; note?: string }) =>
-    api<{ data: Customer }>(`/customers/${id}/verify`, { method: 'POST', body: input }).then((r) => r.data),
+  update: (id: number, input: Partial<CustomerInput>) =>
+    api<{ data: Customer }>(`/customers/${id}`, { method: 'PATCH', body: input }).then((r) => r.data),
+  archive: (id: number) => api<{ data: { archived: boolean } }>(`/customers/${id}`, { method: 'DELETE' }),
+  restore: (id: number) => api<{ data: { archived: boolean } }>(`/customers/${id}/restore`, { method: 'POST' }),
   setLimit: (id: number, input: { limit_amount: string; note?: string }) =>
     api<{ data: Customer }>(`/customers/${id}/credit-limit`, { method: 'PUT', body: input }).then((r) => r.data),
   limitHistory: (id: number) =>

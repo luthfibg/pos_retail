@@ -22,7 +22,7 @@ use Illuminate\Validation\ValidationException;
  *    tipe 'amount' = nominal per unit [ASUMSI]
  *  - idempotency_key (uuid dari frontend): pengiriman ulang mengembalikan struk yang sama, bukan ganda
  *  - tunai: uang diterima >= total; masuk ledger kas kecil; PPN bila diaktifkan (setting vat_enabled, R-04)
- *  - kredit potong gaji: wajib karyawan aktif dengan batas terisi (R-09); total baru + pemakaian belum ditagih
+ *  - kredit potong gaji: wajib debitur belum diarsipkan dengan batas terisi (R-09); total baru + pemakaian belum ditagih
  *    tidak boleh melebihi batas, kecuali pengecualian Admin (re-auth, catatan wajib, bertanda over_limit_flag, R-02);
  *    PPN dihitung saat penjualan untuk tunai maupun kredit, berdasarkan snapshot tarif saat transaksi
  *  - stok kurang -> seluruh transaksi gagal (anti-negatif), pesan di items.N.qty
@@ -83,8 +83,8 @@ class SaleService
         $customer = null;
         if (! empty($data['customer_id'])) {
             $customer = DB::table('customers')->where('store_id', $storeId)->where('id', (int) $data['customer_id'])->first();
-            if ($customer === null) {
-                throw ValidationException::withMessages(['customer_id' => ['Karyawan tidak ditemukan.']]);
+            if ($customer === null || $customer->archived_at !== null) {
+                throw ValidationException::withMessages(['customer_id' => ['Debitur tidak ditemukan.']]);
             }
         }
         if ($isCredit) {
@@ -252,12 +252,12 @@ class SaleService
             throw ValidationException::withMessages(['shift' => ['Shift sedang dihitung; penjualan baru diblokir.']]);
         }
 
-        // 2. karyawan (dikunci agar pemeriksaan batas kredit tidak balapan)
+        // 2. debitur (dikunci agar pemeriksaan batas kredit tidak balapan)
         $customer = null;
         if (! empty($data['customer_id'])) {
             $customer = DB::table('customers')->where('store_id', $storeId)->where('id', (int) $data['customer_id'])->lockForUpdate()->first();
-            if ($customer === null) {
-                throw ValidationException::withMessages(['customer_id' => ['Karyawan tidak ditemukan.']]);
+            if ($customer === null || $customer->archived_at !== null) {
+                throw ValidationException::withMessages(['customer_id' => ['Debitur tidak ditemukan.']]);
             }
         }
         if ($isCredit) {
@@ -490,13 +490,7 @@ class SaleService
     private function assertCreditCustomer(?object $customer): void
     {
         if ($customer === null) {
-            throw ValidationException::withMessages(['customer_id' => ['Pilih karyawan untuk penjualan kredit.']]);
-        }
-        if ($customer->status === 'pending_verification') {
-            throw ValidationException::withMessages(['customer_id' => ['Karyawan belum diverifikasi Admin; hanya dapat membayar tunai.']]);
-        }
-        if ($customer->status === 'inactive') {
-            throw ValidationException::withMessages(['customer_id' => ['Karyawan nonaktif tidak dapat berbelanja kredit.']]);
+            throw ValidationException::withMessages(['customer_id' => ['Pilih debitur untuk penjualan kredit.']]);
         }
     }
 
@@ -507,7 +501,7 @@ class SaleService
             ->orderByDesc('effective_from')->orderByDesc('id')->value('limit_amount');
 
         if ($limit === null) {
-            throw ValidationException::withMessages(['customer_id' => ['Batas kredit karyawan belum ditetapkan Admin; hanya dapat membayar tunai.']]);
+            throw ValidationException::withMessages(['customer_id' => ['Batas kredit debitur belum ditetapkan Admin; hanya dapat membayar tunai.']]);
         }
 
         $used = DB::table('sales')->where('customer_id', $customer->id)->where('payment_mode', 'payroll_credit')

@@ -8,8 +8,8 @@ Bagian ini merangkum fondasi adjustment stok dan siklus opname. Catatan per hand
 
 ### Laporan Piutang Tahunan
 
-- Tab ketiga **Tutup Tahun** merangkum tagihan kredit, pembayaran, dan sisa piutang per karyawan berdasarkan tahun `billing_periods.period_month`.
-- Laporan tahun berjalan dihitung langsung dari transaksi terkini. Tagihan mengikuti periode billing; pembayaran tahun berjalan dibatasi waktu saat laporan diminta, sedangkan tahun sebelumnya memakai batas akhir 31 Desember. Pembayaran invoice gabungan dialokasikan proporsional ke karyawan menurut nilai tagihan.
+- Tab ketiga **Tutup Tahun** merangkum tagihan kredit, pembayaran, dan sisa piutang per debitur berdasarkan tahun `billing_periods.period_month`.
+- Laporan tahun berjalan dihitung langsung dari transaksi terkini. Tagihan mengikuti periode billing; pembayaran tahun berjalan dibatasi waktu saat laporan diminta, sedangkan tahun sebelumnya memakai batas akhir 31 Desember. Pembayaran invoice gabungan dialokasikan proporsional ke debitur menurut nilai tagihan.
 - Tanggal cetak dapat diatur di **Pengaturan → Piutang → Laporan piutang tahunan**. Tombol cetak tahun berjalan aktif pada tanggal tersebut; laporan tahun sebelumnya selalu dapat dicetak.
 - Laporan tidak menutup periode bulanan atau membuat invoice tahunan. Akses laporan mengikuti `invoice.generate`; pengaturan tanggal mengikuti `settings.manage`.
 - Endpoint: `GET /api/annual-receivable-reports`, `GET /api/annual-receivable-reports/{year}`, `GET/PUT /api/settings/annual-receivable-report`.

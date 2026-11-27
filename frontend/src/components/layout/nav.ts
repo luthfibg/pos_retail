@@ -24,7 +24,7 @@ export interface NavGroup {
  *  3. Inventory      penerimaan -> produk -> retur -> stok eksisting toko -> transfer/putaway -> stok opname -> pergerakan stok
  *  4. Penjualan      buka kasir jaga -> jual di kasir -> koreksi/cetak ulang struk
  *  5. Keuangan       periksa kasir jaga -> terima setoran -> tagih HRD
- *  6. Data Master    kategori -> supplier -> karyawan (pembeli kredit)
+ *  6. Data Master    kategori -> supplier -> debitur
  *  7. Pengaturan     satu layar untuk semua konfigurasi
  *
  * Item disaring berdasarkan permission dan batas role dari /auth/me, jadi setiap role hanya melihat menunya sendiri.
@@ -85,7 +85,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/categories', label: 'Kategori', permission: 'category.manage' },
       { to: '/suppliers', label: 'Supplier', permission: 'supplier.manage' },
-      { to: '/customers', label: 'Karyawan', permission: 'customer.select' },
+      { to: '/customers', label: 'Data Debitur', permission: 'customer.select' },
     ],
   },
   {

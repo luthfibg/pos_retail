@@ -38,11 +38,11 @@ final class PermissionCatalog
             'opname.approve' => 'Menyetujui atau menolak hasil stock opname (Admin pada model sederhana atau Owner)',
             'opname.view_value' => 'Melihat nilai rupiah selisih stock opname',
             'discount.manage' => 'Kelola diskon',
-            'customer.create' => 'Menambah data karyawan (status menunggu verifikasi)',
-            'customer.verify' => 'Memverifikasi karyawan',
-            'customer.update' => 'Mengubah data karyawan',
-            'customer.set_limit' => 'Menetapkan batas kredit karyawan',
-            'customer.select' => 'Memilih karyawan di POS',
+            'customer.create' => 'Mendaftarkan debitur (khusus Admin)',
+            'customer.archive' => 'Mengarsipkan debitur (khusus Admin)',
+            'customer.update' => 'Mengubah data debitur (khusus Admin)',
+            'customer.set_limit' => 'Menetapkan batas kredit debitur',
+            'customer.select' => 'Memilih debitur di POS',
             'purchase_requisition.create' => 'Meneruskan PR stok otomatis',
             'purchase_requisition.finance_check' => 'Memeriksa Permintaan Pembelian',
             'purchase_requisition.approve' => 'Menyetujui PR (autentikasi ulang Owner)',
@@ -83,7 +83,6 @@ final class PermissionCatalog
             'product.create',
             'shelf_layout.view',
             'inventory.view',
-            'customer.create',
             'customer.select',
             'purchase_requisition.create',
             'goods_receipt.create',
@@ -112,7 +111,7 @@ final class PermissionCatalog
             'Admin' => ['description' => 'Admin/Owner: seluruh fungsi bisnis (model simple)', 'codes' => array_keys(self::all())],
             'Kasir' => ['description' => 'Operasional toko', 'codes' => self::cashier()],
             'Owner' => ['description' => 'Pemilik: persetujuan, kebijakan, dan pengawasan (model standar retail)', 'codes' => self::owner()],
-            'Finance' => ['description' => 'Keuangan: tinjau shift, terima setoran, periksa PR, kredit karyawan', 'codes' => self::finance()],
+            'Finance' => ['description' => 'Keuangan: tinjau shift, terima setoran, periksa PR, kredit debitur', 'codes' => self::finance()],
             'Purchasing' => ['description' => 'Pembelian: PO, supplier, master produk', 'codes' => self::purchasing()],
             'Accounting' => ['description' => 'Akuntansi: tagihan HRD, verifikasi dokumen penerimaan, audit', 'codes' => self::accounting()],
         ];
@@ -127,7 +126,7 @@ final class PermissionCatalog
             'shelf_layout.manage', 'shelf_layout.view', 'inventory.view', 'inventory.adjust.approve',
             'opname.view', 'opname.count', 'opname.create', 'opname.cancel', 'opname.settings.manage',
             'opname.review', 'opname.post', 'opname.approve', 'opname.view_value',
-            'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
+            'customer.select', 'customer.set_limit',
             'purchase_requisition.approve', 'sales.credit_exception', 'receipt.reprint',
             'shift.review', 'register.manage', 'float.configure', 'reports.view', 'reports.profit.view', 'financial.report.view',
         ];
@@ -137,7 +136,7 @@ final class PermissionCatalog
     public static function finance(): array
     {
         return [
-            'inventory.view', 'customer.select', 'customer.update', 'customer.verify', 'customer.set_limit',
+            'inventory.view', 'customer.select', 'customer.set_limit',
             'purchase_requisition.finance_check', 'shift.review', 'float.propose', 'cash_deposit.receive',
             'invoice.record_payment', 'financial.report.view', 'financial.transaction.create',
             'receipt.reprint', 'reports.view', 'reports.profit.view',

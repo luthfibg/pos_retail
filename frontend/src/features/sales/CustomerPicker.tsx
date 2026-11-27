@@ -15,7 +15,7 @@ interface Props {
   disabled?: boolean;
 }
 
-/** Pilih karyawan untuk kredit potong gaji. Kasir tidak pernah menerima nilai batas, hanya `credit_state` dan sisa. */
+/** Pilih debitur untuk kredit potong gaji. Kasir tidak pernah menerima nilai batas, hanya `credit_state` dan sisa. */
 export function CustomerPicker({ value, onChange, disabled }: Props) {
   const [text, setText] = useState('');
   const debounced = useDebounce(text.trim(), 250);
@@ -54,7 +54,7 @@ export function CustomerPicker({ value, onChange, disabled }: Props) {
         className={inputCls}
         value={text}
         disabled={disabled}
-        placeholder="Cari nama atau NIK karyawan"
+        placeholder="Cari nama atau nomor debitur"
         onChange={(e) => setText(e.target.value)}
       />
       <ErrorNotice error={results.error} />

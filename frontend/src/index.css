@@ -68,6 +68,13 @@ body { @apply bg-slate-50 text-slate-900 antialiased; }
 }
 
 @media print {
+  body.customer-registration-printing * { visibility: hidden !important; }
+  body.customer-registration-printing .customer-registration-print,
+  body.customer-registration-printing .customer-registration-print * { visibility: visible !important; }
+  body.customer-registration-printing .customer-registration-print { position: absolute; inset: 0 auto auto 0; width: 100%; }
+}
+
+@media print {
     .opname-report { border: 0 !important; padding: 0 !important; color: #000 !important; }
   .opname-report > section { break-inside: avoid; }
   .opname-report button { display: none !important; }

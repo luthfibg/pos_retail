@@ -419,7 +419,7 @@ function PeriodDetail({
           {period.customers?.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Nama Karyawan & NIK</th><th className="py-2 pr-3">Divisi/Bagian</th><th className="py-2 pr-3">Transaksi</th><th className="py-2 text-right">Jumlah</th></tr></thead>
+                <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Nama Debitur & NIK</th><th className="py-2 pr-3">Divisi/Bagian</th><th className="py-2 pr-3">Transaksi</th><th className="py-2 text-right">Jumlah</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {period.customers.map((customer) => (
                     <tr key={customer.customer_id}><td className="py-2 pr-3"><span className="block font-medium">{customer.name}</span><span className="text-xs text-slate-500">{customer.customer_no}</span></td><td className="py-2 pr-3">{customer.department ?? '—'}</td><td className="py-2 pr-3">{customer.sales_count}</td><td className="py-2 text-right font-medium">{formatRupiah(customer.total)}</td></tr>
@@ -499,7 +499,7 @@ function InvoiceDetail({
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h2 className="font-semibold">Rekapitulasi Transaksi</h2><p className="text-sm text-slate-500">Rekap berdasarkan struk dan karyawan.</p></div>
+        <div><h2 className="font-semibold">Rekapitulasi Transaksi</h2><p className="text-sm text-slate-500">Rekap berdasarkan struk dan debitur.</p></div>
         <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Tutup rincian</button>
       </div>
       <ErrorNotice error={error} />
@@ -516,7 +516,7 @@ function InvoiceDetail({
           <ErrorNotice error={issueError} />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Karyawan / struk</th><th className="py-2 pr-3">Departemen</th><th className="py-2 pr-3">Tanggal</th><th className="py-2 text-right">Dasar PPN</th></tr></thead>
+              <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Debitur / struk</th><th className="py-2 pr-3">Departemen</th><th className="py-2 pr-3">Tanggal</th><th className="py-2 text-right">Dasar PPN</th></tr></thead>
               {invoice.customers.map((customer) => (
                 <tbody key={customer.customer_id} className="divide-y divide-slate-100">
                   <tr className="bg-slate-50 font-semibold">
@@ -600,12 +600,12 @@ function InvoicePrint({ invoice, storeName, onDone }: { invoice: Invoice; storeN
     <div className="print-only print-doc">
       <article>
         <header className="mb-5 flex items-start justify-between gap-6 border-b-2 border-black pb-3">
-          <div><p className="font-bold">{storeName}</p><h1 className="text-2xl font-bold">INVOICE TAGIHAN KARYAWAN</h1></div>
+          <div><p className="font-bold">{storeName}</p><h1 className="text-2xl font-bold">INVOICE TAGIHAN DEBITUR</h1></div>
           <dl className="text-right text-sm leading-6"><dt className="font-mono text-lg font-bold">{invoice.document_no}</dt><dd>Periode: {invoice.period_label}</dd><dd>Status: {INVOICE_STATUS_LABEL[invoice.status]}</dd><dd>Tanggal terbit: {invoice.issued_at ? formatDateTime(invoice.issued_at) : 'Draft'}</dd></dl>
         </header>
         <p className="mb-4"><strong>Ditagihkan kepada:</strong> {invoice.bill_to}</p>
         <table>
-          <thead><tr><th>Karyawan / struk</th><th>Departemen</th><th>Tanggal</th><th className="text-right">Dasar PPN</th></tr></thead>
+          <thead><tr><th>Debitur / struk</th><th>Departemen</th><th>Tanggal</th><th className="text-right">Dasar PPN</th></tr></thead>
           {invoice.customers.map((customer) => (
             <tbody key={customer.customer_id}>
               <tr className="font-bold">

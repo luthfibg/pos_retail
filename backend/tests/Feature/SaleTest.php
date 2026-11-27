@@ -58,12 +58,12 @@ class SaleTest extends SeededTestCase
         ]);
     }
 
-    private function employee(string $status = 'active', ?string $limit = '1000000'): int
+    private function employee(?string $limit = '1000000'): int
     {
         static $n = 0;
         $n++;
         $id = DB::table('customers')->insertGetId([
-            'store_id' => $this->storeId(), 'customer_no' => "EMP-{$n}", 'name' => "Karyawan {$n}", 'status' => $status,
+            'store_id' => $this->storeId(), 'customer_no' => "EMP-{$n}", 'name' => "Karyawan {$n}",
             'created_by' => $this->cashier->id,
         ]);
         if ($limit !== null) {
@@ -296,7 +296,7 @@ class SaleTest extends SeededTestCase
         $this->openShift();
         $p = $this->makeProduct('20000');
         $this->stock($p, '10');
-        $employee = $this->employee('active', '100000');
+        $employee = $this->employee('100000');
 
         $r = $this->creditSale($employee, [['product_id' => $p, 'qty' => 2]])->assertCreated();
 
@@ -314,16 +314,20 @@ class SaleTest extends SeededTestCase
         $this->getJson("/api/customers/{$employee}")->assertJsonPath('data.credit_remaining', '60000.00');
     }
 
-    public function test_credit_requires_active_customer_with_limit(): void
+    public function test_credit_requires_unarchived_customer_with_limit(): void
     {
         $this->openShift();
         $p = $this->makeProduct('1000');
         $this->stock($p, '10');
         $item = [['product_id' => $p, 'qty' => 1]];
 
-        $this->creditSale($this->employee('pending_verification', null), $item)->assertUnprocessable()->assertJsonValidationErrors(['customer_id']);
-        $this->creditSale($this->employee('active', null), $item)->assertUnprocessable()->assertJsonValidationErrors(['customer_id']);
-        $this->creditSale($this->employee('inactive', '1000000'), $item)->assertUnprocessable()->assertJsonValidationErrors(['customer_id']);
+        $this->creditSale($this->employee(null), $item)->assertUnprocessable()->assertJsonValidationErrors(['customer_id']);
+        $archivedEmployee = $this->employee();
+        DB::table('customers')->where('id', $archivedEmployee)->update([
+            'archived_at' => now(),
+            'archived_by' => $this->cashier->id,
+        ]);
+        $this->creditSale($archivedEmployee, $item)->assertUnprocessable()->assertJsonValidationErrors(['customer_id']);
         $this->postJson('/api/sales', ['idempotency_key' => (string) Str::uuid(), 'payment_mode' => 'payroll_credit', 'items' => $item])
             ->assertUnprocessable()->assertJsonValidationErrors(['customer_id']);
 
@@ -335,7 +339,7 @@ class SaleTest extends SeededTestCase
         $this->openShift();
         $p = $this->makeProduct('40000');
         $this->stock($p, '10');
-        $employee = $this->employee('active', '100000');
+        $employee = $this->employee('100000');
         $item = [['product_id' => $p, 'qty' => 1]];
 
         $this->creditSale($employee, $item)->assertCreated();   // 40.000
@@ -351,7 +355,7 @@ class SaleTest extends SeededTestCase
         $this->openShift();
         $p = $this->makeProduct('150000');
         $this->stock($p, '5');
-        $employee = $this->employee('active', '100000');
+        $employee = $this->employee('100000');
         $this->makeUser('Admin', 'admin-penyetuju', 'sandi-admin-123');
         $item = [['product_id' => $p, 'qty' => 1]];
         $exception = fn (array $o = []) => ['credit_exception' => $o + [
@@ -380,7 +384,7 @@ class SaleTest extends SeededTestCase
         $this->openShift();
         $p = $this->makeProduct('1000');
         $this->stock($p, '5');
-        $employee = $this->employee('active', '100000');
+        $employee = $this->employee('100000');
         $this->makeUser('Admin', 'admin-penyetuju2', 'sandi-admin-123');
 
         $this->creditSale($employee, [['product_id' => $p, 'qty' => 1]], ['credit_exception' => [

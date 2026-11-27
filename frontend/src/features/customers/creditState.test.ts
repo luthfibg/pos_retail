@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CreditState } from '@/lib/api/types';
 import { CREDIT_HINT, CREDIT_LABEL, canUseCredit } from './creditState';
 
-const states: CreditState[] = ['not_verified', 'limit_not_set', 'available', 'exhausted', 'inactive'];
+const states: CreditState[] = ['limit_not_set', 'available', 'exhausted', 'archived'];
 
 describe('creditState', () => {
   it('hanya available yang boleh kredit', () => {

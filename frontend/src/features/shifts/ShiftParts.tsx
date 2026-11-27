@@ -38,7 +38,7 @@ export function ShiftFigures({ shift }: { shift: Shift }) {
       {shift.closed_at && row('Ditutup', formatDateTime(shift.closed_at))}
       {row('Saldo awal', formatRupiah(shift.opening_balance))}
       {row('Penjualan tunai', `${formatRupiah(s.cash_sales_total)} (${s.cash_sales_count} struk)`)}
-      {row('Penjualan kredit karyawan', `${formatRupiah(s.credit_sales_total)} (${s.credit_sales_count} struk)`)}
+      {row('Penjualan kredit debitur', `${formatRupiah(s.credit_sales_total)} (${s.credit_sales_count} struk)`)}
       {shift.expected_cash !== null && row('Kas diharapkan', formatRupiah(shift.expected_cash))}
       {shift.counted_cash !== null && row('Kas terhitung', formatRupiah(shift.counted_cash))}
       {shift.variance !== null && row('Selisih', <VarianceText value={shift.variance} />)}

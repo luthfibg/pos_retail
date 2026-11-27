@@ -1144,27 +1144,49 @@ export interface FinancialPurchaseOrder {
   amount_remaining: Decimal;
 }
 
-export type CustomerStatus = 'pending_verification' | 'active' | 'inactive';
-export type CreditState = 'not_verified' | 'limit_not_set' | 'available' | 'exhausted' | 'inactive';
+export type CreditState = 'limit_not_set' | 'available' | 'exhausted' | 'archived';
 
-/** `credit_limit` dan `credit_used` hanya dikirim ke pengguna dengan izin customer.set_limit (Admin). */
+/** Data identitas dan kontak lengkap hanya dikirim ke Admin; kasir menerima ringkasan untuk POS. */
 export interface Customer {
   id: number;
   customer_no: string;
   name: string;
   department: string | null;
-  status: CustomerStatus;
   credit_state: CreditState;
   credit_remaining: Decimal | null;
-  verified_at: string | null;
+  ktp_no?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  domicile?: string | null;
+  company_name?: string | null;
+  position?: string | null;
+  employment_type?: 'permanent' | 'contract' | null;
+  employment_start_date?: string | null;
+  hrd_name?: string | null;
+  hrd_phone?: string | null;
+  supervisor_name?: string | null;
+  supervisor_phone?: string | null;
+  archived_at?: string | null;
   credit_limit?: Decimal | null;
   credit_used?: Decimal;
 }
 
 export interface CustomerInput {
   customer_no: string;
+  ktp_no: string;
   name: string;
-  department?: string | null;
+  phone: string;
+  address: string;
+  domicile: string;
+  company_name: string;
+  position: string;
+  department: string;
+  employment_type: 'permanent' | 'contract';
+  employment_start_date: string;
+  hrd_name: string;
+  hrd_phone: string;
+  supervisor_name: string;
+  supervisor_phone: string;
 }
 
 export interface CreditLimitRecord {
