@@ -260,15 +260,17 @@ class SaleTest extends SeededTestCase
             ->assertJsonPath('data.items.0.line_total', '17000.00');
     }
 
-    public function test_vat_exclusive_is_added_for_cash_when_enabled_and_never_for_credit(): void
+    public function test_vat_exclusive_is_added_for_cash_and_credit_when_enabled(): void
     {
         $this->openShift();
         $p = $this->makeProduct('100000');
         $this->stock($p, '10');
+        $employee = $this->employee();
         DB::table('settings')->insert(['store_id' => $this->storeId(), 'setting_key' => 'vat_enabled', 'setting_value' => json_encode(true)]);
 
         // tarif belum dikonfigurasi lengkap
         $this->cashSale([['product_id' => $p, 'qty' => 1]], '200000')->assertUnprocessable()->assertJsonValidationErrors(['payment_mode']);
+        $this->creditSale($employee, [['product_id' => $p, 'qty' => 1]])->assertUnprocessable()->assertJsonValidationErrors(['payment_mode']);
 
         DB::table('tax_rates')->insert([
             'store_id' => $this->storeId(), 'name' => 'PPN', 'rate' => '11.00', 'price_includes_tax' => 0,
@@ -278,9 +280,12 @@ class SaleTest extends SeededTestCase
         $this->cashSale([['product_id' => $p, 'qty' => 1]], '200000')->assertCreated()
             ->assertJsonPath('data.tax_rate', '11.00')->assertJsonPath('data.tax_amount', '11000.00')->assertJsonPath('data.total', '111000.00');
 
-        $employee = $this->employee();
         $this->creditSale($employee, [['product_id' => $p, 'qty' => 1]])->assertCreated()
-            ->assertJsonPath('data.tax_amount', '0.00')->assertJsonPath('data.total', '100000.00');
+            ->assertJsonPath('data.tax_rate', '11.00')->assertJsonPath('data.tax_amount', '11000.00')
+            ->assertJsonPath('data.total', '111000.00');
+        $creditSale = DB::table('sales')->where('payment_mode', 'payroll_credit')->first();
+        $this->assertSame('11.00', $creditSale->tax_rate_snapshot);
+        $this->assertSame('11000.00', $creditSale->tax_amount);
     }
 
     // ------------------------------------------------------------------ kredit

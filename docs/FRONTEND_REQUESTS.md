@@ -24,7 +24,7 @@
 
 Aturan proyek: harga, diskon, PPN, dan total **dihitung server** (HANDOFF; `BACKEND_PROGRESS.md` bagian 5), dan frontend tidak boleh menghitung ulang. Akibatnya, sebelum `POST /api/sales` Kasir tidak bisa mengetahui:
 
-- **total sebenarnya** (diskon Admin terbaik per produk/kategori, PPN tunai bila `vat_enabled`) — padahal Kasir perlu angkanya untuk menyebut nominal dan menerima uang; uang diterima yang kurang baru ditolak setelah posting (`422 amount_tendered`);
+- **total sebenarnya** (diskon Admin terbaik per produk/kategori, PPN tunai maupun kredit bila `vat_enabled`) — padahal Kasir perlu angkanya untuk menyebut nominal dan menerima uang; uang diterima yang kurang baru ditolak setelah posting (`422 amount_tendered`)
 - apakah **kredit akan melebihi batas** (`422 credit_limit`) — baru diketahui setelah menekan Bayar;
 - apakah **stok cukup** (`422 items.N.qty`) — baru diketahui setelah menekan Bayar, sehingga antrean di kasir tertahan.
 
@@ -40,7 +40,7 @@ Permintaan (aturan validasi **sama** dengan `StoreSaleRequest`, tanpa `idempoten
   "customer_id": null,
   "items": [ { "product_id": 12, "qty": "2" }, { "product_id": 15, "qty": "0.5" } ] }
 ```
-- `payment_mode` wajib (`cash` | `payroll_credit`), karena PPN hanya untuk tunai; frontend memanggil ulang saat mode berganti.
+- `payment_mode` wajib (`cash` | `payroll_credit`); frontend memanggil ulang saat mode berganti untuk memperbarui sinyal batas kredit.
 - `customer_id` wajib bila `payroll_credit` (sama seperti posting).
 - `items`: 1–100 baris; `qty` > 0, maks 99.999, maks 3 desimal.
 
@@ -88,7 +88,7 @@ Tidak menjadi galat di pratinjau: stok kurang (→ `stock_sufficient: false`), m
 
 ### Test yang diharapkan (`SalePreviewTest`)
 
-- Total pratinjau **sama persis** dengan total hasil `POST /api/sales` untuk data yang sama: tanpa diskon; dengan diskon produk dan kategori (diskon terbaik); `qty` desimal; PPN tunai eksklusif dan inklusif; kredit (tanpa PPN).
+- Total pratinjau **sama persis** dengan total hasil `POST /api/sales` untuk data yang sama: tanpa diskon; dengan diskon produk dan kategori (diskon terbaik); `qty` desimal; PPN tunai dan kredit eksklusif maupun inklusif.
 - Tidak ada baris baru di `sales`, `sale_items`, `payments`, `fund_ledger_entries`, `audit_logs`, dan `number_sequences` tidak berubah setelah pratinjau.
 - Produk yang sama di dua baris digabung; `lines[].index` = indeks baris pertama.
 - Stok kurang → 200 dengan `stock_sufficient: false`; batch kedaluwarsa tidak dihitung di `stock_available`.

@@ -406,40 +406,67 @@ class BillingTest extends SeededTestCase
         return [$next];
     }
 
-    public function test_vat_is_added_on_invoice_only_when_configured(): void
+    public function test_invoice_aggregates_sale_time_vat_snapshots_without_recalculating(): void
+    {
+        [$period] = $this->closedPeriodWithSales();
+        $sales = DB::table('sales')->where('billing_period_id', $period)->where('payment_mode', 'payroll_credit')->orderBy('id')->get();
+        $snapshots = [
+            ['subtotal' => '100000.00', 'tax_amount' => '11000.00', 'total' => '111000.00'],
+            ['subtotal' => '50000.50', 'tax_amount' => '5500.06', 'total' => '55500.56'],
+            ['subtotal' => '25000.00', 'tax_amount' => '2750.00', 'total' => '27750.00'],
+        ];
+        foreach ($sales as $index => $sale) {
+            DB::table('sales')->where('id', $sale->id)->update($snapshots[$index] + ['tax_rate_snapshot' => '11.00']);
+        }
+
+        DB::table('settings')->insert(['store_id' => $this->storeId(), 'setting_key' => 'vat_enabled', 'setting_value' => json_encode(true)]);
+        DB::table('tax_rates')->insert([
+            'store_id' => $this->storeId(), 'name' => 'PPN tarif baru', 'rate' => '15.00', 'price_includes_tax' => 0,
+            'effective_from' => now('Asia/Jakarta')->toDateString(), 'created_by' => $this->admin->id,
+        ]);
+
+        $this->postJson("/api/billing-periods/{$period}/invoice")->assertCreated()
+            ->assertJsonPath('data.tax_rate', '11.00')->assertJsonPath('data.tax_amount', '19250.06')
+            ->assertJsonPath('data.subtotal', '175000.50')->assertJsonPath('data.total', '194250.56')
+            ->assertJsonPath('data.customers.0.subtotal', '150000.50');
+
+        $this->assertSame(
+            ['100000.00', '50000.50', '25000.00'],
+            DB::table('receivable_invoice_lines')->where('invoice_id', DB::table('receivable_invoices')->value('id'))->orderBy('id')->pluck('amount')->all(),
+        );
+    }
+
+    public function test_legacy_credit_sales_are_not_recalculated_with_current_vat(): void
     {
         [$period] = $this->closedPeriodWithSales();
         DB::table('settings')->insert(['store_id' => $this->storeId(), 'setting_key' => 'vat_enabled', 'setting_value' => json_encode(true)]);
-
-        // konfigurasi belum lengkap: invoice ditolak dan tidak ada yang berubah
-        $this->postJson("/api/billing-periods/{$period}/invoice")->assertUnprocessable()->assertJsonValidationErrors(['status']);
-        $this->assertSame(0, DB::table('receivable_invoices')->count());
-        $this->assertSame('closed', DB::table('billing_periods')->where('id', $period)->value('status'));
-
         DB::table('tax_rates')->insert([
-            'store_id' => $this->storeId(), 'name' => 'PPN', 'rate' => '11.00', 'price_includes_tax' => 0,
-            'effective_from' => now('Asia/Jakarta')->subDay()->toDateString(), 'created_by' => $this->admin->id,
+            'store_id' => $this->storeId(), 'name' => 'PPN terbaru', 'rate' => '15.00', 'price_includes_tax' => 0,
+            'effective_from' => now('Asia/Jakarta')->toDateString(), 'created_by' => $this->admin->id,
         ]);
 
-        // eksklusif: 11% x 175.000,50 = 19.250,055 -> 19.250,06
         $this->postJson("/api/billing-periods/{$period}/invoice")->assertCreated()
-            ->assertJsonPath('data.tax_rate', '11.00')->assertJsonPath('data.tax_amount', '19250.06')
-            ->assertJsonPath('data.subtotal', '175000.50')->assertJsonPath('data.total', '194250.56');
+            ->assertJsonPath('data.tax_rate', null)->assertJsonPath('data.tax_amount', '0.00')
+            ->assertJsonPath('data.subtotal', '175000.50')->assertJsonPath('data.total', '175000.50');
     }
 
-    public function test_inclusive_vat_keeps_total_equal_to_subtotal(): void
+    public function test_invoice_uses_inclusive_vat_snapshot_from_sale_time(): void
     {
         $budi = $this->employee('NIK-1', 'Budi');
         $id = $this->openPeriod();
-        $this->sale($budi, '111000.00');
+        $saleId = $this->sale($budi, '111000.00');
+        DB::table('sales')->where('id', $saleId)->update([
+            'subtotal' => '100000.00', 'tax_rate_snapshot' => '11.00', 'tax_amount' => '11000.00',
+        ]);
         $this->postJson("/api/billing-periods/{$id}/close")->assertOk();
         DB::table('settings')->insert(['store_id' => $this->storeId(), 'setting_key' => 'vat_enabled', 'setting_value' => json_encode(true)]);
         DB::table('tax_rates')->insert([
-            'store_id' => $this->storeId(), 'name' => 'PPN', 'rate' => '11.00', 'price_includes_tax' => 1,
-            'effective_from' => now('Asia/Jakarta')->subDay()->toDateString(), 'created_by' => $this->admin->id,
+            'store_id' => $this->storeId(), 'name' => 'PPN terbaru', 'rate' => '15.00', 'price_includes_tax' => 0,
+            'effective_from' => now('Asia/Jakarta')->toDateString(), 'created_by' => $this->admin->id,
         ]);
 
         $this->postJson("/api/billing-periods/{$id}/invoice")->assertCreated()
+            ->assertJsonPath('data.subtotal', '100000.00')->assertJsonPath('data.tax_rate', '11.00')
             ->assertJsonPath('data.tax_amount', '11000.00')->assertJsonPath('data.total', '111000.00');
     }
 

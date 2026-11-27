@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  centsToMoney, compareMoney, lineCents, milliToQty, moneyToCents, qtyToMilli, subtractMoney,
+  calculateVatBreakdown, centsToMoney, compareMoney, lineCents, milliToQty, moneyToCents, qtyToMilli, subtractMoney,
 } from './money';
 
 describe('uang', () => {
@@ -31,6 +31,30 @@ describe('uang', () => {
     expect(compareMoney('10', '10.00')).toBe(0);
     expect(compareMoney('1', '2')).toBe(-1);
     expect(compareMoney('1', 'z')).toBeNull();
+  });
+  it('menghitung rincian harga inklusif dengan pembulatan yang sama seperti backend', () => {
+    expect(calculateVatBreakdown('30000.00', '11.00', true)).toEqual({
+      basePrice: '27027.03',
+      taxAmount: '2972.97',
+      totalPrice: '30000.00',
+    });
+    expect(calculateVatBreakdown('10000', '11.5', true)).toEqual({
+      basePrice: '8968.61',
+      taxAmount: '1031.39',
+      totalPrice: '10000.00',
+    });
+  });
+  it('menghitung PPN tambahan dan total harga eksklusif dengan pembulatan yang sama seperti backend', () => {
+    expect(calculateVatBreakdown('30000', '11.00', false)).toEqual({
+      basePrice: '30000.00',
+      taxAmount: '3300.00',
+      totalPrice: '33300.00',
+    });
+  });
+  it('menolak angka harga atau tarif yang tidak valid', () => {
+    expect(calculateVatBreakdown('', '11', true)).toBeNull();
+    expect(calculateVatBreakdown('100', null, false)).toBeNull();
+    expect(calculateVatBreakdown('-100', '11', true)).toBeNull();
   });
 });
 

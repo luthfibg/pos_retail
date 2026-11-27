@@ -50,6 +50,41 @@ export function subtractMoney(a: Decimal, b: Decimal): string | null {
   return x === null || y === null ? null : centsToMoney(x - y);
 }
 
+export interface VatBreakdown {
+  basePrice: string;
+  taxAmount: string;
+  totalPrice: string;
+}
+
+/** Rincian PPN untuk harga inklusif atau eksklusif; pembulatan mengikuti backend. */
+export function calculateVatBreakdown(
+  price: Decimal | null | undefined,
+  rate: Decimal | null | undefined,
+  priceIncludesTax: boolean,
+): VatBreakdown | null {
+  const priceCents = moneyToCents(price);
+  const rateUnits = moneyToCents(rate);
+  if (priceCents === null || priceCents < 0n || rateUnits === null || rateUnits < 0n || rateUnits > 10000n) return null;
+
+  if (priceIncludesTax) {
+    const totalCents = priceCents;
+    const denominator = 10000n + rateUnits;
+    const taxCents = (totalCents * rateUnits + denominator / 2n) / denominator;
+    return {
+      basePrice: centsToMoney(totalCents - taxCents),
+      taxAmount: centsToMoney(taxCents),
+      totalPrice: centsToMoney(totalCents),
+    };
+  }
+
+  const taxCents = (priceCents * rateUnits + 5000n) / 10000n;
+  return {
+    basePrice: centsToMoney(priceCents),
+    taxAmount: centsToMoney(taxCents),
+    totalPrice: centsToMoney(priceCents + taxCents),
+  };
+}
+
 /** Membandingkan dua string uang: -1, 0, 1; null bila tak valid. */
 export function compareMoney(a: Decimal, b: Decimal): -1 | 0 | 1 | null {
   const x = moneyToCents(a);

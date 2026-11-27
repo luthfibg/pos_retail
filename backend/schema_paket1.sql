@@ -819,7 +819,7 @@ CREATE TABLE sales (
   payment_mode ENUM('cash','payroll_credit') NOT NULL,
   subtotal DECIMAL(18,2) NOT NULL DEFAULT 0,
   discount_total DECIMAL(18,2) NOT NULL DEFAULT 0,
-  tax_rate_snapshot DECIMAL(5,2) NULL,              -- hanya untuk mode cash (bila PPN aktif)
+  tax_rate_snapshot DECIMAL(5,2) NULL,              -- snapshot tarif PPN saat transaksi bila aktif
   tax_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
   total DECIMAL(18,2) NOT NULL DEFAULT 0,
   status ENUM('draft','posted','voided') NOT NULL DEFAULT 'draft',

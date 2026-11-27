@@ -22,7 +22,7 @@ return new class extends Migration
             $table->enum('payment_mode', ['cash', 'payroll_credit']);
             $table->decimal('subtotal', 18, 2)->default(0);
             $table->decimal('discount_total', 18, 2)->default(0);
-            $table->decimal('tax_rate_snapshot', 5, 2)->nullable()->comment('hanya untuk mode cash (bila PPN aktif)');
+            $table->decimal('tax_rate_snapshot', 5, 2)->nullable()->comment('snapshot tarif PPN saat transaksi bila aktif');
             $table->decimal('tax_amount', 18, 2)->default(0);
             $table->decimal('total', 18, 2)->default(0);
             $table->enum('status', ['draft', 'posted', 'voided'])->default('draft');

@@ -516,12 +516,12 @@ function InvoiceDetail({
           <ErrorNotice error={issueError} />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Karyawan / struk</th><th className="py-2 pr-3">Departemen</th><th className="py-2 pr-3">Tanggal</th><th className="py-2 text-right">Tagihan</th></tr></thead>
+              <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Karyawan / struk</th><th className="py-2 pr-3">Departemen</th><th className="py-2 pr-3">Tanggal</th><th className="py-2 text-right">Dasar PPN</th></tr></thead>
               {invoice.customers.map((customer) => (
                 <tbody key={customer.customer_id} className="divide-y divide-slate-100">
                   <tr className="bg-slate-50 font-semibold">
                     <th colSpan={3} className="py-2 pr-3 text-left">{customer.name} · {customer.customer_no}{customer.department ? ` · ${customer.department}` : ''}</th>
-                    <th className="py-2 text-right">Subtotal {formatRupiah(customer.subtotal)}</th>
+                    <th className="py-2 text-right">Dasar tagihan {formatRupiah(customer.subtotal)}</th>
                   </tr>
                   {customer.sales.map((sale) => (
                     <tr key={sale.sale_id}>
@@ -536,7 +536,7 @@ function InvoiceDetail({
             </table>
           </div>
           <dl className="ml-auto grid max-w-sm grid-cols-2 gap-x-6 gap-y-2 border-t border-slate-200 pt-3 text-sm">
-            <Metric label="Subtotal" value={formatRupiah(invoice.subtotal)} />
+            <Metric label="Subtotal sebelum PPN" value={formatRupiah(invoice.subtotal)} />
             <Metric label={`PPN${invoice.tax_rate ? ` (${invoice.tax_rate}%)` : ''}`} value={formatRupiah(invoice.tax_amount)} />
             <Metric label="Total invoice" value={formatRupiah(invoice.total)} strong />
             <Metric label="Sudah dibayar" value={formatRupiah(invoice.amount_paid)} />
@@ -605,12 +605,12 @@ function InvoicePrint({ invoice, storeName, onDone }: { invoice: Invoice; storeN
         </header>
         <p className="mb-4"><strong>Ditagihkan kepada:</strong> {invoice.bill_to}</p>
         <table>
-          <thead><tr><th>Karyawan / struk</th><th>Departemen</th><th>Tanggal</th><th className="text-right">Jumlah</th></tr></thead>
+          <thead><tr><th>Karyawan / struk</th><th>Departemen</th><th>Tanggal</th><th className="text-right">Dasar PPN</th></tr></thead>
           {invoice.customers.map((customer) => (
             <tbody key={customer.customer_id}>
               <tr className="font-bold">
                 <th colSpan={3} className="border-t border-black text-left">{customer.name} ({customer.customer_no})</th>
-                <th className="border-t border-black text-right">Subtotal {formatRupiah(customer.subtotal)}</th>
+                <th className="border-t border-black text-right">Dasar tagihan {formatRupiah(customer.subtotal)}</th>
               </tr>
               {customer.sales.map((sale) => (
                 <tr key={sale.sale_id}>
@@ -624,7 +624,7 @@ function InvoicePrint({ invoice, storeName, onDone }: { invoice: Invoice; storeN
           ))}
         </table>
         <dl className="ml-auto mt-4 grid max-w-xs grid-cols-2 gap-2">
-          <dt>Subtotal</dt><dd className="text-right">{formatRupiah(invoice.subtotal)}</dd>
+          <dt>Subtotal sebelum PPN</dt><dd className="text-right">{formatRupiah(invoice.subtotal)}</dd>
           <dt>PPN{invoice.tax_rate ? ` (${invoice.tax_rate}%)` : ''}</dt><dd className="text-right">{formatRupiah(invoice.tax_amount)}</dd>
           <dt className="border-t border-black pt-2 font-bold">Total</dt><dd className="border-t border-black pt-2 text-right font-bold">{formatRupiah(invoice.total)}</dd>
           <dt>Sudah dibayar</dt><dd className="text-right">{formatRupiah(invoice.amount_paid)}</dd>

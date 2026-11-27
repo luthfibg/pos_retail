@@ -72,7 +72,7 @@ export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {
       <div>
         <SettingsTitle embedded={embedded}>Pengaturan PPN</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          Mengatur PPN untuk penjualan tunai dan invoice HRD. Penjualan kredit karyawan tidak dikenai PPN di struk; PPN kredit dihitung saat invoice.
+          PPN dihitung saat transaksi kasir untuk penjualan tunai maupun kredit. Invoice HRD merangkum PPN dari struk dan tidak menghitungnya ulang.
         </p>
       </div>
 
@@ -80,7 +80,7 @@ export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {
         {values.includes
           ? 'Model harga yang dipilih: harga jual sudah termasuk PPN.'
           : 'Model harga yang dipilih: PPN ditambahkan di atas harga jual.'}{' '}
-        Tarif dan status PKP masih menunggu konfirmasi klien (R-04). PPN aktif tetapi belum lengkap membuat penjualan tunai dan pembuatan invoice ditolak.
+        Tarif dan status PKP masih menunggu konfirmasi klien (R-04). PPN aktif tetapi belum lengkap membuat transaksi kasir ditolak.
         Pengaturan ini tidak mengubah harga master produk dan tidak membulatkan total transaksi.
       </div>
 
@@ -93,7 +93,7 @@ export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {
             {saved.effective_from ? `, berlaku sejak ${formatDate(saved.effective_from)}` : ''}.
           </p>
         ) : (
-          <p className="mt-1 text-slate-700">PPN <span className="font-semibold">nonaktif</span>. Total penjualan tunai = harga setelah diskon.</p>
+          <p className="mt-1 text-slate-700">PPN <span className="font-semibold">nonaktif</span>. Total penjualan = harga setelah diskon.</p>
         )}
       </div>
 

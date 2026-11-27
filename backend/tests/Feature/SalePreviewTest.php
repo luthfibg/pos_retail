@@ -124,7 +124,7 @@ class SalePreviewTest extends SeededTestCase
         $this->assertSame($preview->json('data.discount_total'), $posted->json('data.discount_total'));
     }
 
-    public function test_preview_matches_inclusive_cash_vat(): void
+    public function test_preview_matches_inclusive_vat_for_cash_and_credit(): void
     {
         $this->openShift();
         $product = $this->product('10000');
@@ -146,6 +146,19 @@ class SalePreviewTest extends SeededTestCase
 
         $this->assertSame($preview->json('data.tax_amount'), $posted->json('data.tax_amount'));
         $this->assertSame($preview->json('data.total'), $posted->json('data.total'));
+
+        $employee = $this->employee('100000');
+        $creditPreview = $this->postJson('/api/sales/preview', [
+            'payment_mode' => 'payroll_credit', 'customer_id' => $employee, 'items' => $items,
+        ])->assertOk()->assertJsonPath('data.tax_rate', '11.00')
+            ->assertJsonPath('data.tax_amount', '990.99')->assertJsonPath('data.total', '10000.00');
+        $creditPosted = $this->postJson('/api/sales', [
+            'idempotency_key' => (string) Str::uuid(), 'payment_mode' => 'payroll_credit',
+            'customer_id' => $employee, 'items' => $items,
+        ])->assertCreated();
+
+        $this->assertSame($creditPreview->json('data.tax_amount'), $creditPosted->json('data.tax_amount'));
+        $this->assertSame($creditPreview->json('data.total'), $creditPosted->json('data.total'));
     }
 
     public function test_credit_preview_reports_remaining_without_posting_or_reauth(): void

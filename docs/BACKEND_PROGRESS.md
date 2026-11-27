@@ -256,7 +256,7 @@ Untuk **Admin** ditambah: `"credit_limit": "1500000.00"` (null bila belum diisi)
 | `exhausted` | Sisa batas habis (`credit_remaining` = `"0.00"`) | Tawarkan tunai; pengecualian hanya Admin |
 | `inactive` | Karyawan nonaktif | Tidak bisa dipilih untuk kredit |
 
-`credit_remaining` bernilai `null` kecuali status `available`/`exhausted`. Pemakaian dihitung dari struk kredit terposting yang belum ditagih (struk baru ada setelah modul penjualan; sebelum itu selalu 0). Estimasi PPN belum dihitung (R-04).
+`credit_remaining` bernilai `null` kecuali status `available`/`exhausted`. Pemakaian dihitung dari total struk kredit terposting yang belum ditagih; pratinjau menghitung total, termasuk PPN bila aktif, tanpa mengubah data.
 
 ### POST `/api/customers`
 `{ "customer_no": "NIK-100", "name": "Budi", "department": "Produksi" }` → 201 `{data}` status `pending_verification`.
@@ -356,7 +356,7 @@ Endpoint read-only untuk kasir/administrator yang memiliki `sales.create`, denga
   "items": [ { "product_id": 12, "qty": "2" }, { "product_id": 15, "qty": "0.5" } ] }
 ```
 
-Respons memuat baris tergabung, nama diskon terpilih, subtotal, diskon, PPN tunai, total, stok layak jual FEFO saat ini, dan status kecukupan stok. Untuk kredit potong gaji, respons juga memuat `credit.remaining_before`, `remaining_after`, dan `exceeds_limit` tanpa mengirim batas kredit mentah. Melebihi batas adalah sinyal UI (`exceeds_limit: true`) dan bukan error; pengecualian Admin tetap dilakukan hanya saat posting.
+Respons memuat baris tergabung, nama diskon terpilih, subtotal, diskon, PPN untuk mode tunai maupun kredit, total, stok layak jual FEFO saat ini, dan status kecukupan stok. Untuk kredit potong gaji, respons juga memuat `credit.remaining_before`, `remaining_after`, dan `exceeds_limit` tanpa mengirim batas kredit mentah. Melebihi batas adalah sinyal UI (`exceeds_limit: true`) dan bukan error; pengecualian Admin tetap dilakukan hanya saat posting.
 
 Semua aturan harga, diskon, PPN, pembulatan, dan penggabungan baris memakai sumber perhitungan yang sama dengan `POST /api/sales`. Pratinjau tidak memeriksa shift, tidak mengunci/menurunkan stok, tidak membuat nomor dokumen, sale/item/payment, ledger, idempotensi, atau audit. Nomor baris dipertahankan sebagai indeks baris pertama agar kunci error tetap sama, misalnya `items.N.product_id`. Stok kadaluarsa tidak dihitung sebagai tersedia, tetapi stok kurang tidak menolak pratinjau.
 
@@ -373,7 +373,7 @@ Contoh respons:
 } }
 ```
 
-Validasi dan error 422 sama dengan posting untuk `payment_mode`, `customer_id`, dan `items.*`, kecuali field posting `idempotency_key`, `amount_tendered`, dan `credit_exception` tidak diperlukan. `SalePreviewTest` memeriksa paritas dengan posting, diskon PPN tunai, sinyal batas kredit, stok kadaluarsa, serta sifat read-only.
+Validasi dan error 422 sama dengan posting untuk `payment_mode`, `customer_id`, dan `items.*`, kecuali field posting `idempotency_key`, `amount_tendered`, dan `credit_exception` tidak diperlukan. `SalePreviewTest` memeriksa paritas dengan posting, diskon, PPN tunai/kredit, sinyal batas kredit, stok kadaluarsa, serta sifat read-only.
 
 ### POST `/api/sales`
 
@@ -410,7 +410,7 @@ Respons (`data`):
   "payment": { "method": "cash", "amount_tendered": "50000.00", "change_given": "22500.00", "amount_applied": "27500.00" },
   "receipt": { "store_name": "…", "is_copy": false, "copy_label": null, "note": null } }
 ```
-Kredit: `payment` = `null`, `billing_status` = `"unbilled"`, `receipt.note` = "Belum dibayar. Ditagihkan lewat potong gaji." (struk kredit hanya menampilkan subtotal barang; PPN kredit dihitung saat invoice).
+Kredit: `payment` = `null`, `billing_status` = `"unbilled"`, `receipt.note` = "Belum dibayar. Ditagihkan lewat potong gaji." Struk kredit menampilkan pajak dan total dari snapshot yang dihitung saat transaksi, sama seperti tunai.
 
 ### Error yang perlu penanganan khusus (422, `errors.<kunci>`)
 | Kunci | Arti | Tindakan UI |
@@ -430,7 +430,7 @@ Pengecualian berhasil → `over_limit: true` pada struk (label "melebihi batas" 
 
 ### Catatan perilaku
 - Stok FEFO: Kasir tidak memilih batch; batch kadaluarsa tidak terjual (stok tampak "ada" di `stock_sellable` tetapi bisa ditolak `items.N.qty`).
-- PPN tunai hanya aktif bila Admin mengaktifkan (`vat_enabled`) dan tarif dikonfigurasi; default mati. Keputusan klien: harga jual termasuk PPN. Saat mode inklusif aktif, PPN diurai dari harga tanpa menaikkan total; untuk kredit, penguraian dilakukan pada invoice HRD. Pembulatan total tunai tidak diterapkan.
+- PPN untuk tunai dan kredit hanya aktif bila Admin mengaktifkan (`vat_enabled`) dan tarif dikonfigurasi; default mati. Keputusan klien: harga jual termasuk PPN. Saat mode inklusif aktif, PPN diurai dari harga tanpa menaikkan total. Tarif dan jumlah PPN disimpan sebagai snapshot pada struk; invoice HRD menjumlahkan snapshot tersebut, tidak menghitung ulang memakai konfigurasi terbaru. Penjualan lama tanpa snapshot PPN tidak dikenai PPN retroaktif. Pembulatan total transaksi tidak diterapkan.
 - Tunai masuk ledger kas kecil otomatis; kredit tidak menyentuh laci.
 - Tidak ada endpoint pencarian produk baru: pakai pencarian/`by-barcode` produk yang sudah ada dan pemilih karyawan (`GET /api/customers?q=`, perhatikan `credit_state`).
 
@@ -668,7 +668,7 @@ Pencatatan kas masuk/keluar nonpenjualan dan setoran parsial tidak lagi tersedia
 - **Tutup periode** mengikat semua struk kredit terposting yang belum terikat ke periode itu, lalu **periode berikutnya otomatis dibuka**; struk kredit baru masuk ke sana. Karena struk terikat tidak lagi dihitung sebagai pemakaian, **sisa batas kredit karyawan pulih** setelah tutup periode. Struk tunai dan struk batal tidak ikut.
 - Nama default periode menggunakan `Periode [Nama Bulan]` dalam bahasa Indonesia. Periode pertama/manual memakai bulan berjalan; setelah periode ditutup, periode otomatis berikutnya memakai bulan kalender setelah `period_month` periode yang ditutup (misalnya Oktober → November). Admin dapat mengubah bulan/tahun periode (`period_month`) saat masih terbuka; bila label masih memakai nama default, label mengikuti perubahan bulan. Label khusus tetap dapat diedit terpisah. Periode tertutup tidak dapat diubah agar riwayat struk tidak bergeser. Jika periode kosong dibatalkan lalu dibuka lagi, bulan periode terakhir yang dibatalkan dipakai kembali (tidak melompat bulan).
 - Periode kosong dapat dibatalkan dengan alasan, baik masih terbuka maupun sudah ditutup, selama tidak memiliki invoice. Periode aktif yang dibatalkan tidak otomatis diganti; Admin harus membuka periode yang benar sebelum transaksi kredit dilanjutkan. Periode berisi struk kredit atau yang sudah memiliki invoice tidak dapat dibatalkan. Keterikatan transaksi dijaga agar pembatalan tidak balapan dengan posting kredit.
-- **Invoice**: satu per periode tertutup, satu baris per struk. Subtotal = jumlah struk. PPN dihitung di invoice hanya bila `vat_enabled` aktif dan tarif lengkap (R-04); bila PPN aktif tapi konfigurasi belum lengkap → 422 `status` dan tidak ada yang berubah. Struk ditandai `billing_status: "invoiced"` dan **tidak dapat di-void lagi** (422 `status`, perlu credit note).
+- **Invoice**: satu per periode tertutup, satu baris per struk dengan nilai dasar sebelum PPN. Subtotal = jumlah dasar struk, PPN = jumlah snapshot pajak struk, dan total = jumlah total struk. Invoice tidak menggunakan tarif atau status PPN terkini untuk menghitung ulang. PPN aktif tetapi konfigurasi tarif/harga belum lengkap membuat transaksi kasir (tunai maupun kredit) ditolak. Struk ditandai `billing_status: "invoiced"` dan **tidak dapat di-void lagi** (422 `status`, perlu credit note).
 - **Status invoice**: `draft` → `issued` → `handed_to_hr` → `partially_paid` → `paid`. Pembayaran hanya untuk `issued`/`handed_to_hr`/`partially_paid`; jumlah > 0 dan ≤ `amount_remaining` (422 `amount`). Saat lunas, semua struk menjadi `billing_status: "paid"`.
 - Finance mencatat pembayaran HRD sebagai konfirmasi penerimaan dana. Transaksi pembayaran dan ledger `invoice_payment_in` pada akun kas besar toko dibuat atomik; referensi ledger menunjuk baris `invoice_payments`. Permission `invoice.record_payment` tersedia untuk Finance dan Admin (serta role lain yang secara eksplisit diberi izin).
 - Bentuk invoice: `id, document_no (INV-YYYYMM-000001), billing_period_id, period_label, bill_to, subtotal, tax_rate, tax_amount, total, amount_paid, amount_remaining, status, issued_at, handed_at, created_at`. Semua uang string desimal.
@@ -701,7 +701,7 @@ Pencatatan kas masuk/keluar nonpenjualan dan setoran parsial tidak lagi tersedia
 | PUT | `/api/settings/warehouse` | `settings.manage` | `{ enabled }`; mengubah flag warehouse dan status aktif lokasi Gudang secara atomik |
 
 - Diskon: tanggal `YYYY-MM-DD` (WIB); mulai = awal hari, berakhir = akhir hari; `starts_at` kosong = mulai sekarang. `value` > 0, maks 2 desimal; persen ≤ 100. Respons memuat `target_name` dan `status` (`active` · `scheduled` · `expired` · `inactive`; tampilkan sebagai teks, bukan hanya warna). Tidak ada hapus; nonaktifkan lewat `is_active`. Di kasir, diskon terbaik yang sedang berlaku dipilih otomatis (produk vs kategori).
-- PPN: default nonaktif. Keputusan klien untuk toko ini adalah harga jual sudah termasuk PPN; konfigurasi baru di UI memilih mode inklusif secara default. Admin tetap wajib mengisi tarif (0–100, 2 desimal) sebelum mengaktifkan. Perubahan tarif/mode membuat versi baru yang berlaku mulai hari ini (WIB); nilai yang sama tidak membuat versi baru; menonaktifkan tidak menghapus riwayat tarif. Tarif dan status PKP masih menunggu konfirmasi klien (R-04); PPN aktif tapi konfigurasi tidak lengkap membuat penjualan tunai dan pembuatan invoice ditolak. Harga master tidak diubah otomatis dan tidak ada pembulatan transaksi.
+- PPN: default nonaktif. Keputusan klien untuk toko ini adalah harga jual sudah termasuk PPN; konfigurasi baru di UI memilih mode inklusif secara default. Admin tetap wajib mengisi tarif (0–100, 2 desimal) sebelum mengaktifkan. Perubahan tarif/mode membuat versi baru yang berlaku mulai hari ini (WIB); nilai yang sama tidak membuat versi baru; menonaktifkan tidak menghapus riwayat tarif. Tarif dan status PKP masih menunggu konfirmasi klien (R-04); PPN aktif tapi konfigurasi tidak lengkap membuat transaksi kasir (tunai maupun kredit) ditolak. Invoice HRD merangkum snapshot PPN per transaksi dan tidak menghitung ulang. Harga master tidak diubah otomatis dan tidak ada pembulatan transaksi.
 - Gudang: default nonaktif. Admin dapat mengaktifkan/nonaktifkan lewat `/settings/warehouse`; perubahan mengaktifkan/nonaktifkan lokasi Gudang tenant dalam transaksi dan dicatat ke audit. Menonaktifkan tidak menghapus saldo maupun riwayat stok; penerimaan dan transfer yang melibatkan Gudang tetap dibatasi oleh `warehouse_enabled`.
 - Layar pengaturan yang tersedia (Admin): daftar + form diskon, pengaturan PPN, dan saklar Pengaturan Gudang dengan konfirmasi sebelum mengubah status.
 

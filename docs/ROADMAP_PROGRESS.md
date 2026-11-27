@@ -217,7 +217,7 @@ Hak akses UI menggunakan permission dan tidak bergantung pada nama role sehingga
 | # | Tahap | Status | Test / catatan |
 |---|---|---|---|
 | 5.1 | Periode tagihan: buka / ubah jadwal / tutup periode (struk kredit terikat, periode berikutnya terbuka otomatis) | ✅ | BillingTest |
-| 5.2 | Invoice gabungan ke HRD + rincian per karyawan (PPN kredit dihitung saat invoice); terbit, serah ke HRD | ✅ | BillingTest |
+| 5.2 | Invoice gabungan ke HRD + rincian per karyawan (PPN dari snapshot struk); terbit, serah ke HRD | ✅ | BillingTest |
 | 5.3 | Catat pembayaran HRD (potong gaji), boleh sebagian | ✅ | BillingTest |
 
 ### Fase 6 — Cetak, laporan, dashboard

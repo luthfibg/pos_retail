@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { categoryApi, productApi, supplierApi } from '@/lib/api/endpoints';
+import { categoryApi, productApi, settingsApi, supplierApi } from '@/lib/api/endpoints';
 import { ApiError } from '@/lib/api/client';
 import type { Product, ProductStatus, Supplier } from '@/lib/api/types';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -8,9 +8,10 @@ import { Modal } from '@/components/ui/Modal';
 import { Field, inputCls } from '@/components/ui/Field';
 import { LocalDecimalInput } from '@/components/ui/LocalDecimalInput';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
-import { formatRupiah } from '@/lib/format';
+import { formatQty, formatRupiah } from '@/lib/format';
+import { calculateVatBreakdown } from '@/lib/money';
 import {
-  buildCreatePayload, buildUpdatePayload, emptyValues, valuesFromProduct, validateProduct,
+  buildCreatePayload, buildUpdatePayload, emptyValues, normalizeDecimal, valuesFromProduct, validateProduct,
   normalizeScannedBarcode, type FormErrors, type ProductFormValues, type UpdatePayload,
 } from './productForm';
 
@@ -48,17 +49,29 @@ export function ProductFormDialog({ product, onClose }: Props) {
   const { can } = useAuth();
   const qc = useQueryClient();
   const caps = { canSetPrice: can('price.change'), canSetCost: can('price.change'), canActivate: can('product.activate') };
+  const canViewVatSetting = caps.canSetPrice && can('settings.manage');
 
   const [values, setValues] = useState<ProductFormValues>(() => (product ? valuesFromProduct(product) : emptyValues()));
   const [errors, setErrors] = useState<FormErrors>({});
   const [created, setCreated] = useState<Product | null>(null);
   const [scannerValue, setScannerValue] = useState('');
 
+  const vatSetting = useQuery({
+    queryKey: ['settings', 'vat'],
+    queryFn: settingsApi.vat,
+    enabled: canViewVatSetting,
+  });
   const categories = useQuery({ queryKey: ['categories', 'active'], queryFn: () => categoryApi.list(true) });
   const suppliers = useQuery({
     queryKey: ['suppliers', 'products'],
     queryFn: loadSuppliers,
   });
+  const priceIncludesTax = vatSetting.data?.enabled === true && vatSetting.data.price_includes_tax === true;
+  const showVatBreakdown = vatSetting.data?.enabled === true && vatSetting.data.price_includes_tax !== null;
+  const vatBreakdown = showVatBreakdown && vatSetting.data?.rate !== null && vatSetting.data?.rate !== undefined
+    ? calculateVatBreakdown(normalizeDecimal(values.sellPrice), vatSetting.data.rate, priceIncludesTax)
+    : null;
+  const vatRateLabel = vatSetting.data?.rate ? ` (${formatQty(vatSetting.data.rate)}%)` : '';
 
   const mutation = useMutation({
     mutationFn: (job: Job) =>
@@ -150,6 +163,7 @@ export function ProductFormDialog({ product, onClose }: Props) {
         <div className="space-y-4 p-5">
           {showTopError && <ErrorNotice error={mutation.error} />}
           <ErrorNotice error={suppliers.error} />
+          {canViewVatSetting && <ErrorNotice error={vatSetting.error} />}
 
           {mode === 'create' && (
             <Field label="Scan barcode">
@@ -233,14 +247,35 @@ export function ProductFormDialog({ product, onClose }: Props) {
           </div>
 
           {caps.canSetPrice ? (
-            <Field label="Harga jual (Rp)" error={err('sell_price')} hint={mode === 'create' ? 'Kosongkan bila harga belum ditetapkan.' : undefined}>
-              <input
-                className={`${inputCls} tabular-nums`}
-                inputMode="decimal"
-                value={values.sellPrice}
-                onChange={(e) => set('sellPrice', e.target.value)}
-              />
-            </Field>
+            <>
+              <Field
+                label={priceIncludesTax ? 'Harga jual + PPN (Rp)' : 'Harga jual (Rp)'}
+                error={err('sell_price')}
+                hint={mode === 'create' ? 'Kosongkan bila harga belum ditetapkan.' : undefined}
+              >
+                <input
+                  className={`${inputCls} tabular-nums`}
+                  inputMode="decimal"
+                  value={values.sellPrice}
+                  onChange={(e) => set('sellPrice', e.target.value)}
+                />
+              </Field>
+              {showVatBreakdown && (
+                <div className="grid grid-cols-2 gap-3">
+                  {priceIncludesTax ? (
+                    <>
+                      <ReadOnlyPriceField label="Harga jual (sebelum PPN)" value={vatBreakdown?.basePrice} />
+                      <ReadOnlyPriceField label={`PPN termasuk${vatRateLabel}`} value={vatBreakdown?.taxAmount} />
+                    </>
+                  ) : (
+                    <>
+                      <ReadOnlyPriceField label={`PPN${vatRateLabel}`} value={vatBreakdown?.taxAmount} />
+                      <ReadOnlyPriceField label="Harga jual + PPN" value={vatBreakdown?.totalPrice} />
+                    </>
+                  )}
+                </div>
+              )}
+            </>
           ) : (
             <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">
               {mode === 'create'
@@ -308,5 +343,18 @@ export function ProductFormDialog({ product, onClose }: Props) {
         </div>
       </form>
     </Modal>
+  );
+}
+
+function ReadOnlyPriceField({ label, value }: { label: string; value?: string }) {
+  return (
+    <Field label={label}>
+      <input
+        className={`${inputCls} tabular-nums`}
+        value={formatRupiah(value)}
+        disabled
+        readOnly
+      />
+    </Field>
   );
 }

@@ -24,7 +24,7 @@ use Illuminate\Validation\ValidationException;
  *  - tunai: uang diterima >= total; masuk ledger kas kecil; PPN bila diaktifkan (setting vat_enabled, R-04)
  *  - kredit potong gaji: wajib karyawan aktif dengan batas terisi (R-09); total baru + pemakaian belum ditagih
  *    tidak boleh melebihi batas, kecuali pengecualian Admin (re-auth, catatan wajib, bertanda over_limit_flag, R-02);
- *    PPN kredit dihitung saat invoice, bukan di struk
+ *    PPN dihitung saat penjualan untuk tunai maupun kredit, berdasarkan snapshot tarif saat transaksi
  *  - stok kurang -> seluruh transaksi gagal (anti-negatif), pesan di items.N.qty
  *  - VOID (sales.void, Admin): dokumen sale_voids + status 'voided', bukan hapus. Stok kembali ke batch asal (voidSale),
  *    kredit hanya bila belum ditagihkan, tunai hanya selama shift struk itu masih open (uang kembali dari laci yang sama,
@@ -94,7 +94,7 @@ class SaleService
             $this->assertCreditCustomer($customer);
         }
 
-        $calculated = $this->calculateLines($storeId, $data['payment_mode'], $data['items']);
+        $calculated = $this->calculateLines($storeId, $data['items']);
         $credit = null;
         if ($isCredit) {
             $creditState = $this->creditState($customer, $calculated['total']);
@@ -350,7 +350,7 @@ class SaleService
         }
 
         // 3–4. baris, harga, diskon, dan pajak memakai sumber logika yang sama dengan pratinjau
-        $calculated = $this->calculateLines($storeId, $data['payment_mode'], $data['items'], lockProducts: true);
+        $calculated = $this->calculateLines($storeId, $data['items'], lockProducts: true);
         $computed = $calculated['lines'];
         $products = $calculated['products'];
         $subtotal = $calculated['subtotal'];
@@ -490,7 +490,7 @@ class SaleService
      * @param  array<int, array<string, mixed>>  $items
      * @return array<string, mixed>
      */
-    private function calculateLines(int $storeId, string $paymentMode, array $items, bool $lockProducts = false): array
+    private function calculateLines(int $storeId, array $items, bool $lockProducts = false): array
     {
         $lines = [];
         foreach ($items as $index => $item) {
@@ -560,9 +560,7 @@ class SaleService
         }
 
         $net = $subtotal - $discountTotal;
-        [$taxAmount, $taxRate, $total] = $paymentMode === 'payroll_credit'
-            ? [0, null, $net]
-            : $this->cashTax($storeId, $net);
+        [$taxAmount, $taxRate, $total] = $this->saleTax($storeId, $net);
 
         return [
             'lines' => $computed,
@@ -636,7 +634,7 @@ class SaleService
     }
 
     /** @return array{0: int, 1: string|null, 2: int} [pajak, tarif, total akhir] */
-    private function cashTax(int $storeId, int $net): array
+    private function saleTax(int $storeId, int $net): array
     {
         $enabled = DB::table('settings')->where('store_id', $storeId)->where('setting_key', 'vat_enabled')->value('setting_value');
         if ($enabled === null || json_decode((string) $enabled, true) !== true) {

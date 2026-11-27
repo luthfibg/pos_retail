@@ -15,7 +15,7 @@ use Illuminate\Validation\ValidationException;
  *  - periode: satu terbuka per toko; Admin menutup pada hari gaji; menutup = mengikat semua struk kredit terposting
  *    yang belum terikat (billing_period_id) ke periode itu, lalu periode berikutnya langsung dibuka
  *  - invoice: satu per periode tertutup, satu baris per struk (receivable_invoice_lines), dikelompokkan per karyawan saat tampil
- *  - PPN kredit dihitung di invoice (bila vat_enabled + tarif lengkap, R-04); struk kredit tidak memuat PPN
+ *  - PPN kredit memakai snapshot yang dihitung saat penjualan; invoice hanya merangkum dasar pajak dan PPN struk
  *  - alur status invoice: draft -> issued -> handed_to_hr -> partially_paid -> paid (pembayaran HRD boleh sebagian [ASUMSI])
  *  - struk yang sudah di-invoice tidak dapat di-void (butuh credit note, Paket 2)
  */
@@ -236,18 +236,37 @@ class BillingService
             $sales = DB::table('sales')
                 ->where('billing_period_id', $periodId)->where('payment_mode', 'payroll_credit')->where('status', 'posted')
                 ->orderBy('customer_id')->orderBy('id')->lockForUpdate()
-                ->get(['id', 'customer_id', 'total']);
+                ->get(['id', 'customer_id', 'tax_rate_snapshot', 'tax_amount', 'total']);
 
             if ($sales->isEmpty()) {
                 throw ValidationException::withMessages(['status' => ['Tidak ada struk kredit pada periode ini.']]);
             }
 
             $subtotal = 0;
+            $tax = 0;
+            $total = 0;
+            $rateSnapshots = [];
+            $rows = [];
             foreach ($sales as $s) {
-                $subtotal += Decimal::money((string) $s->total);
+                $saleTotal = Decimal::money((string) $s->total);
+                $saleTax = Decimal::money((string) $s->tax_amount);
+                $subtotal += $saleTotal - $saleTax;
+                $tax += $saleTax;
+                $total += $saleTotal;
+                $rateKey = $s->tax_rate_snapshot === null
+                    ? 'none'
+                    : (string) Decimal::money((string) $s->tax_rate_snapshot);
+                $rateSnapshots[$rateKey] = $s->tax_rate_snapshot;
+                $rows[] = [
+                    'customer_id' => $s->customer_id,
+                    'sale_id' => $s->id,
+                    'amount' => Decimal::moneyString($saleTotal - $saleTax),
+                ];
             }
 
-            [$tax, $rate, $total] = $this->invoiceTax($storeId, $subtotal);
+            $rate = count($rateSnapshots) === 1 && ! array_key_exists('none', $rateSnapshots)
+                ? reset($rateSnapshots)
+                : null;
 
             $period = Carbon::now('Asia/Jakarta')->format('Ym');
             $docNo = DocumentNumber::format('INV', $this->sequences->next($storeId, 'INV', $period), $period);
@@ -266,10 +285,10 @@ class BillingService
                 'created_by' => $actor->id,
             ]);
 
-            $rows = [];
-            foreach ($sales as $s) {
-                $rows[] = ['invoice_id' => $invoiceId, 'customer_id' => $s->customer_id, 'sale_id' => $s->id, 'amount' => $s->total];
+            foreach ($rows as &$row) {
+                $row['invoice_id'] = $invoiceId;
             }
+            unset($row);
             foreach (array_chunk($rows, 200) as $chunk) {
                 DB::table('receivable_invoice_lines')->insert($chunk);
             }
@@ -830,34 +849,6 @@ class BillingService
             11 => 'November',
             12 => 'Desember',
         ][$month];
-    }
-
-    /** @return array{0: int, 1: string|null, 2: int} [pajak, tarif, total] */
-    private function invoiceTax(int $storeId, int $subtotal): array
-    {
-        $enabled = DB::table('settings')->where('store_id', $storeId)->where('setting_key', 'vat_enabled')->value('setting_value');
-        if ($enabled === null || json_decode((string) $enabled, true) !== true) {
-            return [0, null, $subtotal];
-        }
-
-        $rate = DB::table('tax_rates')->where('store_id', $storeId)->where('effective_from', '<=', Carbon::now('Asia/Jakarta')->toDateString())
-            ->orderByDesc('effective_from')->orderByDesc('id')->first();
-
-        if ($rate === null || $rate->price_includes_tax === null) {
-            throw ValidationException::withMessages(['status' => ['Konfigurasi PPN belum lengkap (tarif atau status harga termasuk PPN); invoice belum dapat dibuat.']]);
-        }
-
-        $units = Decimal::money((string) $rate->rate);
-
-        if ($rate->price_includes_tax) {
-            $tax = intdiv($subtotal * $units + intdiv(10000 + $units, 2), 10000 + $units);
-
-            return [$tax, (string) $rate->rate, $subtotal];
-        }
-
-        $tax = intdiv($subtotal * $units + 5000, 10000);
-
-        return [$tax, (string) $rate->rate, $subtotal + $tax];
     }
 
     private function periodQuery(int $storeId)
