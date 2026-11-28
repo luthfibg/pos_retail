@@ -31,9 +31,6 @@ export function DashboardPage() {
     <div className="space-y-6 p-4 sm:p-6">
       <header>
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Ringkasan barang masuk dan keluar, laporan Kasir Jaga, tagihan, serta retur.
-        </p>
       </header>
 
       <form onSubmit={applyFilters} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
@@ -59,10 +56,10 @@ export function DashboardPage() {
         {filterError && <p role="alert" className="text-sm text-red-700 sm:col-span-2 lg:col-span-full">{filterError}</p>}
       </form>
 
-      <p className="text-sm text-slate-500">
+      {/* <p className="text-sm text-slate-500">
         Periode barang dan Kasir Jaga: {formatDate(applied.dateFrom)} – {formatDate(applied.dateTo)}.
         Tagihan memakai bulan dan tahun berjalan; retur menampilkan jumlah seluruh retur supplier.
-      </p>
+      </p> */}
       <DashboardMenuSummaries applied={applied} />
     </div>
   );

@@ -47,7 +47,7 @@ class SalePreviewTest extends SeededTestCase
     {
         $id = DB::table('customers')->insertGetId([
             'store_id' => $this->storeId(), 'customer_no' => 'EMP-PREV', 'name' => 'Karyawan Pratinjau',
-            'status' => 'active', 'created_by' => $this->cashier->id,
+            'created_by' => $this->cashier->id,
         ]);
         DB::table('customer_credit_limits')->insert([
             'customer_id' => $id, 'limit_amount' => $limit, 'effective_from' => now(), 'set_by' => $this->cashier->id,

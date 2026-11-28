@@ -94,11 +94,6 @@ export function PurchaseRequisitionsPage() {
       <header className="space-y-1">
         <div>
           <h1 className="text-xl font-semibold">Permintaan Pembelian</h1>
-          <p className="max-w-2xl text-sm text-slate-600">
-            {canViewAll
-              ? 'Periksa Permintaan toko, siapkan PO dengan satu otorisasi Owner, lalu pantau pengiriman hingga penerimaan.'
-              : 'Ajukan Permintaan otomatis dari pemantauan stok ke Finance.'}
-          </p>
         </div>
       </header>
 

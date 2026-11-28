@@ -36,7 +36,7 @@ class ReportTest extends SeededTestCase
         if ($mode === 'payroll_credit') {
             $customerId = DB::table('customers')->insertGetId([
                 'store_id' => $this->storeId(), 'customer_no' => 'EMP-RPT', 'name' => 'Karyawan Laporan',
-                'status' => 'active', 'created_by' => $this->cashier->id,
+                'created_by' => $this->cashier->id,
             ]);
         }
 

@@ -35,7 +35,7 @@ class BillingTest extends SeededTestCase
     {
         return DB::table('customers')->insertGetId([
             'store_id' => $this->storeId(), 'customer_no' => $no, 'name' => $name, 'department' => 'Produksi',
-            'status' => 'active', 'created_by' => $this->admin->id,
+            'created_by' => $this->admin->id,
         ]);
     }
 
