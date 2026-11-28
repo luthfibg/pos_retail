@@ -4,7 +4,7 @@ import { toWibDate } from '@/lib/format';
 import { moneyToCents } from '@/lib/money';
 
 export const TARGET_LABEL: Record<DiscountTarget, string> = { product: 'Produk', category: 'Kategori' };
-export const TYPE_LABEL: Record<DiscountType, string> = { percent: 'Persen (%)', amount: 'Nominal per unit (Rp)' };
+export const TYPE_LABEL: Record<DiscountType, string> = { percent: 'Persentase (%)', amount: 'Jumlah potongan per barang (Rp)' };
 
 export const STATUS_LABEL: Record<DiscountStatus, string> = {
   active: 'Berlaku',
@@ -120,7 +120,7 @@ export function buildDiscountUpdate(v: DiscountFormValues, original: Discount): 
   return p;
 }
 
-/** "10%" atau "Rp 500 / unit" (tampilan; nilai dari server). */
+/** "10%" atau "Rp 500 / barang" (tampilan; nilai dari server). */
 export function describeValue(type: DiscountType, value: string, formatMoney: (v: string) => string): string {
   if (type === 'percent') {
     const n = moneyToCents(value);
@@ -129,5 +129,5 @@ export function describeValue(type: DiscountType, value: string, formatMoney: (v
     const frac = n % 100n;
     return `${whole}${frac === 0n ? '' : `,${frac.toString().padStart(2, '0').replace(/0$/, '')}`}%`;
   }
-  return `${formatMoney(value)} / unit`;
+  return `${formatMoney(value)} / barang`;
 }

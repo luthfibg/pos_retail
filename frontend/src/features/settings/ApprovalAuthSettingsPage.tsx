@@ -12,14 +12,14 @@ import { SettingsTitle, pageClass } from './embedded';
 import { normalizeAuthorizationKey, validateAuthorizationKey } from './authorizationKeyLogic';
 
 const MODE_SUMMARY: Record<ApprovalAuthMode, string> = {
-  password: 'Pemberi persetujuan mengetik username dan password akunnya.',
-  key: 'Pemberi persetujuan mengetik username dan kunci otorisasinya; password tidak diminta.',
-  password_and_key: 'Pemberi persetujuan mengetik username, password akun, dan kunci otorisasi.',
+  password: 'Pengguna memasukkan nama pengguna dan kata sandi akunnya.',
+  key: 'Pengguna memasukkan nama pengguna dan kunci pribadinya. Kata sandi akun tidak diminta.',
+  password_and_key: 'Pengguna memasukkan nama pengguna, kata sandi akun, dan kunci pribadinya.',
 };
 
 const KEY_TYPE_LABEL: Record<AuthorizationKeyType, string> = {
   code: 'Kode 6 karakter',
-  passphrase: 'Kalimat rahasia',
+  passphrase: 'Kalimat sandi rahasia',
 };
 
 const MODE_QUERY_KEY = ['settings', 'approval-auth'];
@@ -182,9 +182,9 @@ export function ApprovalAuthSettingsPage({ embedded = false }: { embedded?: bool
   return (
     <div className={pageClass(embedded, 'max-w-5xl')}>
       <div>
-        <SettingsTitle embedded={embedded}>Otorisasi persetujuan</SettingsTitle>
+        <SettingsTitle embedded={embedded}>Cara mengonfirmasi persetujuan</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          Kunci bersifat pribadi untuk setiap pemegang izin persetujuan. Pengelola hanya dapat melihat status dan mencabut kunci, bukan melihat atau mengatur kunci milik orang lain.
+          Setiap pengguna yang berhak menyetujui memiliki kunci pribadi sendiri. Pengelola hanya dapat melihat status atau menonaktifkan kunci, bukan melihat atau mengubah kunci milik orang lain.
         </p>
       </div>
 
@@ -232,49 +232,49 @@ export function ApprovalAuthSettingsPage({ embedded = false }: { embedded?: bool
       )}
 
       {removeOwnOpen && (
-        <Modal title="Hapus kunci otorisasi?" onClose={() => { if (!removeOwnBusy) setRemoveOwnOpen(false); }}>
+        <Modal title="Hapus kunci pribadi?" onClose={() => { if (!removeOwnBusy) setRemoveOwnOpen(false); }}>
           <form onSubmit={(event) => void removeOwnKey(event)} className="space-y-4 p-5">
-            <p className="text-sm text-slate-700">Kunci pribadi Anda akan dihapus. Pada mode kunci, penghapusan ditolak jika Anda adalah pemegang kunci aktif terakhir.</p>
+            <p className="text-sm text-slate-700">Kunci Anda akan dihapus. Jika kunci wajib digunakan, Anda tidak dapat menghapusnya bila hanya Anda yang memiliki kunci aktif.</p>
             <ErrorNotice error={removeOwnError} />
-            <Field label="Password akun" error={removeOwnError instanceof ApiError ? removeOwnError.firstError('current_password') : undefined}>
+            <Field label="Kata sandi akun" error={removeOwnError instanceof ApiError ? removeOwnError.firstError('current_password') : undefined}>
               <input autoComplete="current-password" type="password" maxLength={200} required className={inputCls} value={removeOwnPassword} onChange={(event) => setRemoveOwnPassword(event.target.value)} />
             </Field>
             <div className="flex justify-end gap-2">
               <button type="button" disabled={removeOwnBusy} onClick={() => setRemoveOwnOpen(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-              <button type="submit" disabled={removeOwnBusy} className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{removeOwnBusy ? 'Menghapus…' : 'Hapus kunci saya'}</button>
+              <button type="submit" disabled={removeOwnBusy} className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{removeOwnBusy ? 'Menghapus…' : 'Hapus kunci pribadi'}</button>
             </div>
           </form>
         </Modal>
       )}
 
       {modeTarget && (
-        <Modal title={`Ganti mode ke “${modeTarget.label}”?`} onClose={closeModeDialog}>
+        <Modal title={`Ubah cara konfirmasi menjadi “${modeTarget.label}”?`} onClose={closeModeDialog}>
           <form onSubmit={(event) => void saveMode(event)} className="space-y-4 p-5">
             <ErrorNotice error={modeError} />
             <p className="text-sm text-slate-700">{MODE_SUMMARY[modeTarget.mode]}</p>
-            <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">Mode baru berlaku untuk persetujuan berikutnya. Pastikan semua pemegang izin sudah memiliki kunci aktif sebelum memilih mode kunci.</p>
-            <Field label="Password akun Anda" error={modeError instanceof ApiError ? modeError.firstError('current_password') : undefined}>
+            <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">Pengaturan baru berlaku untuk persetujuan berikutnya. Sebelum memilih cara yang memakai kunci, pastikan semua pengguna yang perlu menyetujui sudah memiliki kunci aktif.</p>
+            <Field label="Kata sandi akun Anda" error={modeError instanceof ApiError ? modeError.firstError('current_password') : undefined}>
               <input autoComplete="current-password" type="password" maxLength={200} required className={inputCls} value={modePassword} onChange={(event) => setModePassword(event.target.value)} />
             </Field>
             <div className="flex justify-end gap-2">
               <button type="button" disabled={modeBusy} onClick={closeModeDialog} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-              <button type="submit" disabled={modeBusy} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{modeBusy ? 'Menyimpan…' : 'Konfirmasi mode'}</button>
+              <button type="submit" disabled={modeBusy} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{modeBusy ? 'Menyimpan…' : 'Simpan cara ini'}</button>
             </div>
           </form>
         </Modal>
       )}
 
       {revokeTarget && (
-        <Modal title={`Cabut kunci ${revokeTarget.name}?`} onClose={closeRevokeDialog}>
+        <Modal title={`Nonaktifkan kunci ${revokeTarget.name}?`} onClose={closeRevokeDialog}>
           <form onSubmit={(event) => void revokeKey(event)} className="space-y-4 p-5">
-            <p className="text-sm text-slate-700">Kunci akan langsung tidak berlaku. Pemilik harus mengatur kunci baru sendiri. Tindakan ini tercatat pada audit.</p>
+            <p className="text-sm text-slate-700">Kunci ini langsung tidak dapat digunakan. Pengguna tersebut harus membuat kunci baru sendiri. Perubahan ini akan tercatat.</p>
             <ErrorNotice error={revokeError} />
-            <Field label="Alasan pencabutan" error={revokeError instanceof ApiError ? revokeError.firstError('reason') ?? revokeError.firstError('key') ?? revokeError.firstError('user') : undefined} hint="Wajib, minimal 3 karakter.">
+            <Field label="Alasan menonaktifkan kunci" error={revokeError instanceof ApiError ? revokeError.firstError('reason') ?? revokeError.firstError('key') ?? revokeError.firstError('user') : undefined} hint="Wajib diisi, minimal 3 karakter.">
               <textarea required minLength={3} maxLength={500} rows={3} className={inputCls} value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} />
             </Field>
             <div className="flex justify-end gap-2">
               <button type="button" disabled={revokeBusy} onClick={closeRevokeDialog} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-              <button type="submit" disabled={revokeBusy || revokeReason.trim().length < 3} className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{revokeBusy ? 'Mencabut…' : 'Cabut kunci'}</button>
+              <button type="submit" disabled={revokeBusy || revokeReason.trim().length < 3} className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{revokeBusy ? 'Menonaktifkan…' : 'Nonaktifkan kunci'}</button>
             </div>
           </form>
         </Modal>
@@ -312,8 +312,8 @@ function OwnKeySection({
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
       <div>
-        <h2 className="font-semibold">Kunci pribadi saya</h2>
-        <p className="mt-1 text-sm text-slate-600">Hanya Anda yang dapat membuat, merotasi, atau menghapus kunci. Password akun diminta untuk setiap perubahan.</p>
+        <h2 className="font-semibold">Kunci persetujuan saya</h2>
+        <p className="mt-1 text-sm text-slate-600">Hanya Anda yang dapat membuat, mengganti, atau menghapus kunci ini. Masukkan kata sandi akun setiap kali mengubahnya.</p>
       </div>
       <ErrorNotice error={error} />
       {loading ? <p className="text-sm text-slate-500">Memuat status kunci…</p> : status && (
@@ -323,18 +323,18 @@ function OwnKeySection({
               <strong>{status.has_key ? `Kunci ${KEY_TYPE_LABEL[status.type ?? 'code']} sudah diatur` : 'Kunci belum diatur'}</strong>
               {status.locked && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">Terkunci</span>}
             </div>
-            {status.locked && <p className="mt-1 text-red-800">Kunci terkunci setelah terlalu banyak percobaan salah. Atur ulang kunci dengan password akun untuk membuka kunci.</p>}
+            {status.locked && <p className="mt-1 text-red-800">Kunci terkunci setelah beberapa kali percobaan yang salah. Ganti kunci dengan kata sandi akun untuk membukanya kembali.</p>}
             {status.last_used_at && <p className="mt-1 text-xs text-slate-500">Terakhir digunakan: {formatDateTime(status.last_used_at)}</p>}
-            {status.rotated_at && <p className="text-xs text-slate-500">Terakhir dirotasi: {formatDateTime(status.rotated_at)}</p>}
+            {status.rotated_at && <p className="text-xs text-slate-500">Terakhir diganti: {formatDateTime(status.rotated_at)}</p>}
           </div>
 
           <form onSubmit={(event) => void onSubmit(event)} className="space-y-3">
             {!ownError || (ownError instanceof ApiError && ownError.status === 422) ? null : <ErrorNotice error={ownError} />}
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Jenis kunci">
+              <Field label="Bentuk kunci">
                 <select className={inputCls} value={type} onChange={(event) => onType(event.target.value as AuthorizationKeyType)}>
                   <option value="code">Kode 6 karakter</option>
-                  <option value="passphrase">Kalimat rahasia</option>
+                  <option value="passphrase">Kalimat sandi rahasia</option>
                 </select>
               </Field>
               {type === 'code' && (
@@ -346,9 +346,9 @@ function OwnKeySection({
             </div>
             {!generateCode && (
               <Field
-                label={type === 'code' ? 'Kode otorisasi' : 'Kalimat rahasia'}
+                label={type === 'code' ? 'Kode persetujuan' : 'Kalimat sandi rahasia'}
                 error={inputError}
-                hint={type === 'code' ? 'Tepat 6 huruf/angka; huruf kecil akan diubah menjadi kapital.' : 'Minimal 16 karakter dan 3 kata. Huruf besar/kecil dibedakan.'}
+                hint={type === 'code' ? 'Tepat 6 huruf atau angka. Huruf kecil akan diubah menjadi huruf besar.' : 'Minimal 16 karakter dan 3 kata. Huruf besar dan kecil dianggap berbeda.'}
               >
                 <input
                   type="password"
@@ -361,22 +361,22 @@ function OwnKeySection({
               </Field>
             )}
             {generateCode && inputError && <p role="alert" className="text-xs text-red-700">{inputError}</p>}
-            <Field label="Password akun" error={passwordError}>
+            <Field label="Kata sandi akun" error={passwordError}>
               <input autoComplete="current-password" type="password" required maxLength={200} className={inputCls} value={password} onChange={(event) => onPassword(event.target.value)} />
             </Field>
             {ownError instanceof ApiError && ownError.status === 422 && !passwordError && !inputError && <ErrorNotice error={ownError} />}
             <div className="flex flex-wrap gap-2">
               <button type="submit" disabled={busy || !password || (!generateCode && !keyValue)} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
-                {busy ? 'Menyimpan…' : status.has_key ? 'Ganti / buka kunci' : 'Simpan kunci'}
+                {busy ? 'Menyimpan…' : status.has_key ? 'Ganti kunci / buka kunci' : 'Simpan kunci'}
               </button>
-              {status.has_key && <button type="button" disabled={busy} onClick={onRemove} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-800 disabled:opacity-60">Hapus kunci saya</button>}
+              {status.has_key && <button type="button" disabled={busy} onClick={onRemove} className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-800 disabled:opacity-60">Hapus kunci pribadi</button>}
             </div>
           </form>
           {generatedKey && (
             <div role="alert" className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
               <p className="font-semibold">Simpan kode ini sekarang. Kode tidak akan ditampilkan lagi setelah pesan ini ditutup.</p>
-              <input aria-label="Kode otorisasi yang dibuat" readOnly value={generatedKey} onFocus={(event) => event.currentTarget.select()} className="w-full rounded-md border border-amber-400 bg-white px-3 py-2 font-mono text-lg tracking-widest" />
-              <button type="button" onClick={onDismissGenerated} className="text-sm underline">Saya sudah menyimpan kode</button>
+              <input aria-label="Kode persetujuan yang dibuat" readOnly value={generatedKey} onFocus={(event) => event.currentTarget.select()} className="w-full rounded-md border border-amber-400 bg-white px-3 py-2 font-mono text-lg tracking-widest" />
+              <button type="button" onClick={onDismissGenerated} className="text-sm underline">Kode sudah saya simpan</button>
             </div>
           )}
         </>
@@ -396,11 +396,11 @@ function ModeSection({
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
       <div>
-        <h2 className="font-semibold">Metode autentikasi persetujuan</h2>
-        <p className="mt-1 text-sm text-slate-600">Berlaku untuk persetujuan Permintaan/PO, adjustment stok loss/expired, dan pengecualian kredit.</p>
+        <h2 className="font-semibold">Cara mengonfirmasi persetujuan</h2>
+        <p className="mt-1 text-sm text-slate-600">Berlaku saat menyetujui permintaan atau pesanan pembelian, mencatat pengurangan stok barang rusak atau kedaluwarsa, dan memberi pengecualian penjualan kredit.</p>
       </div>
       <ErrorNotice error={error} />
-      {loading ? <p className="text-sm text-slate-500">Memuat mode…</p> : setting && (
+      {loading ? <p className="text-sm text-slate-500">Memuat pilihan…</p> : setting && (
         <div className="space-y-3">
           {setting.modes.map((option) => (
             <div key={option.mode} className="rounded-md border border-slate-200 p-3">
@@ -436,15 +436,15 @@ function HoldersSection({
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
       <div>
-        <h2 className="font-semibold">Pemegang izin persetujuan</h2>
-        <p className="mt-1 text-sm text-slate-600">Daftar ini menunjukkan status saja; kunci pribadi tidak dapat dilihat atau diubah oleh pengelola.</p>
+        <h2 className="font-semibold">Pengguna yang dapat menyetujui</h2>
+        <p className="mt-1 text-sm text-slate-600">Daftar ini hanya menampilkan status kunci. Pengelola tidak dapat melihat atau mengubah kunci pribadi pengguna lain.</p>
       </div>
       <ErrorNotice error={error} />
-      {loading ? <p className="text-sm text-slate-500">Memuat daftar pemegang…</p> : holders && holders.length > 0 ? (
+      {loading ? <p className="text-sm text-slate-500">Memuat daftar pengguna…</p> : holders && holders.length > 0 ? (
         <div className="overflow-x-auto rounded-md border border-slate-200">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-              <tr><th className="px-3 py-2">Pengguna</th><th className="px-3 py-2">Status kunci</th><th className="px-3 py-2">Jenis</th><th className="px-3 py-2">Terakhir digunakan</th><th className="px-3 py-2 text-right">Aksi</th></tr>
+              <tr><th className="px-3 py-2">Pengguna</th><th className="px-3 py-2">Status kunci</th><th className="px-3 py-2">Bentuk kunci</th><th className="px-3 py-2">Terakhir digunakan</th><th className="px-3 py-2 text-right">Aksi</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {holders.map((holder) => (
@@ -455,7 +455,7 @@ function HoldersSection({
                   <td className="px-3 py-2">{formatDateTime(holder.last_used_at)}</td>
                   <td className="px-3 py-2 text-right">
                     {holder.has_key && holder.user_id !== currentUserId && (
-                      <button type="button" onClick={() => onRevoke(holder)} className="text-red-700 underline">Cabut kunci</button>
+                      <button type="button" onClick={() => onRevoke(holder)} className="text-red-700 underline">Nonaktifkan kunci</button>
                     )}
                   </td>
                 </tr>
@@ -463,7 +463,7 @@ function HoldersSection({
             </tbody>
           </table>
         </div>
-      ) : !error ? <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada pemegang izin persetujuan.</p> : null}
+      ) : !error ? <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Belum ada pengguna yang dapat menyetujui.</p> : null}
     </section>
   );
 }

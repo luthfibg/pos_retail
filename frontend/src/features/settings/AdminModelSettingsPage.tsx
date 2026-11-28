@@ -16,6 +16,7 @@ import {
   convertsCurrentUser,
   modelErrorMessages,
 } from './adminModelLogic';
+import { displayRole, displayRoleDescription } from './roleLabel';
 
 const QUERY_KEY = ['settings', 'admin-model'];
 
@@ -39,7 +40,7 @@ export function AdminModelSettingsPage({ embedded = false }: { embedded?: boolea
       void queryClient.invalidateQueries({ queryKey: ['users'] });
       setTarget(null);
       setUnderstood(false);
-      setNotice(`Model administrasi kini ${MODEL_TITLE[data.model]}. Menu setiap pengguna mengikuti perannya.`);
+      setNotice(`Pembagian tugas toko kini menggunakan pengaturan ${MODEL_TITLE[data.model].toLowerCase()}. Menu setiap pengguna mengikuti perannya.`);
     },
   });
 
@@ -58,7 +59,7 @@ export function AdminModelSettingsPage({ embedded = false }: { embedded?: boolea
   if (query.isLoading || !query.data) {
     return (
       <div className={pageClass(embedded)}>
-        <SettingsTitle embedded={embedded}>Model Administrasi</SettingsTitle>
+        <SettingsTitle embedded={embedded}>Pembagian tugas toko</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-slate-500">Memuat…</p>}
       </div>
@@ -66,15 +67,14 @@ export function AdminModelSettingsPage({ embedded = false }: { embedded?: boolea
   }
 
   const setting = query.data;
-  const current = setting.options.find((option) => option.current);
   const others = setting.options.filter((option) => !option.current);
 
   return (
     <div className={pageClass(embedded, 'max-w-4xl')}>
       <div>
-        <SettingsTitle embedded={embedded}>Model Administrasi</SettingsTitle>
+        <SettingsTitle embedded={embedded}>Pembagian tugas toko</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          Pilih cara toko membagi tugas. Hak akses tetap ditentukan oleh peran masing-masing akun; model ini menentukan peran mana yang tersedia.
+          Pilih cara tugas toko dibagi. Pengaturan ini menentukan peran yang dapat dipilih untuk setiap akun.
         </p>
       </div>
 
@@ -90,9 +90,8 @@ export function AdminModelSettingsPage({ embedded = false }: { embedded?: boolea
           <span className="shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-800">Aktif</span>
         </div>
         <p className="text-sm text-slate-600">
-          Peran tersedia: <strong>{setting.assignable_roles.join(', ')}</strong>. Pengendali toko: <strong>{setting.controlling_role}</strong>.
+          Peran yang tersedia: <strong>{setting.assignable_roles.map(displayRole).join(', ')}</strong>. Peran utama toko: <strong>{displayRole(setting.controlling_role)}</strong>.
         </p>
-        {current && <p className="text-xs text-slate-500">{current.label}</p>}
       </section>
 
       {others.map((option) => (
@@ -121,13 +120,13 @@ export function AdminModelSettingsPage({ embedded = false }: { embedded?: boolea
             <ul className="list-disc space-y-1 pl-5 text-slate-700">
               {target.model === 'standard' ? (
                 <>
-                  <li>Peran Admin tidak lagi tersedia. Semua pemegang Admin otomatis menjadi Owner.</li>
-                  <li>Owner memegang persetujuan, kebijakan, dan pengawasan, bukan fungsi operasional harian.</li>
+                  <li>Peran Admin tidak lagi tersedia. Semua akun Admin otomatis berubah menjadi Pemilik toko (Owner).</li>
+                  <li>Pemilik toko mengatur persetujuan dan aturan serta memantau kegiatan. Peran lain menjalankan pekerjaan harian.</li>
                 </>
               ) : (
                 <>
-                  <li>Peran Owner diganti Admin, yang memegang semua izin.</li>
-                  <li>Finance, Purchasing, dan Accounting tetap dapat dipakai sebagai delegasi.</li>
+                  <li>Peran Pemilik toko (Owner) diganti Admin, yang dapat mengelola semua bagian toko.</li>
+                  <li>Peran Keuangan, Pembelian, dan Pembukuan tetap dapat digunakan untuk membagi tugas.</li>
                 </>
               )}
               <li>Perubahan berlaku seketika; menu dan akses setiap pengguna mengikuti perannya.</li>
@@ -185,7 +184,7 @@ function OptionCard({ option, setting, onSwitch }: { option: AdminModelOption; s
       </div>
 
       <div>
-        <h3 className="text-sm font-medium">Kesiapan akun</h3>
+        <h3 className="text-sm font-medium">Akun yang perlu disiapkan</h3>
         <ul className="mt-2 space-y-1.5">
           {checklist.map((row) => (
             <li key={row.key} className="flex items-start gap-2 text-sm">
@@ -210,7 +209,7 @@ function OptionCard({ option, setting, onSwitch }: { option: AdminModelOption; s
           Beralih ke {MODEL_TITLE[option.model]}
         </button>
         {!option.can_switch && option.blockers.length > 0 && (
-          <span className="text-sm text-slate-600">Lengkapi akun yang belum ada di <Link to="/settings#users" className="font-medium text-blue-700 underline">Manajemen Pengguna</Link>, lalu muat ulang halaman ini.</span>
+          <span className="text-sm text-slate-600">Tambahkan akun yang belum ada di bagian <Link to="/settings#users" className="font-medium text-blue-700 underline">Pengguna</Link>, lalu muat ulang halaman ini.</span>
         )}
       </div>
     </section>
@@ -237,8 +236,8 @@ function RolesTable({ setting, canManageUsers }: { setting: AdminModelSetting; c
           <tbody className="divide-y divide-slate-100">
             {setting.roles.map((role) => (
               <tr key={role.name} className={role.assignable ? undefined : 'text-slate-400'}>
-                <td className="px-3 py-2 font-medium">{role.name}</td>
-                <td className="px-3 py-2">{role.description ?? '—'}</td>
+                <td className="px-3 py-2 font-medium">{displayRole(role.name)}</td>
+                <td className="px-3 py-2">{displayRoleDescription(role.name, role.description) ?? '—'}</td>
                 <td className="px-3 py-2">{role.assignable ? 'Tersedia' : 'Tidak tersedia'}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{role.active_users} / {role.total_users}</td>
               </tr>
@@ -246,7 +245,7 @@ function RolesTable({ setting, canManageUsers }: { setting: AdminModelSetting; c
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500">Akun pada peran yang tidak tersedia tetap tercatat, tetapi tidak dapat diaktifkan ulang sebelum perannya diganti.</p>
+      <p className="text-xs text-slate-500">Akun dengan peran yang tidak tersedia tetap tersimpan. Untuk mengaktifkannya kembali, ganti perannya terlebih dahulu.</p>
     </section>
   );
 }

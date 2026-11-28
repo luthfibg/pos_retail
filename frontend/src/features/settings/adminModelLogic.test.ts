@@ -16,12 +16,12 @@ const setting: AdminModelSetting = {
 
 const standard: AdminModelOption = {
   model: 'standard',
-  label: 'Standar retail',
+  label: 'Toko dengan pembagian tugas',
   current: false,
   can_switch: false,
   blockers: [
-    { code: 'role_missing', role: 'Finance', message: 'Buat minimal satu akun aktif dengan role Finance sebelum beralih ke model standar retail.' },
-    { code: 'role_missing', role: 'Accounting', message: 'Buat minimal satu akun aktif dengan role Accounting sebelum beralih ke model standar retail.' },
+    { code: 'role_missing', role: 'Finance', message: 'Buat atau aktifkan setidaknya satu akun dengan peran Finance sebelum memilih pembagian tugas ini.' },
+    { code: 'role_missing', role: 'Accounting', message: 'Buat atau aktifkan setidaknya satu akun dengan peran Accounting sebelum memilih pembagian tugas ini.' },
   ],
   conversions: [{
     from: 'Admin',
@@ -38,13 +38,13 @@ describe('adminModelLogic', () => {
     const rows = buildChecklist(setting, standard);
     const byLabel = Object.fromEntries(rows.map((row) => [row.label, row]));
 
-    expect(byLabel['Admin menjadi Owner']?.ok).toBe(true);
+    expect(byLabel['Admin menjadi Pemilik toko (Owner)']?.ok).toBe(true);
     expect(byLabel['Akun aktif Kasir']?.ok).toBe(true);
-    expect(byLabel['Akun aktif Purchasing']?.ok).toBe(true);
-    expect(byLabel['Akun aktif Finance']?.ok).toBe(false);
-    expect(byLabel['Akun aktif Finance']?.message).toContain('Finance');
-    expect(byLabel['Akun aktif Accounting']?.ok).toBe(false);
-    expect(byLabel['Akun aktif Finance']?.activeUsers).toBe(0);
+    expect(byLabel['Akun aktif Pembelian (Purchasing)']?.ok).toBe(true);
+    expect(byLabel['Akun aktif Keuangan (Finance)']?.ok).toBe(false);
+    expect(byLabel['Akun aktif Keuangan (Finance)']?.message).toContain('Finance');
+    expect(byLabel['Akun aktif Pembukuan (Accounting)']?.ok).toBe(false);
+    expect(byLabel['Akun aktif Keuangan (Finance)']?.activeUsers).toBe(0);
   });
 
   it('penghalang pengendali ikut pada baris konversi', () => {
@@ -73,13 +73,13 @@ describe('adminModelLogic', () => {
     };
     const rows = buildChecklist({ ...setting, model: 'standard', roles: [role('Owner', 1)] }, simple);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.label).toBe('Owner menjadi Admin');
+    expect(rows[0]?.label).toBe('Pemilik toko (Owner) menjadi Admin');
     expect(rows[0]?.ok).toBe(true);
   });
 
   it('merangkum konversi dan mengenali akun sendiri', () => {
     const conversion = standard.conversions[0];
-    expect(conversion && conversionLine(conversion)).toBe('Admin → Owner: Budi (budi), Sari (sari) — nonaktif');
+    expect(conversion && conversionLine(conversion)).toBe('Admin → Pemilik toko (Owner): Budi (budi), Sari (sari) — nonaktif');
     expect(convertsCurrentUser(standard, 1)).toBe(true);
     expect(convertsCurrentUser(standard, 99)).toBe(false);
     expect(convertsCurrentUser(standard, undefined)).toBe(false);

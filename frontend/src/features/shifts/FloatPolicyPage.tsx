@@ -48,7 +48,7 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
   if (query.isLoading || !query.data || !values) {
     return (
       <div className={pageClass(embedded)}>
-        <SettingsTitle embedded={embedded}>Kebijakan Endapan</SettingsTitle>
+        <SettingsTitle embedded={embedded}>Uang yang disisakan di laci</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-slate-500">Memuat kebijakan…</p>}
       </div>
@@ -77,30 +77,30 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
   return (
     <div className={pageClass(embedded, 'max-w-2xl')}>
       <div>
-        <SettingsTitle embedded={embedded}>Kebijakan Endapan</SettingsTitle>
+        <SettingsTitle embedded={embedded}>Uang yang disisakan di laci</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          Atur uang yang tetap berada di laci saat kasir jaga ditutup. Kebijakan ini menentukan endapan dan setoran akhir kasir jaga berikutnya.
+          Atur jumlah uang yang ditinggalkan di laci saat kasir jaga ditutup. Sisa uang lainnya akan disetorkan.
         </p>
       </div>
 
       {!saved ? (
         <div role="note" className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          <p className="font-semibold">Kebijakan belum diatur</p>
+          <p className="font-semibold">Aturan belum ditentukan</p>
           <p className="mt-1">
-            Saat ini backend mempertahankan seluruh kas terhitung sebagai endapan dan tidak membuat setoran akhir.
-            Simpan kebijakan di bawah agar sistem dapat menghitung nominal setoran.
+            Saat ini semua uang yang dihitung kasir tetap berada di laci dan tidak ada jumlah yang disetorkan.
+            Isi aturan di bawah agar sistem dapat menghitung jumlah setoran.
           </p>
         </div>
       ) : (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-          <p className="font-semibold">Kebijakan laci aktif</p>
+          <p className="font-semibold">Aturan laci aktif</p>
           <p className="mt-1">
             {saved.mode === 'fixed'
-              ? `Endapan tetap ${formatRupiah(saved.fixed_amount)}`
-              : `Endapan ${formatQty(saved.percent)}% dari ${saved.percent_base === 'cash_sales_shift' ? 'penjualan tunai kasir jaga' : 'kas terhitung'}`}
-            {saved.min_amount !== null && ` · minimum ${formatRupiah(saved.min_amount)}`}
-            {saved.max_amount !== null && ` · maksimum ${formatRupiah(saved.max_amount)}`}
-            {` · pembulatan setoran Rp${formatQty(String(saved.rounding_unit))}`}
+              ? `Uang yang disisakan: ${formatRupiah(saved.fixed_amount)}`
+              : `${formatQty(saved.percent)}% dari ${saved.percent_base === 'cash_sales_shift' ? 'penjualan tunai selama kasir jaga' : 'uang yang dihitung di laci'}`}
+            {saved.min_amount !== null && ` · batas minimum ${formatRupiah(saved.min_amount)}`}
+            {saved.max_amount !== null && ` · batas maksimum ${formatRupiah(saved.max_amount)}`}
+            {` · pembulatan setoran per Rp${formatQty(String(saved.rounding_unit))}`}
           </p>
           <p className="mt-1 text-xs text-emerald-900">Berlaku sejak {formatDateTime(saved.effective_from)}.</p>
         </div>
@@ -108,13 +108,13 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
 
       <form onSubmit={review} noValidate className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
         {!is422 && <ErrorNotice error={mutation.error} />}
-        {savedNotice && <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">Kebijakan endapan tersimpan dan berlaku untuk penutupan kasir jaga berikutnya.</p>}
+        {savedNotice && <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">Aturan tersimpan dan berlaku saat kasir jaga berikutnya ditutup.</p>}
 
         <fieldset className="space-y-2">
-          <legend className="mb-1 text-sm font-medium">Cara menentukan endapan</legend>
+          <legend className="mb-1 text-sm font-medium">Cara menentukan uang yang disisakan</legend>
           <label className="flex items-center gap-2 text-sm">
             <input type="radio" name="float-mode" checked={values.mode === 'fixed'} onChange={() => set('mode', 'fixed')} />
-            Nominal tetap
+            Jumlah tetap
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input type="radio" name="float-mode" checked={values.mode === 'percent'} onChange={() => set('mode', 'percent')} />
@@ -123,7 +123,7 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
         </fieldset>
 
         {values.mode === 'fixed' ? (
-          <Field label="Nominal endapan (Rp)" error={errors.fixedAmount ?? serverError('fixed_amount')} hint="Sisa uang selain endapan akan menjadi setoran, mengikuti aturan pembulatan.">
+          <Field label="Jumlah yang disisakan (Rp)" error={errors.fixedAmount ?? serverError('fixed_amount')} hint="Sisa uang lainnya akan disetorkan setelah dibulatkan sesuai aturan di bawah.">
             <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.fixedAmount} onChange={(event) => set('fixedAmount', event.target.value)} />
           </Field>
         ) : (
@@ -131,26 +131,26 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
             <Field label="Persentase (%)" error={errors.percent ?? serverError('percent')}>
               <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.percent} onChange={(event) => set('percent', event.target.value)} />
             </Field>
-            <Field label="Dasar perhitungan" error={errors.percentBase ?? serverError('percent_base')}>
+            <Field label="Dihitung dari" error={errors.percentBase ?? serverError('percent_base')}>
               <select className={inputCls} value={values.percentBase} onChange={(event) => set('percentBase', event.target.value as FloatPolicyFormValues['percentBase'])}>
-                <option value="">Pilih dasar</option>
-                <option value="cash_sales_shift">Penjualan tunai kasir jaga</option>
-                <option value="cash_on_hand">Kas terhitung di laci</option>
+                <option value="">Pilih sumber perhitungan</option>
+                <option value="cash_sales_shift">Penjualan tunai selama kasir jaga</option>
+                <option value="cash_on_hand">Uang yang dihitung di laci</option>
               </select>
             </Field>
           </div>
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Endapan minimum (opsional, Rp)" error={errors.minAmount ?? serverError('min_amount')} hint="Setoran tidak dibuat bila kas terhitung di bawah minimum.">
+          <Field label="Batas minimum uang di laci (opsional, Rp)" error={errors.minAmount ?? serverError('min_amount')} hint="Setoran tidak dibuat jika uang yang dihitung di laci kurang dari jumlah ini.">
             <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.minAmount} onChange={(event) => set('minAmount', event.target.value)} />
           </Field>
-          <Field label="Endapan maksimum (opsional, Rp)" error={errors.maxAmount ?? serverError('max_amount')}>
+          <Field label="Batas maksimum uang yang disisakan (opsional, Rp)" error={errors.maxAmount ?? serverError('max_amount')}>
             <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.maxAmount} onChange={(event) => set('maxAmount', event.target.value)} />
           </Field>
         </div>
 
-        <Field label="Pembulatan setoran (Rp)" error={errors.roundingUnit ?? serverError('rounding_unit')} hint="Nominal setoran dibulatkan ke bawah; nilai sisa tetap di laci. Default backend: Rp1.000.">
+        <Field label="Kelipatan pembulatan setoran (Rp)" error={errors.roundingUnit ?? serverError('rounding_unit')} hint="Jumlah setoran dibulatkan ke bawah mengikuti kelipatan ini. Sisa uang tetap di laci. Nilai awal Rp1.000.">
           <input className={`${inputCls} w-48 tabular-nums`} inputMode="numeric" value={values.roundingUnit} onChange={(event) => set('roundingUnit', event.target.value)} />
         </Field>
 
@@ -159,19 +159,19 @@ export function FloatPolicyPage({ embedded = false }: { embedded?: boolean } = {
         </Field>
 
         <button type="submit" disabled={mutation.isPending} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
-          Simpan kebijakan
+          Simpan aturan
         </button>
       </form>
 
       {confirming && (
-        <Modal title="Terapkan kebijakan endapan?" onClose={() => !mutation.isPending && setConfirming(false)}>
+        <Modal title="Terapkan aturan uang di laci?" onClose={() => !mutation.isPending && setConfirming(false)}>
           <div className="space-y-2 p-5 text-sm">
-            <p>Menyimpan akan membuat versi kebijakan baru untuk laci dan langsung mengganti kebijakan aktif sebelumnya.</p>
-            <p className="text-slate-600">Setoran dan endapan dihitung server saat kasir jaga ditutup. Kasir jaga yang sudah ditutup tidak berubah.</p>
+            <p>Aturan baru akan langsung menggantikan aturan yang sedang digunakan.</p>
+            <p className="text-slate-600">Sistem menghitung jumlah uang yang disisakan dan disetorkan saat kasir jaga ditutup. Kasir jaga yang sudah ditutup tidak berubah.</p>
             <ErrorNotice error={mutation.error} />
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
-            <button type="button" disabled={mutation.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Periksa lagi</button>
+            <button type="button" disabled={mutation.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Kembali</button>
             <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
               {mutation.isPending ? 'Menyimpan…' : 'Terapkan'}
             </button>

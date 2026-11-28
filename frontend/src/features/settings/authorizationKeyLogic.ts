@@ -15,7 +15,7 @@ export function validateAuthorizationKey(type: AuthorizationKeyType, value: stri
 
   const words = normalized.split(' ').filter(Boolean);
   if (normalized.length < 16 || normalized.length > 100 || words.length < 3) {
-    return 'Kalimat rahasia minimal 16 karakter dan 3 kata (maksimal 100 karakter).';
+    return 'Kalimat sandi rahasia harus minimal 16 karakter dan 3 kata (maksimal 100 karakter).';
   }
   return undefined;
 }

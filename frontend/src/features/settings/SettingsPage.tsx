@@ -98,7 +98,7 @@ export function SettingsPage() {
     return (
       <div className="p-8">
         <h1 className="text-lg font-semibold">Tidak ada pengaturan</h1>
-        <p className="mt-1 text-sm text-slate-600">Akun Anda tidak memiliki izin untuk mengubah pengaturan apa pun.</p>
+        <p className="mt-1 text-sm text-slate-600">Akun Anda tidak dapat mengubah pengaturan apa pun.</p>
       </div>
     );
   }

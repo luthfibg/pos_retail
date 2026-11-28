@@ -1,14 +1,15 @@
 import type { StockAuthorityRule, StockAuthorityUpdate } from '@/lib/api/types';
+import { displayRole } from './roleLabel';
 
 /** Perubahan yang belum disimpan: hanya aturan yang diubah, kunci = `rule.key`, nilai = role terpilih. */
 export type StockDraft = Record<string, string[]>;
 
 export const ACTION_TITLE: Record<string, string> = {
-  opening_balance: 'Stok eksisting toko',
+  opening_balance: 'Mencatat stok awal',
   receipt: 'Penerimaan barang',
-  supplier_return: 'Retur supplier',
-  transfer: 'Transfer / putaway',
-  adjustment_approve: 'Write-off retur supplier',
+  supplier_return: 'Mengembalikan barang ke pemasok',
+  transfer: 'Memindahkan stok',
+  adjustment_approve: 'Menyetujui pengurangan stok barang retur',
 };
 
 export function sameRoles(a: readonly string[], b: readonly string[]): boolean {
@@ -86,7 +87,7 @@ export function rowTitle(rule: StockAuthorityRule): string {
 }
 
 export function formatRoles(roles: readonly string[]): string {
-  return roles.length > 0 ? roles.join(', ') : '(tidak ada)';
+  return roles.length > 0 ? roles.map(displayRole).join(', ') : '(tidak ada)';
 }
 
 /** Semua pesan galat 422 (kunci seperti `rules.0.roles`) dalam satu daftar tanpa duplikat. */

@@ -108,12 +108,12 @@ final class PermissionCatalog
     public static function roles(): array
     {
         return [
-            'Admin' => ['description' => 'Admin/Owner: seluruh fungsi bisnis (model simple)', 'codes' => array_keys(self::all())],
-            'Kasir' => ['description' => 'Operasional toko', 'codes' => self::cashier()],
-            'Owner' => ['description' => 'Pemilik: persetujuan, kebijakan, dan pengawasan (model standar retail)', 'codes' => self::owner()],
-            'Finance' => ['description' => 'Keuangan: tinjau shift, terima setoran, periksa PR, kredit debitur', 'codes' => self::finance()],
-            'Purchasing' => ['description' => 'Pembelian: PO, supplier, master produk', 'codes' => self::purchasing()],
-            'Accounting' => ['description' => 'Akuntansi: tagihan HRD, verifikasi dokumen penerimaan, audit', 'codes' => self::accounting()],
+            'Admin' => ['description' => 'Mengelola semua bagian toko pada pembagian tugas sederhana.', 'codes' => array_keys(self::all())],
+            'Kasir' => ['description' => 'Melayani pelanggan dan menjalankan kegiatan kasir.', 'codes' => self::cashier()],
+            'Owner' => ['description' => 'Pemilik toko: mengatur persetujuan dan aturan serta memantau kegiatan toko.', 'codes' => self::owner()],
+            'Finance' => ['description' => 'Keuangan: memeriksa kasir jaga, menerima setoran, memeriksa permintaan pembelian, dan mengelola piutang.', 'codes' => self::finance()],
+            'Purchasing' => ['description' => 'Pembelian: mengelola pemasok, pesanan pembelian, dan data barang.', 'codes' => self::purchasing()],
+            'Accounting' => ['description' => 'Pembukuan: mengelola tagihan HRD, memeriksa dokumen penerimaan barang, dan melihat riwayat perubahan.', 'codes' => self::accounting()],
         ];
     }
 

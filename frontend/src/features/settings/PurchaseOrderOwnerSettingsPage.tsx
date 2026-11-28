@@ -27,7 +27,7 @@ export function PurchaseOrderOwnerSettingsPage({ embedded = false }: { embedded?
   if (query.isLoading || !query.data) {
     return (
       <div className={pageClass(embedded)}>
-        <SettingsTitle embedded>Nama Owner Purchase Order</SettingsTitle>
+        <SettingsTitle embedded>Akun pemilik toko untuk pembelian</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-sm text-slate-500">Memuat pengaturan…</p>}
       </div>
@@ -36,11 +36,16 @@ export function PurchaseOrderOwnerSettingsPage({ embedded = false }: { embedded?
 
   return (
     <div className={pageClass(embedded, 'max-w-2xl')}>
-      <SettingsTitle embedded>Nama Owner Purchase Order</SettingsTitle>
+      <div>
+        <SettingsTitle embedded>Akun pemilik toko untuk pembelian</SettingsTitle>
+        <p className="mt-1 text-sm text-slate-600">
+          Pilih akun pemilik toko yang mengonfirmasi permintaan pembelian dan namanya dicantumkan pada pesanan pembelian.
+        </p>
+      </div>
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
         <ErrorNotice error={mutation.error} />
         <div>
-          <label htmlFor="purchase-order-owner" className="mb-1 block text-sm font-medium">Akun Owner</label>
+          <label htmlFor="purchase-order-owner" className="mb-1 block text-sm font-medium">Akun pemilik toko</label>
           <select
             id="purchase-order-owner"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -48,7 +53,7 @@ export function PurchaseOrderOwnerSettingsPage({ embedded = false }: { embedded?
             onChange={(event) => setSelectedOwnerId(event.target.value)}
             disabled={query.data.owners.length === 0 || mutation.isPending}
           >
-            <option value="">Pilih akun Owner</option>
+            <option value="">Pilih akun pemilik toko</option>
             {query.data.owners.map((owner) => (
               <option key={owner.id} value={owner.id}>
                 {owner.name} · {owner.username}
@@ -57,7 +62,7 @@ export function PurchaseOrderOwnerSettingsPage({ embedded = false }: { embedded?
           </select>
         </div>
         {query.data.owners.length === 0 && (
-          <p className="text-sm text-amber-800">Tidak ada akun aktif dengan izin persetujuan Permintaan Pembelian.</p>
+          <p className="text-sm text-amber-800">Tidak ada akun aktif yang dapat menyetujui permintaan pembelian.</p>
         )}
         <div className="flex items-center gap-3">
           <button
@@ -68,7 +73,7 @@ export function PurchaseOrderOwnerSettingsPage({ embedded = false }: { embedded?
           >
             {mutation.isPending ? 'Menyimpan…' : 'Simpan'}
           </button>
-          {query.data.owner && <span className="text-sm text-slate-600">Owner aktif: {query.data.owner.name}</span>}
+          {query.data.owner && <span className="text-sm text-slate-600">Pemilik toko terpilih: {query.data.owner.name}</span>}
         </div>
       </section>
     </div>

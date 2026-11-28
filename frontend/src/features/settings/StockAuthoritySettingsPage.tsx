@@ -20,9 +20,10 @@ import {
   validationMessages,
   type StockDraft,
 } from './stockAuthorityLogic';
+import { displayRole } from './roleLabel';
 
 const QUERY_KEY = ['settings', 'stock-authority'];
-const MODEL_LABEL = { simple: 'Simple', standard: 'Standar retail' } as const;
+const MODEL_LABEL = { simple: 'toko sederhana', standard: 'toko dengan pembagian tugas' } as const;
 
 export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const queryClient = useQueryClient();
@@ -40,7 +41,7 @@ export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: bo
       await refreshMe();
       setDraft({});
       setConfirming(false);
-      setNotice('Kewenangan stok tersimpan. Menu dan akses pengguna kini mengikuti matriks ini.');
+      setNotice('Pengaturan akses stok tersimpan. Menu dan akses pengguna kini mengikuti pilihan ini.');
     },
     onError: () => setConfirming(false),
   });
@@ -48,7 +49,7 @@ export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: bo
   if (query.isLoading || !query.data) {
     return (
       <div className={pageClass(embedded)}>
-        <SettingsTitle embedded={embedded}>Kewenangan Stok</SettingsTitle>
+        <SettingsTitle embedded={embedded}>Akses untuk mengelola stok</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-slate-500">Memuat…</p>}
       </div>
@@ -72,10 +73,10 @@ export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: bo
   return (
     <div className={pageClass(embedded, 'max-w-4xl')}>
       <div>
-        <SettingsTitle embedded={embedded}>Kewenangan Stok</SettingsTitle>
+        <SettingsTitle embedded={embedded}>Akses untuk mengelola stok</SettingsTitle>
         <p className="text-sm text-slate-600">
-          Tentukan role mana yang boleh melakukan setiap operasi stok. Berlaku untuk model <strong>{MODEL_LABEL[model]}</strong>
-          {warehouseEnabled ? '.' : '; aturan Gudang baru berlaku setelah Gudang diaktifkan.'} Pengecualian per pengguna tetap berlaku di atas matriks ini.
+          Pilih peran yang boleh melakukan setiap kegiatan stok. Pengaturan ini berlaku untuk <strong>{MODEL_LABEL[model]}</strong>
+          {warehouseEnabled ? '.' : '; akses Gudang baru berlaku setelah fitur Gudang diaktifkan.'} Akses khusus untuk pengguna tertentu tetap mengikuti pengaturan masing-masing.
         </p>
       </div>
 
@@ -92,8 +93,8 @@ export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: bo
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th scope="col" className="px-4 py-2">Operasi</th>
-              {roles.map((role) => <th key={role} scope="col" className="px-3 py-2 text-center">{role}</th>)}
+              <th scope="col" className="px-4 py-2">Kegiatan</th>
+              {roles.map((role) => <th key={role} scope="col" className="px-3 py-2 text-center">{displayRole(role)}</th>)}
               <th scope="col" className="px-3 py-2"><span className="sr-only">Aksi</span></th>
             </tr>
           </thead>
@@ -115,7 +116,7 @@ export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: bo
                         {rule.customized && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Disesuaikan</span>}
                       </div>
                       <p className="mt-0.5 max-w-sm text-xs text-slate-500">{rule.description}</p>
-                      {isEmpty && <p className="mt-1 text-xs font-medium text-red-700">Pilih minimal satu role.</p>}
+                      {isEmpty && <p className="mt-1 text-xs font-medium text-red-700">Pilih setidaknya satu peran.</p>}
                       {!modified && rule.warnings.map((warning) => <p key={warning.code} className="mt-1 text-xs text-red-700">{warning.message}</p>)}
                     </th>
                     {roles.map((role) => (
@@ -123,7 +124,7 @@ export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: bo
                         <input
                           type="checkbox"
                           className="h-4 w-4"
-                          aria-label={`${group.title}, ${rowTitle(rule)}: ${role}`}
+                          aria-label={`${group.title}, ${rowTitle(rule)}: ${displayRole(role)}`}
                           checked={selected.includes(role)}
                           onChange={() => change(toggleRole(rule, draft, role, roles))}
                         />
@@ -131,7 +132,7 @@ export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: bo
                     ))}
                     <td className="px-3 py-3 text-right align-top">
                       {!sameRoles(selected, rule.default_roles) && (
-                        <button type="button" onClick={() => change(resetToDefault(rule, draft))} className="text-xs font-medium text-blue-700 hover:underline">Default</button>
+                        <button type="button" onClick={() => change(resetToDefault(rule, draft))} className="text-xs font-medium text-blue-700 hover:underline">Kembalikan ke awal</button>
                       )}
                     </td>
                   </tr>
@@ -143,23 +144,23 @@ export function StockAuthoritySettingsPage({ embedded = false }: { embedded?: bo
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" disabled={!canSave} onClick={() => setConfirming(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Simpan kewenangan</button>
+        <button type="button" disabled={!canSave} onClick={() => setConfirming(true)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Simpan akses stok</button>
         <button type="button" disabled={!dirty || mutation.isPending} onClick={() => change({})} className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50">Batalkan perubahan</button>
-        <span className="text-sm text-slate-600">{dirty ? `${changes.length} aturan diubah` : 'Belum ada perubahan'}</span>
+        <span className="text-sm text-slate-600">{dirty ? `${changes.length} pengaturan akses diubah` : 'Belum ada perubahan'}</span>
       </div>
 
       {confirming && (
-        <Modal title="Simpan perubahan kewenangan stok?" onClose={() => { if (!mutation.isPending) setConfirming(false); }}>
+        <Modal title="Simpan perubahan akses stok?" onClose={() => { if (!mutation.isPending) setConfirming(false); }}>
           <div className="space-y-3 p-5 text-sm">
             <ul className="space-y-2">
               {changes.map((item) => (
                 <li key={item.rule.key} className="rounded-md bg-slate-50 p-3">
                   <div className="font-medium">{item.rule.label}</div>
-                  <div className="mt-1 text-slate-600">{formatRoles(item.from)} → <strong className="text-slate-900">{formatRoles(item.to)}</strong>{item.toDefault && ' (default)'}</div>
+                  <div className="mt-1 text-slate-600">{formatRoles(item.from)} → <strong className="text-slate-900">{formatRoles(item.to)}</strong>                  {item.toDefault && ' (pengaturan awal)'}</div>
                 </li>
               ))}
             </ul>
-            <p className="text-slate-700">Perubahan berlaku seketika dan dicatat di audit. Pengguna yang kehilangan wewenang tidak lagi melihat menu atau tombol terkait.</p>
+            <p className="text-slate-700">Perubahan langsung berlaku dan tercatat dalam riwayat. Pengguna yang tidak lagi memiliki akses tidak akan melihat menu atau tombol terkait.</p>
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
             <button type="button" disabled={mutation.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Batal</button>

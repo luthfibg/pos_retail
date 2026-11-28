@@ -24,26 +24,26 @@ final class StockAuthorityPolicy
     /** @var array<string, array{action: string, scope: ?string, permission: string, label: string, description: string}> */
     public const RULES = [
         'opening_balance' => ['action' => 'opening_balance', 'scope' => null, 'permission' => 'inventory.opening_balance',
-            'label' => 'Input stok awal', 'description' => 'Memasukkan saldo stok awal (cut-over) per produk dan batch.'],
+            'label' => 'Mencatat stok awal', 'description' => 'Mencatat jumlah stok yang sudah tersedia untuk setiap produk.'],
         'receipt.store_floor' => ['action' => 'receipt', 'scope' => 'store_floor', 'permission' => 'goods_receipt.create',
-            'label' => 'Penerimaan barang ke toko', 'description' => 'Mencatat, memposting, dan membatalkan penerimaan barang dari PO ke lokasi toko.'],
+            'label' => 'Penerimaan barang ke toko', 'description' => 'Mencatat penerimaan barang dari pesanan pembelian (PO) yang tiba di toko. Pengguna juga dapat membatalkan penerimaan yang salah.'],
         'receipt.warehouse' => ['action' => 'receipt', 'scope' => 'warehouse', 'permission' => 'goods_receipt.create',
-            'label' => 'Penerimaan barang ke gudang', 'description' => 'Penerimaan barang dari PO ke lokasi gudang (berlaku bila Gudang diaktifkan).'],
+            'label' => 'Penerimaan barang ke gudang', 'description' => 'Mencatat penerimaan barang dari pesanan pembelian (PO) yang tiba di gudang. Pengguna juga dapat membatalkan penerimaan yang salah.'],
         'supplier_return.store_floor' => ['action' => 'supplier_return', 'scope' => 'store_floor', 'permission' => 'supplier_return.create',
-            'label' => 'Retur supplier dari toko', 'description' => 'Mengajukan retur barang dan mencatat keputusan supplier dari lokasi toko.'],
+            'label' => 'Retur barang ke pemasok dari toko', 'description' => 'Mengajukan pengembalian barang ke pemasok dan mencatat jawabannya untuk barang dari toko.'],
         'supplier_return.warehouse' => ['action' => 'supplier_return', 'scope' => 'warehouse', 'permission' => 'supplier_return.create',
-            'label' => 'Retur supplier dari gudang', 'description' => 'Mengajukan retur barang dan mencatat keputusan supplier dari gudang.'],
+            'label' => 'Retur barang ke pemasok dari gudang', 'description' => 'Mengajukan pengembalian barang ke pemasok dan mencatat jawabannya untuk barang dari gudang.'],
         'transfer.store_floor' => ['action' => 'transfer', 'scope' => 'store_floor', 'permission' => 'stock_transfer.create',
-            'label' => 'Transfer/putaway di toko', 'description' => 'Memindahkan stok antar posisi rak di toko.'],
+            'label' => 'Memindahkan stok di toko', 'description' => 'Memindahkan barang antar rak di toko.'],
         'transfer.warehouse' => ['action' => 'transfer', 'scope' => 'warehouse', 'permission' => 'stock_transfer.create',
-            'label' => 'Transfer/putaway dari/ke gudang', 'description' => 'Memindahkan stok yang melibatkan gudang (asal atau tujuan).'],
+            'label' => 'Memindahkan stok ke atau dari gudang', 'description' => 'Memindahkan barang antara toko dan gudang.'],
         'adjustment_approve' => ['action' => 'adjustment_approve', 'scope' => null, 'permission' => 'inventory.adjust.approve',
-            'label' => 'Setujui write-off retur supplier', 'description' => 'Menyetujui pencatatan barang retur supplier yang ditolak dan dihapus dari stok.'],
+            'label' => 'Menyetujui pengurangan stok barang retur', 'description' => 'Menyetujui pengurangan stok barang retur yang ditolak oleh pemasok.'],
     ];
 
     private const ACTION_LABELS = [
         'receipt' => 'menerima barang',
-        'supplier_return' => 'mengajukan retur supplier',
+        'supplier_return' => 'mengembalikan barang ke pemasok',
         'transfer' => 'memindahkan stok',
     ];
 

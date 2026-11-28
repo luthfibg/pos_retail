@@ -103,7 +103,7 @@ export function DiscountFormDialog({ discount, onClose }: Props) {
           ) : (
             <p className="text-sm text-slate-600">
               Berlaku untuk {discount ? TARGET_LABEL[discount.target_type].toLowerCase() : ''} <span className="font-medium">{discount?.target_name ?? '—'}</span>.
-              Target tidak dapat diubah; buat diskon baru bila perlu.
+              Barang atau kategori yang dipilih tidak dapat diubah. Jika perlu menggantinya, buat diskon baru.
             </p>
           )}
 
@@ -113,16 +113,16 @@ export function DiscountFormDialog({ discount, onClose }: Props) {
                 {(Object.keys(TYPE_LABEL) as DiscountType[]).map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
               </select>
             </Field>
-            <Field label={values.discountType === 'percent' ? 'Persen' : 'Nominal per unit (Rp)'} error={err('value')}>
+            <Field label={values.discountType === 'percent' ? 'Persentase (%)' : 'Potongan per barang (Rp)'} error={err('value')}>
               <input className={`${inputCls} tabular-nums`} inputMode="decimal" value={values.value} onChange={(e) => set('value', e.target.value)} />
             </Field>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Mulai (tanggal WIB)" error={err('starts_at')} hint={mode === 'create' ? 'Kosong = mulai sekarang.' : undefined}>
+            <Field label="Tanggal mulai berlaku (Waktu Jakarta)" error={err('starts_at')} hint={mode === 'create' ? 'Kosongkan agar diskon mulai sekarang.' : undefined}>
               <input type="date" className={inputCls} value={values.startsAt} onChange={(e) => set('startsAt', e.target.value)} />
             </Field>
-            <Field label="Berakhir (tanggal WIB)" error={err('ends_at')} hint="Kosong = tanpa batas akhir. Berlaku sampai akhir hari itu.">
+            <Field label="Tanggal berakhir (Waktu Jakarta)" error={err('ends_at')} hint="Kosongkan jika diskon tidak memiliki tanggal berakhir. Diskon berlaku sampai akhir tanggal yang dipilih.">
               <input type="date" className={inputCls} value={values.endsAt} onChange={(e) => set('endsAt', e.target.value)} />
             </Field>
           </div>
@@ -133,7 +133,7 @@ export function DiscountFormDialog({ discount, onClose }: Props) {
               Diskon aktif
             </label>
           )}
-          <p className="text-xs text-slate-500">Bila beberapa diskon berlaku untuk satu produk, kasir otomatis memakai yang potongannya terbesar. Diskon tidak dihapus; nonaktifkan bila tidak dipakai.</p>
+          <p className="text-xs text-slate-500">Jika beberapa diskon berlaku untuk barang yang sama, kasir otomatis memakai potongan terbesar. Diskon tidak dihapus; nonaktifkan jika tidak dipakai.</p>
         </div>
 
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">

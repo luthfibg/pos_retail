@@ -55,7 +55,7 @@ export function RegisterSettingsPage({ embedded = false }: { embedded?: boolean 
     <div className={embedded ? 'space-y-4' : 'space-y-4 p-6'}>
       {!embedded && <div>
         <h1 className="text-xl font-semibold">Mesin kasir</h1>
-        <p className="mt-1 text-sm text-slate-600">Kelola mesin kasir dan laci kas toko.</p>
+        <p className="mt-1 text-sm text-slate-600">Kelola titik kasir dan laci uang di toko.</p>
       </div>}
       <ErrorNotice error={list.error ?? create.error ?? update.error ?? toggle.error ?? deactivate.error} />
       <form className="flex flex-wrap items-end gap-3 rounded-md border border-slate-200 p-3" onSubmit={submitCreate}>
@@ -72,9 +72,9 @@ export function RegisterSettingsPage({ embedded = false }: { embedded?: boolean 
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th className="px-3 py-2">Mesin kasir</th>
-              <th className="px-3 py-2">Akun laci</th>
+              <th className="px-3 py-2">Kas yang digunakan</th>
               <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Shift berjalan</th>
+              <th className="px-3 py-2">Kasir jaga aktif</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
@@ -105,7 +105,7 @@ export function RegisterSettingsPage({ embedded = false }: { embedded?: boolean 
         </table>
       </div>
       <p className="text-xs text-slate-500">
-        Mesin kasir yang memiliki riwayat tidak dihapus permanen. Penonaktifan mempertahankan laporan dan saldo laci; mesin dengan shift berjalan harus ditutup dahulu.
+        Titik kasir yang sudah memiliki riwayat tidak dapat dihapus. Jika dinonaktifkan, laporan dan saldo kas tetap tersimpan. Kasir jaga yang masih berjalan harus ditutup terlebih dahulu.
       </p>
 
       {editing && (

@@ -254,21 +254,21 @@ class AuthorizationKeyService
                     'user_id' => $h['user_id'],
                     'username' => $h['username'],
                     'message' => $h['locked']
-                        ? "Kunci {$h['name']} terkunci; minta yang bersangkutan menyetel ulang kuncinya."
-                        : "{$h['name']} ({$h['username']}) belum mengatur kunci otorisasi.",
+                        ? "Kunci milik {$h['name']} terkunci. Minta pengguna tersebut mengganti kuncinya."
+                        : "{$h['name']} ({$h['username']}) belum membuat kunci pribadi.",
                 ];
             }
         }
         if ($holders === []) {
-            $blockers[] = ['code' => 'no_approver', 'user_id' => null, 'username' => null, 'message' => 'Belum ada pengguna aktif yang memegang izin persetujuan.'];
+            $blockers[] = ['code' => 'no_approver', 'user_id' => null, 'username' => null, 'message' => 'Belum ada pengguna aktif yang dapat menyetujui.'];
         }
 
         return [
             'mode' => $this->mode($storeId),
             'modes' => [
-                ['mode' => 'password', 'label' => 'Password akun saja', 'can_switch' => true, 'blockers' => []],
-                ['mode' => 'key', 'label' => 'Kunci otorisasi menggantikan password', 'can_switch' => $blockers === [], 'blockers' => $blockers],
-                ['mode' => 'password_and_key', 'label' => 'Password akun dan kunci otorisasi', 'can_switch' => $blockers === [], 'blockers' => $blockers],
+                ['mode' => 'password', 'label' => 'Kata sandi akun saja', 'can_switch' => true, 'blockers' => []],
+                ['mode' => 'key', 'label' => 'Kunci pribadi menggantikan kata sandi akun', 'can_switch' => $blockers === [], 'blockers' => $blockers],
+                ['mode' => 'password_and_key', 'label' => 'Kata sandi akun dan kunci pribadi', 'can_switch' => $blockers === [], 'blockers' => $blockers],
             ],
             'holders' => $holders,
         ];
@@ -359,10 +359,10 @@ class AuthorizationKeyService
             $words = preg_split('/\s+/u', $plain, -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
             if (mb_strlen($plain) < 16 || mb_strlen($plain) > 100 || count($words) < 3) {
-                throw ValidationException::withMessages(['key' => ['Kalimat rahasia minimal 16 karakter dan 3 kata (maksimal 100 karakter).']]);
+                throw ValidationException::withMessages(['key' => ['Kalimat sandi rahasia harus minimal 16 karakter dan 3 kata (maksimal 100 karakter).']]);
             }
             if (mb_strtolower($plain) === mb_strtolower($user->username)) {
-                throw ValidationException::withMessages(['key' => ['Kalimat rahasia tidak boleh sama dengan username.']]);
+                throw ValidationException::withMessages(['key' => ['Kalimat sandi rahasia tidak boleh sama dengan nama pengguna.']]);
             }
         }
 

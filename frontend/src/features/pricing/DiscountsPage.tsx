@@ -43,8 +43,7 @@ export function DiscountsPage({ embedded = false }: { embedded?: boolean } = {})
         <button type="button" onClick={() => setDialog({})} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Diskon baru</button>
       </div>
       <p className="max-w-2xl text-sm text-slate-600">
-        Hanya Admin yang mengatur diskon; kasir tidak dapat mengubah harga atau diskon. Di kasir, diskon yang sedang berlaku dan paling besar
-        (produk atau kategori) dipilih otomatis.
+        Hanya Admin yang dapat mengatur diskon. Kasir tidak dapat mengubah harga atau diskon. Jika beberapa diskon berlaku untuk barang yang sama, sistem memilih potongan terbesar secara otomatis.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -64,7 +63,7 @@ export function DiscountsPage({ embedded = false }: { embedded?: boolean } = {})
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={activeOnly} onChange={(e) => { setActiveOnly(e.target.checked); setPage(1); }} />
-          Hanya yang aktif (tidak dinonaktifkan)
+          Tampilkan hanya diskon aktif
         </label>
       </div>
 
@@ -77,7 +76,7 @@ export function DiscountsPage({ embedded = false }: { embedded?: boolean } = {})
               <th className="px-3 py-2">Nama</th>
               <th className="px-3 py-2">Berlaku untuk</th>
               <th className="px-3 py-2">Potongan</th>
-              <th className="px-3 py-2">Periode (WIB)</th>
+              <th className="px-3 py-2">Masa berlaku (Waktu Jakarta)</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2" />
             </tr>

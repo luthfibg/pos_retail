@@ -10,6 +10,7 @@ import type { ManagedRole, ManagedUser } from '@/lib/api/types';
 import { formatDateTime } from '@/lib/format';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { buildCreateUser, buildUpdateUser, emptyUserForm, validateUserForm, type UserFormErrors, type UserFormValues } from './userForm';
+import { displayRole, displayRoleDescription } from '@/features/settings/roleLabel';
 
 type UserStatus = 'active' | 'inactive' | '';
 
@@ -66,7 +67,7 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
   });
   const reset = useMutation({
     mutationFn: () => {
-      if (!resetTarget) throw new Error('Pengguna untuk reset sandi belum dipilih.');
+      if (!resetTarget) throw new Error('Pilih pengguna yang sandinya akan diatur ulang.');
       return userApi.resetPassword(resetTarget.id, resetPassword);
     },
     onSuccess: () => {
@@ -138,21 +139,21 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
     <div className={embedded ? 'space-y-5' : 'space-y-5 p-4 sm:p-6'}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          {embedded ? <h3 className="sr-only">Manajemen Pengguna</h3> : <h1 className="text-2xl font-semibold">Manajemen Pengguna</h1>}
-          <p className="mt-1 text-sm text-slate-600">Kelola akun, role, akses, dan status pengguna di toko ini.</p>
+          {embedded ? <h3 className="sr-only">Pengguna</h3> : <h1 className="text-2xl font-semibold">Pengguna</h1>}
+          <p className="mt-1 text-sm text-slate-600">Kelola akun, peran, akses, dan status pengguna di toko ini.</p>
         </div>
         <button type="button" onClick={openCreate} disabled={roles.isLoading || Boolean(roles.error)} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">Tambah pengguna</button>
       </header>
 
       <ErrorNotice error={roles.error} />
       <form onSubmit={applyFilters} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
-        <Field label="Cari nama atau username">
+        <Field label="Cari nama atau nama pengguna">
           <input className={inputCls} value={values.q} onChange={(event) => setValues({ ...values, q: event.target.value })} placeholder="Cari pengguna" />
         </Field>
-        <Field label="Role">
+        <Field label="Peran">
           <select className={inputCls} value={values.role} onChange={(event) => setValues({ ...values, role: event.target.value })}>
-            <option value="">Semua role</option>
-            {roles.data?.map((role) => <option key={role.id} value={role.name}>{role.name}</option>)}
+            <option value="">Semua peran</option>
+            {roles.data?.map((role) => <option key={role.id} value={role.name}>{displayRole(role.name)}</option>)}
           </select>
         </Field>
         <Field label="Status">
@@ -164,7 +165,7 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
         </Field>
         <div className="flex gap-2">
           <button type="submit" className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white">Terapkan</button>
-          <button type="button" onClick={() => { setValues({ q: '', status: '', role: '' }); setFilters({ q: '', status: '', role: '' }); setPage(1); }} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Reset</button>
+          <button type="button" onClick={() => { setValues({ q: '', status: '', role: '' }); setFilters({ q: '', status: '', role: '' }); setPage(1); }} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Hapus filter</button>
         </div>
       </form>
 
@@ -174,7 +175,7 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
           <>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[700px] text-left text-sm">
-                <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Nama pengguna</th><th className="py-2 pr-3">Email</th><th className="py-2 pr-3">Role</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Login terakhir</th><th className="py-2">Aksi</th></tr></thead>
+                <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-3">Pengguna</th><th className="py-2 pr-3">Email</th><th className="py-2 pr-3">Peran</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Terakhir masuk</th><th className="py-2">Aksi</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {list.data.data.map((user) => (
                     <tr key={user.id}>
@@ -184,13 +185,13 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
                         <span className="text-xs text-slate-500">{user.username}</span>
                       </td>
                       <td className="py-3 pr-3">{user.email ?? '—'}</td>
-                      <td className="py-3 pr-3">{user.roles.join(', ') || '—'}</td>
+                      <td className="py-3 pr-3">{user.roles.map(displayRole).join(', ') || '—'}</td>
                       <td className="py-3 pr-3"><span className={`rounded-full px-2 py-1 text-xs font-medium ${user.is_active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{user.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
-                      <td className="py-3 pr-3 whitespace-nowrap">{user.last_login_at ? formatDateTime(user.last_login_at) : 'Belum pernah'}</td>
+                      <td className="py-3 pr-3 whitespace-nowrap">{user.last_login_at ? formatDateTime(user.last_login_at) : 'Belum pernah masuk'}</td>
                       <td className="py-3">
                         <div className="flex flex-wrap gap-2">
                           <button type="button" onClick={() => openEdit(user)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">Ubah</button>
-                          <button type="button" onClick={() => startReset(user)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">Reset sandi</button>
+                          <button type="button" onClick={() => startReset(user)} className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">Atur sandi baru</button>
                           <button
                             type="button"
                             disabled={user.id === me?.user.id || setActive.isPending}
@@ -209,7 +210,7 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
             </div>
             <Pagination page={list.data.current_page} lastPage={list.data.last_page} from={list.data.from} to={list.data.to} total={list.data.total} onPage={setPage} />
           </>
-        ) : <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Tidak ada pengguna yang cocok dengan filter.</p>}
+        ) : <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Tidak ada pengguna yang sesuai dengan pencarian atau filter.</p>}
         <ErrorNotice error={setActive.error} />
       </section>
 
@@ -230,16 +231,16 @@ export function UsersPage({ embedded = false }: { embedded?: boolean } = {}) {
         />
       )}
       {resetTarget && (
-        <Modal title={`Reset sandi: ${resetTarget.username}`} onClose={() => { if (!reset.isPending) setResetTarget(null); }}>
+        <Modal title={`Atur sandi baru: ${resetTarget.username}`} onClose={() => { if (!reset.isPending) setResetTarget(null); }}>
           <form onSubmit={(event) => { event.preventDefault(); if (resetPassword.length < 8 || resetPassword.length > 255) { setResetError('Sandi harus 8–255 karakter.'); return; } setResetError(null); reset.mutate(); }} className="space-y-4 p-5">
-            <p className="text-sm text-slate-600">Semua sesi aktif pengguna ini akan diakhiri setelah sandi direset.</p>
+            <p className="text-sm text-slate-600">Pengguna harus masuk kembali setelah sandinya diganti.</p>
             <Field label="Sandi baru" error={resetError ?? (reset.error instanceof ApiError ? reset.error.firstError('password') : undefined)}>
               <input autoComplete="new-password" className={inputCls} type="password" maxLength={255} value={resetPassword} onChange={(event) => { setResetPassword(event.target.value); setResetError(null); }} />
             </Field>
             <ErrorNotice error={reset.error && !(reset.error instanceof ApiError && reset.error.status === 422) ? reset.error : null} />
             <div className="flex justify-end gap-2">
               <button type="button" disabled={reset.isPending} onClick={() => setResetTarget(null)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Batal</button>
-              <button type="submit" disabled={reset.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{reset.isPending ? 'Mereset…' : 'Reset sandi'}</button>
+              <button type="submit" disabled={reset.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{reset.isPending ? 'Menyimpan…' : 'Simpan sandi baru'}</button>
             </div>
           </form>
         </Modal>
@@ -272,7 +273,7 @@ function UserFormDialog({
         <Field label="Nama lengkap" error={errorFor('name')}>
           <input autoComplete="name" className={inputCls} maxLength={150} value={values.name} onChange={(event) => onChange({ ...values, name: event.target.value })} />
         </Field>
-        <Field label="Username" error={errorFor('username')} hint={isCreate ? 'Huruf, angka, titik, garis bawah, dan strip; tidak dapat diubah setelah dibuat.' : 'Username tidak dapat diubah.'}>
+        <Field label="Nama pengguna" error={errorFor('username')} hint={isCreate ? 'Dipakai untuk masuk. Gunakan huruf, angka, titik, garis bawah, atau tanda hubung. Tidak dapat diubah setelah dibuat.' : 'Dipakai untuk masuk dan tidak dapat diubah.'}>
           <input autoComplete="username" className={`${inputCls} ${!isCreate ? 'disabled:cursor-not-allowed' : ''}`} maxLength={60} disabled={!isCreate} value={values.username} onChange={(event) => onChange({ ...values, username: event.target.value })} />
         </Field>
         <Field label="Email (opsional)" error={errorFor('email')}>
@@ -283,10 +284,13 @@ function UserFormDialog({
             <input autoComplete="new-password" className={inputCls} type="password" maxLength={255} value={values.password} onChange={(event) => onChange({ ...values, password: event.target.value })} />
           </Field>
         )}
-        <Field label="Role" error={errorFor('role')} hint={isSelf ? 'Role akun sendiri tidak dapat diubah.' : 'Satu role per pengguna per toko.'}>
+        <Field label="Peran" error={errorFor('role')} hint={isSelf ? 'Peran akun sendiri tidak dapat diubah.' : 'Setiap pengguna hanya memiliki satu peran di toko ini.'}>
           <select className={inputCls} disabled={isSelf} value={values.role} onChange={(event) => onChange({ ...values, role: event.target.value })}>
-            <option value="">Pilih role</option>
-            {roles.map((role) => <option key={role.id} value={role.name}>{role.name}{role.description ? ` — ${role.description}` : ''}</option>)}
+            <option value="">Pilih peran</option>
+            {roles.map((role) => {
+              const description = displayRoleDescription(role.name, role.description);
+              return <option key={role.id} value={role.name}>{displayRole(role.name)}{description ? ` — ${description}` : ''}</option>;
+            })}
           </select>
         </Field>
         {serverErrors.role?.[0] && <p role="alert" className="text-xs text-red-700">{serverErrors.role[0]}</p>}

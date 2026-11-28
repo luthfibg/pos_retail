@@ -78,6 +78,6 @@ describe('describeValue', () => {
     expect(describeValue('percent', '10.00', rp)).toBe('10%');
     expect(describeValue('percent', '12.50', rp)).toBe('12,5%');
     expect(describeValue('percent', '7.25', rp)).toBe('7,25%');
-    expect(describeValue('amount', '500.00', rp)).toBe('Rp 500.00 / unit');
+    expect(describeValue('amount', '500.00', rp)).toBe('Rp 500.00 / barang');
   });
 });

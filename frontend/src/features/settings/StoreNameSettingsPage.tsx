@@ -52,7 +52,7 @@ export function StoreNameSettingsPage({ embedded = false }: { embedded?: boolean
       <div>
         <SettingsTitle embedded={embedded}>Nama toko</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          Ubah nama yang ditampilkan untuk toko ini. Kode, mata uang, zona waktu, dan data tenant lain tidak diubah.
+          Ubah nama yang ditampilkan untuk toko ini. Kode toko, mata uang, zona waktu, dan data lainnya tetap sama.
         </p>
       </div>
 
@@ -77,7 +77,7 @@ export function StoreNameSettingsPage({ embedded = false }: { embedded?: boolean
           />
         </Field>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-          <p className="text-xs text-slate-500">Perubahan tercatat di audit toko.</p>
+          <p className="text-xs text-slate-500">Perubahan nama tercatat dalam riwayat aktivitas.</p>
           <button
             type="submit"
             disabled={!me?.store || !dirty || Boolean(error) || update.isPending}

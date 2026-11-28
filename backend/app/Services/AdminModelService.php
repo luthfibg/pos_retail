@@ -80,7 +80,9 @@ class AdminModelService
             $plan = $target === $model ? ['blockers' => [], 'conversions' => []] : $this->plan($storeId, $model, $target);
             $options[] = [
                 'model' => $target,
-                'label' => $target === self::STANDARD ? 'Standar retail (Kasir, Finance, Purchasing, Accounting, Owner)' : 'Simple (Admin dan Kasir)',
+                'label' => $target === self::STANDARD
+                    ? 'Toko dengan pembagian tugas (Kasir, Keuangan, Pembelian, Pembukuan, Pemilik toko)'
+                    : 'Toko sederhana (Admin dan Kasir)',
                 'current' => $target === $model,
                 'can_switch' => $target !== $model && $plan['blockers'] === [],
                 'blockers' => $plan['blockers'],
@@ -106,7 +108,7 @@ class AdminModelService
             $from = $this->current($storeId);
 
             if ($from === $target) {
-                throw ValidationException::withMessages(['model' => ['Toko sudah memakai model administrasi ini.']]);
+                throw ValidationException::withMessages(['model' => ['Toko sudah menggunakan pembagian tugas ini.']]);
             }
 
             $plan = $this->plan($storeId, $from, $target);
@@ -159,7 +161,7 @@ class AdminModelService
             ->orderBy('u.name')->get(['u.id', 'u.name', 'u.username', 'u.is_active']);
 
         if ($holders->where('is_active', 1)->isEmpty()) {
-            $blockers[] = ['code' => 'role_missing', 'role' => $fromControl, 'message' => "Belum ada akun aktif dengan role {$fromControl} yang dapat menjadi {$toControl}."];
+            $blockers[] = ['code' => 'role_missing', 'role' => $fromControl, 'message' => "Pastikan ada akun aktif dengan peran {$fromControl} sebelum mengganti pembagian tugas."];
         }
 
         if ($target === self::STANDARD) {
@@ -168,7 +170,7 @@ class AdminModelService
                     ->where('ur.store_id', $storeId)->where('r.name', $role)->where('u.is_active', 1)->count();
 
                 if ($active === 0) {
-                    $blockers[] = ['code' => 'role_missing', 'role' => $role, 'message' => "Buat minimal satu akun aktif dengan role {$role} sebelum beralih ke model standar retail."];
+                    $blockers[] = ['code' => 'role_missing', 'role' => $role, 'message' => "Buat atau aktifkan setidaknya satu akun dengan peran {$role} sebelum memilih pembagian tugas ini."];
                 }
             }
         }

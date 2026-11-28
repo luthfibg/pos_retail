@@ -35,9 +35,9 @@ export function validateUserForm(values: UserFormValues, mode: 'create' | 'edit'
   else if (name.length > 150) errors.name = 'Maksimal 150 karakter.';
 
   if (mode === 'create') {
-    if (!username) errors.username = 'Username wajib diisi.';
+    if (!username) errors.username = 'Nama pengguna wajib diisi.';
     else if (username.length > 60 || !/^[A-Za-z0-9._-]+$/.test(username)) {
-      errors.username = 'Gunakan huruf, angka, titik, garis bawah, atau strip (maks. 60 karakter).';
+      errors.username = 'Nama pengguna hanya boleh berisi huruf, angka, titik, garis bawah, atau tanda hubung (maks. 60 karakter).';
     }
     if (password.length < 8) errors.password = 'Sandi minimal 8 karakter.';
     else if (password.length > 255) errors.password = 'Sandi maksimal 255 karakter.';
@@ -46,7 +46,7 @@ export function validateUserForm(values: UserFormValues, mode: 'create' | 'edit'
   if (email && (email.length > 190 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
     errors.email = 'Alamat email tidak valid (maks. 190 karakter).';
   }
-  if (!values.role) errors.role = 'Pilih role pengguna.';
+  if (!values.role) errors.role = 'Pilih peran pengguna.';
   return errors;
 }
 

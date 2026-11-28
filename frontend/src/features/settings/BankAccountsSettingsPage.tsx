@@ -67,7 +67,7 @@ export function BankAccountsSettingsPage({ embedded = false }: { embedded?: bool
       <div>
         <SettingsTitle embedded>Rekening bank</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          Data rekening hanya dicantumkan pada PO; sistem tidak mencatat saldo atau memeriksa kecukupan dana. Maksimal lima rekening, termasuk yang dinonaktifkan.
+          Rekening ini hanya dicantumkan pada pesanan pembelian. Aplikasi tidak menyimpan saldonya atau memeriksa apakah dananya cukup. Maksimal lima rekening, termasuk yang dinonaktifkan.
         </p>
       </div>
 
@@ -99,7 +99,7 @@ export function BankAccountsSettingsPage({ embedded = false }: { embedded?: bool
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <label className="flex items-center gap-2 text-sm">
                       <input type="checkbox" checked={draft.is_active} onChange={(event) => setDrafts({ ...drafts, [account.id]: { ...draft, is_active: event.target.checked } })} />
-                      Aktif untuk dipilih pada PO
+                      Aktif untuk dipilih pada pesanan pembelian
                     </label>
                     <button type="submit" disabled={update.isPending} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60">
                       {update.isPending && update.variables?.id === account.id ? 'Menyimpan…' : 'Simpan rekening'}

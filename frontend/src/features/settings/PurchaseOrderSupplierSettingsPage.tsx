@@ -21,7 +21,7 @@ export function PurchaseOrderSupplierSettingsPage({ embedded = false }: { embedd
   if (query.isLoading || !query.data) {
     return (
       <div className={pageClass(embedded)}>
-        <SettingsTitle embedded={embedded}>Supplier Purchase Order</SettingsTitle>
+        <SettingsTitle embedded={embedded}>Pemasok pesanan pembelian</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-sm text-slate-500">Memuat pengaturan…</p>}
       </div>
@@ -33,25 +33,25 @@ export function PurchaseOrderSupplierSettingsPage({ embedded = false }: { embedd
   return (
     <div className={pageClass(embedded, 'max-w-2xl')}>
       <div>
-        <SettingsTitle embedded={embedded}>Supplier Purchase Order</SettingsTitle>
-        <p className="mt-1 text-sm text-slate-600">Pilih otomatis supplier yang terhubung di master produk.</p>
+        <SettingsTitle embedded={embedded}>Pemasok pesanan pembelian</SettingsTitle>
+        <p className="mt-1 text-sm text-slate-600">Tentukan cara memilih pemasok untuk setiap pesanan pembelian.</p>
       </div>
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
         <ErrorNotice error={mutation.error} />
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="font-medium">Pemilihan supplier otomatis</h2>
+            <h2 className="font-medium">Pilih pemasok otomatis</h2>
             <p className="mt-1 text-sm text-slate-600">
               {automatic
-                ? 'Supplier mengikuti data supplier pada produk. Jika tersedia beberapa, pilih supplier saat membuat PO.'
-                : 'Supplier dipilih dari seluruh supplier aktif pada master data.'}
+                ? 'Pemasok mengikuti data pada barang. Jika satu barang memiliki beberapa pemasok, pilih salah satunya saat membuat pesanan.'
+                : 'Pemasok dipilih dari daftar pemasok yang aktif.'}
             </p>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={automatic}
-            aria-label="Pemilihan supplier otomatis dari master produk"
+            aria-label="Memilih pemasok otomatis dari data barang"
             disabled={mutation.isPending}
             onClick={() => mutation.mutate(automatic ? 'manual' : 'product')}
             className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${automatic ? 'bg-blue-700' : 'bg-slate-300'}`}

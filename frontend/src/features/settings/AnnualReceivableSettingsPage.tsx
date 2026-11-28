@@ -29,7 +29,10 @@ export function AnnualReceivableSettingsPage({ embedded = false }: { embedded?: 
 
   return (
     <div className={pageClass(embedded, 'max-w-xl')}>
-      <SettingsTitle embedded>Tanggal cetak laporan tahunan</SettingsTitle>
+      <div>
+        <SettingsTitle embedded>Tanggal cetak laporan piutang tahunan</SettingsTitle>
+        <p className="mt-1 text-sm text-slate-600">Pilih bulan dan tanggal yang dicantumkan sebagai tanggal cetak pada laporan piutang tahunan.</p>
+      </div>
       <ErrorNotice error={setting.error} />
       <ErrorNotice error={update.error} />
       {setting.isLoading ? <p className="text-sm text-slate-500">Memuat pengaturan…</p> : setting.data ? (
@@ -41,7 +44,7 @@ export function AnnualReceivableSettingsPage({ embedded = false }: { embedded?: 
             update.mutate();
           }}
         >
-          <Field label="Bulan dan tanggal">
+          <Field label="Bulan dan tanggal laporan">
             <input
               type="date"
               className={inputCls}

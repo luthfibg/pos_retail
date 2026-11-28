@@ -38,14 +38,14 @@ export function validateFloatPolicy(values: FloatPolicyFormValues): FloatPolicyE
 
   if (values.mode === 'fixed') {
     const cents = moneyToCents(fixed);
-    if (!fixed) errors.fixedAmount = 'Nominal endapan wajib diisi.';
+    if (!fixed) errors.fixedAmount = 'Jumlah uang yang disisakan wajib diisi.';
     else if (!MONEY_RE.test(fixed) || cents === null) errors.fixedAmount = 'Nominal tidak valid (maks. 2 desimal).';
   } else {
     const cents = moneyToCents(percent);
     if (!percent) errors.percent = 'Persentase wajib diisi.';
     else if (!MONEY_RE.test(percent) || cents === null) errors.percent = 'Persentase tidak valid (maks. 2 desimal).';
     else if (cents > 10000n) errors.percent = 'Persentase harus antara 0 dan 100.';
-    if (!values.percentBase) errors.percentBase = 'Pilih dasar perhitungan endapan.';
+    if (!values.percentBase) errors.percentBase = 'Pilih sumber perhitungan uang yang disisakan.';
   }
 
   const min = normalizeDecimal(values.minAmount);
@@ -76,7 +76,7 @@ export function buildFloatPolicyInput(values: FloatPolicyFormValues): FloatPolic
   if (values.mode === 'fixed') {
     return { mode: 'fixed', fixed_amount: normalizeDecimal(values.fixedAmount), ...common };
   }
-  if (!values.percentBase) throw new Error('Pilih dasar perhitungan endapan.');
+  if (!values.percentBase) throw new Error('Pilih sumber perhitungan uang yang disisakan.');
   return {
     mode: 'percent',
     percent: normalizeDecimal(values.percent),

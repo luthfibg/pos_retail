@@ -72,16 +72,16 @@ export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {
       <div>
         <SettingsTitle embedded={embedded}>Pengaturan PPN</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          PPN dihitung saat transaksi kasir untuk penjualan tunai maupun kredit. Invoice HRD merangkum PPN dari struk dan tidak menghitungnya ulang.
+          PPN dihitung saat kasir mencatat penjualan tunai maupun kredit. Tagihan HRD mengambil PPN dari struk agar tidak dihitung dua kali.
         </p>
       </div>
 
       <div role="note" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         {values.includes
-          ? 'Model harga yang dipilih: harga jual sudah termasuk PPN.'
-          : 'Model harga yang dipilih: PPN ditambahkan di atas harga jual.'}{' '}
-        Tarif dan status PKP masih menunggu konfirmasi klien (R-04). PPN aktif tetapi belum lengkap membuat transaksi kasir ditolak.
-        Pengaturan ini tidak mengubah harga master produk dan tidak membulatkan total transaksi.
+          ? 'Harga jual yang dimasukkan sudah termasuk PPN.'
+          : 'PPN akan ditambahkan ke harga jual yang dimasukkan.'}{' '}
+        Sebelum mengaktifkan, pastikan toko terdaftar sebagai Pengusaha Kena Pajak (PKP) dan tarif PPN sudah benar. Kasir tidak dapat menyimpan transaksi jika pengaturan PPN belum lengkap.
+        Pengaturan ini tidak mengubah harga pada data barang atau membulatkan jumlah pembayaran.
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
@@ -89,11 +89,11 @@ export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {
         {saved.enabled ? (
           <p className="mt-1 text-slate-700">
             PPN <span className="font-semibold">aktif</span>, tarif {saved.rate ? `${formatQty(saved.rate)}%` : '—'},{' '}
-            {saved.price_includes_tax === null ? 'status harga belum diisi' : saved.price_includes_tax ? 'harga jual sudah termasuk PPN' : 'PPN ditambahkan di atas harga jual'}
+            {saved.price_includes_tax === null ? 'cara menghitung PPN belum dipilih' : saved.price_includes_tax ? 'harga jual sudah termasuk PPN' : 'PPN ditambahkan ke harga jual'}
             {saved.effective_from ? `, berlaku sejak ${formatDate(saved.effective_from)}` : ''}.
           </p>
         ) : (
-          <p className="mt-1 text-slate-700">PPN <span className="font-semibold">nonaktif</span>. Total penjualan = harga setelah diskon.</p>
+          <p className="mt-1 text-slate-700">PPN <span className="font-semibold">nonaktif</span>. Jumlah penjualan mengikuti harga setelah diskon.</p>
         )}
       </div>
 
@@ -113,14 +113,14 @@ export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {
             </Field>
 
             <fieldset>
-              <legend className="mb-1 text-sm font-medium">Harga jual di sistem</legend>
+              <legend className="mb-1 text-sm font-medium">Cara memasukkan harga jual</legend>
               <label className="flex items-center gap-2 text-sm">
                 <input type="radio" name="includes" checked={values.includes === true} onChange={() => set('includes', true)} />
-                Sudah termasuk PPN (PPN dihitung dari dalam harga)
+                Harga sudah termasuk PPN
               </label>
               <label className="mt-1 flex items-center gap-2 text-sm">
                 <input type="radio" name="includes" checked={values.includes === false} onChange={() => set('includes', false)} />
-                Belum termasuk PPN (PPN ditambahkan di atas harga)
+                Harga belum termasuk PPN; PPN ditambahkan setelahnya
               </label>
               {(errors.price_includes_tax ?? serverErrors.price_includes_tax) && (
                 <p role="alert" className="mt-1 text-xs text-red-700">{errors.price_includes_tax ?? serverErrors.price_includes_tax}</p>
@@ -145,7 +145,7 @@ export function VatSettingsPage({ embedded = false }: { embedded?: boolean } = {
                 ? `PPN akan diaktifkan dengan tarif ${values.rate.trim()}% (${values.includes ? 'harga sudah termasuk PPN' : 'ditambahkan di atas harga'}).`
                 : 'PPN akan dinonaktifkan. Riwayat tarif tetap tersimpan.'}
             </p>
-            <p className="text-slate-600">Berlaku mulai hari ini untuk penjualan tunai berikutnya dan invoice yang dibuat setelahnya. Struk yang sudah terposting tidak berubah.</p>
+            <p className="text-slate-600">Tarif baru berlaku mulai hari ini untuk penjualan tunai dan tagihan HRD yang dibuat setelahnya. Struk yang sudah dibuat tidak berubah.</p>
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
             <button type="button" disabled={mutation.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Periksa lagi</button>

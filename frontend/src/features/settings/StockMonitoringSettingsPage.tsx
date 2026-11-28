@@ -69,7 +69,7 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
   if (query.isLoading || !query.data || threshold === null) {
     return (
       <div className={pageClass(embedded)}>
-        <SettingsTitle embedded>Ambang pemantauan stok</SettingsTitle>
+        <SettingsTitle embedded>Batas stok untuk pemantauan</SettingsTitle>
         <ErrorNotice error={query.error} />
         {!query.error && <p className="text-sm text-slate-500">Memuat pengaturan pemantauan stok…</p>}
       </div>
@@ -95,20 +95,20 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
   return (
     <div className={pageClass(embedded, 'max-w-2xl')}>
       <div>
-        <SettingsTitle embedded>Ambang pemantauan stok</SettingsTitle>
+        <SettingsTitle embedded>Batas stok untuk pemantauan</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
-          Sistem membuat dan memperbarui satu draft Permintaan saat stok jual produk aktif di seluruh lokasi toko mencapai ambang ini.
+          Jika jumlah stok barang aktif di seluruh lokasi sama dengan atau kurang dari batas ini, sistem akan membuat atau memperbarui draf permintaan pembelian otomatis.
         </p>
       </div>
 
       <form onSubmit={review} noValidate className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
         {!is422 && <ErrorNotice error={mutation.error} />}
-        {savedNotice && <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">Ambang stok tersimpan. Draft Permintaan otomatis telah disinkronkan.</p>}
+        {savedNotice && <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">Batas stok tersimpan. Draf permintaan pembelian otomatis telah diperbarui.</p>}
 
         <Field
-          label="Ambang stok menipis"
+          label="Batas stok rendah"
           error={error || serverError}
-          hint="Produk dengan stok ≤ ambang ini dipertimbangkan untuk Permintaan. Isi jumlah isi ulang di master produk; nilai 0 tidak dimasukkan."
+          hint="Barang dengan stok sama dengan atau kurang dari batas ini masuk ke permintaan pembelian otomatis. Atur jumlah stok yang ingin ditambahkan pada data barang; jumlah 0 tidak akan dimasukkan."
         >
           <LocalDecimalInput
             className={`${inputCls} w-48 tabular-nums`}
@@ -124,11 +124,11 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
 
         {confirming ? (
           <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
-            <p>Mengubah ambang akan menyinkronkan ulang draft Permintaan otomatis. Produk yang tidak lagi memenuhi kriteria dapat dikeluarkan dari draft.</p>
+            <p>Mengubah batas ini akan memperbarui draf (permintaan yang belum diajukan). Barang yang tidak lagi memenuhi batas akan dikeluarkan dari draf.</p>
             <div className="flex justify-end gap-2">
-              <button type="button" disabled={mutation.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2">Periksa lagi</button>
+              <button type="button" disabled={mutation.isPending} onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-3 py-2">Kembali</button>
               <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()} className="rounded-md bg-slate-900 px-3 py-2 font-medium text-white disabled:opacity-60">
-                {mutation.isPending ? 'Menyimpan…' : 'Simpan ambang'}
+                {mutation.isPending ? 'Menyimpan…' : 'Simpan batas'}
               </button>
             </div>
           </div>
@@ -142,9 +142,9 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
       {isAdmin && (
         <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5" aria-labelledby="purchase-order-reset-title">
           <div>
-            <h2 id="purchase-order-reset-title" className="font-semibold text-slate-900">Reset alur PO untuk monitoring stok</h2>
+            <h2 id="purchase-order-reset-title" className="font-semibold text-slate-900">Batalkan atau tutup pesanan pembelian</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Reset tidak menghapus riwayat. PO tanpa penerimaan terposting dibatalkan; PO yang sudah menerima barang ditutup dengan sisa kuantitas dihentikan. GR draft/checked ikut dibatalkan, kecuali ada retur masuk aktif.
+              Catatan tidak dihapus. Pesanan yang belum menerima barang akan dibatalkan; pesanan yang baru menerima sebagian barang akan ditutup dan sisa barangnya dibatalkan. Draf penerimaan barang yang belum selesai juga dibatalkan, kecuali masih ada proses pengembalian barang ke pemasok.
             </p>
           </div>
 
@@ -164,7 +164,7 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
                 <option value="day">1 hari terakhir</option>
                 <option value="week">1 minggu terakhir</option>
                 <option value="month">1 bulan terakhir</option>
-                <option value="all_time">All Time</option>
+                <option value="all_time">Semua waktu</option>
               </select>
             </Field>
             <button
@@ -173,7 +173,7 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
               onClick={() => previewReset.mutate()}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-60"
             >
-              {previewReset.isPending ? 'Memeriksa…' : 'Pratinjau reset'}
+              {previewReset.isPending ? 'Memeriksa…' : 'Tinjau pesanan'}
             </button>
           </div>
 
@@ -182,10 +182,10 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
           {resetPreview && (
             <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm">
               <p>
-                {resetPreview.total_po_count} PO aktif ditemukan: {resetPreview.cancel_count} akan dibatalkan, {resetPreview.close_partial_count} akan ditutup, dan {resetPreview.skipped_po_count} dilewati karena retur masuk aktif.
+                Ditemukan {resetPreview.total_po_count} pesanan pembelian: {resetPreview.cancel_count} akan dibatalkan, {resetPreview.close_partial_count} akan ditutup, dan {resetPreview.skipped_po_count} dilewati karena masih ada proses pengembalian barang ke pemasok.
               </p>
               {resetPreview.draft_receipts_to_cancel > 0 && (
-                <p>{resetPreview.draft_receipts_to_cancel} GR draft/checked akan dibatalkan.</p>
+                <p>{resetPreview.draft_receipts_to_cancel} draf penerimaan barang yang belum selesai akan dibatalkan.</p>
               )}
               <div className="flex justify-end">
                 <button
@@ -194,7 +194,7 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
                   onClick={() => resetWorkflow.mutate()}
                   className="rounded-md bg-red-700 px-3 py-2 font-medium text-white disabled:opacity-60"
                 >
-                  {resetWorkflow.isPending ? 'Mereset…' : 'Konfirmasi reset alur PO'}
+                  {resetWorkflow.isPending ? 'Memproses…' : 'Konfirmasi pembatalan'}
                 </button>
               </div>
             </div>
@@ -202,7 +202,7 @@ export function StockMonitoringSettingsPage({ embedded = false }: { embedded?: b
 
           {resetResult && (
             <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">
-              Reset selesai: {resetResult.cancelled_po_count} PO dibatalkan, {resetResult.closed_partial_po_count} PO ditutup, {resetResult.cancelled_gr_count} GR dibatalkan, dan {resetResult.skipped_po_count} PO dilewati karena retur masuk aktif. Monitoring stok telah disinkronkan.
+              Selesai: {resetResult.cancelled_po_count} pesanan pembelian dibatalkan, {resetResult.closed_partial_po_count} ditutup, {resetResult.cancelled_gr_count} draf penerimaan barang dibatalkan, dan {resetResult.skipped_po_count} dilewati karena pengembalian barang ke pemasok masih diproses. Daftar pemantauan stok telah diperbarui.
             </p>
           )}
         </section>

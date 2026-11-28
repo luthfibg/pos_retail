@@ -18,7 +18,7 @@ export interface SettingsSection {
 
 export const GROUPS: ReadonlyArray<{ id: GroupId; label: string }> = [
   { id: 'store', label: 'Toko' },
-  { id: 'inventory', label: 'Opname' },
+  { id: 'inventory', label: 'Penghitungan stok' },
   { id: 'sales', label: 'Penjualan & harga' },
   { id: 'cash', label: 'Kas' },
   { id: 'accounts', label: 'Akun' },
@@ -32,8 +32,8 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     keywords: ['nama', 'identitas', 'retail', 'toko'],
   },
   {
-    id: 'admin-model', group: 'store', title: 'Model administrasi', permission: 'settings.manage', defaultOpen: true,
-    description: 'Pilih model Simple (Admin dan Kasir) atau Standar retail (Kasir, Finance, Purchasing, Accounting, Owner).',
+    id: 'admin-model', group: 'store', title: 'Pembagian tugas toko', permission: 'settings.manage', defaultOpen: true,
+    description: 'Pilih apakah semua tugas dikelola Admin dan Kasir, atau dibagi ke peran Keuangan, Pembelian, Pembukuan, dan Pemilik toko.',
     keywords: ['role', 'peran', 'owner', 'finance', 'purchasing', 'accounting', 'admin'],
   },
   {
@@ -43,37 +43,37 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
   },
   {
     id: 'stock-monitoring', group: 'store', title: 'Pemantauan stok', permission: 'settings.manage', defaultOpen: true,
-    description: 'Atur ambang stok menipis untuk pembuatan Permintaan otomatis oleh sistem.',
+    description: 'Atur batas stok untuk membuat permintaan pembelian secara otomatis.',
     keywords: ['inventory', 'stok', 'minimum', 'menipis', 'pembelian', 'restock', 'isi ulang', 'permintaan otomatis'],
   },
   {
-    id: 'purchase-order-suppliers', group: 'store', title: 'Supplier Purchase Order', permission: 'settings.manage', defaultOpen: false,
-    description: 'Pilih supplier PO dari master data atau otomatis dari supplier produk.',
-    keywords: ['supplier', 'pembelian', 'purchase order', 'po', 'produk', 'otomatis'],
+    id: 'purchase-order-suppliers', group: 'store', title: 'Pemasok pesanan pembelian', permission: 'settings.manage', defaultOpen: false,
+    description: 'Pilih pemasok untuk pesanan pembelian (PO), baik dari data produk maupun daftar pemasok aktif.',
+    keywords: ['supplier po', 'supplier', 'pembelian', 'purchase order', 'po', 'produk', 'otomatis'],
   },
   {
-    id: 'purchase-order-owner', group: 'store', title: 'Nama Owner Purchase Order', permission: 'settings.manage', defaultOpen: false,
-    description: 'Tetapkan akun Owner yang ditampilkan dan digunakan untuk autentikasi PO.',
-    keywords: ['owner', 'nama', 'akun', 'persetujuan', 'pembelian', 'purchase order', 'po'],
+    id: 'purchase-order-owner', group: 'store', title: 'Pemilik toko untuk persetujuan pembelian', permission: 'settings.manage', defaultOpen: false,
+    description: 'Pilih akun pemilik toko yang mengonfirmasi permintaan pembelian dan namanya dicantumkan pada pesanan.',
+    keywords: ['nama owner', 'owner', 'nama', 'akun', 'persetujuan', 'pembelian', 'purchase order', 'po'],
   },
   {
-    id: 'inventory-menus', group: 'store', title: 'Menu Inventory', permission: 'settings.manage', defaultOpen: false,
-    description: 'Tampilkan atau sembunyikan menu Stok Eksisting Toko dan Transfer Stok.',
+    id: 'inventory-menus', group: 'store', title: 'Menu stok', permission: 'settings.manage', defaultOpen: false,
+    description: 'Pilih menu stok awal toko dan pemindahan stok yang ingin ditampilkan.',
     keywords: ['inventory', 'stok eksisting', 'stok awal', 'transfer', 'menu'],
   },
   {
     id: 'bank-accounts', group: 'store', title: 'Rekening bank', permission: 'settings.manage', defaultOpen: false,
-    description: 'Kelola hingga lima rekening bank untuk dicantumkan pada Purchase Order. Saldo tidak dicatat.',
+    description: 'Kelola hingga lima rekening bank yang dapat dicantumkan pada pesanan pembelian (PO). Saldo rekening tidak disimpan.',
     keywords: ['bank', 'rekening', 'purchase order', 'pembelian', 'nomor rekening'],
   },
   {
-    id: 'stock-authority', group: 'store', title: 'Kewenangan stok', permission: 'settings.manage', defaultOpen: false,
-    description: 'Siapa yang boleh mencatat stok eksisting toko, penerimaan, transfer, serta mengajukan dan menyetujui adjustment/opname.',
+    id: 'stock-authority', group: 'store', title: 'Akses untuk mengelola stok', permission: 'settings.manage', defaultOpen: false,
+    description: 'Tentukan peran yang boleh mencatat stok awal, menerima dan memindahkan barang, serta menyetujui perubahan stok.',
     keywords: ['inventory', 'opname', 'adjustment', 'penerimaan', 'transfer', 'stok eksisting toko', 'wewenang', 'role'],
   },
   {
-    id: 'opname', group: 'inventory', title: 'Opname', permission: 'opname.settings.manage', defaultOpen: true,
-    description: 'Atur apakah petugas melihat angka stok sistem saat melakukan stock opname.',
+    id: 'opname', group: 'inventory', title: 'Penghitungan stok', permission: 'opname.settings.manage', defaultOpen: true,
+    description: 'Atur pengingat, tampilan jumlah stok di sistem, dan persetujuan hasil penghitungan stok.',
     keywords: ['inventory', 'stok', 'stock opname', 'hitung buta', 'selisih', 'ambang persetujuan'],
   },
   {
@@ -87,30 +87,30 @@ export const SECTIONS: ReadonlyArray<SettingsSection> = [
     keywords: ['promo', 'potongan', 'harga'],
   },
   {
-    id: 'float-policy', group: 'cash', title: 'Kebijakan endapan', permission: 'float.configure', defaultOpen: true,
-    description: 'Uang yang tetap di laci saat kasir jaga ditutup dan aturan setoran akhir kasir jaga.',
+    id: 'float-policy', group: 'cash', title: 'Uang yang disisakan di laci', permission: 'float.configure', defaultOpen: true,
+    description: 'Atur jumlah uang yang ditinggalkan di laci dan jumlah yang disetorkan saat kasir jaga ditutup.',
     keywords: ['endapan', 'laci', 'setoran', 'kas', 'shift'],
   },
   {
     id: 'registers', group: 'cash', title: 'Mesin kasir', permission: 'register.manage', defaultOpen: true,
-    description: 'Kelola mesin kasir dan laci kas. Tiap mesin dipakai bergantian oleh kasir dan memiliki saldo kas kecil sendiri.',
+    description: 'Kelola titik kasir dan laci kas. Setiap titik digunakan bergantian oleh kasir dan memiliki saldo kas sendiri.',
     keywords: ['register', 'laci', 'mesin', 'kasir jaga', 'shift'],
   },
   {
     id: 'users', group: 'accounts', title: 'Pengguna', permission: 'user.manage', defaultOpen: false,
-    description: 'Akun, role, akses, dan status pengguna di toko ini.',
+    description: 'Akun, peran, akses, dan status pengguna di toko ini.',
     keywords: ['akun', 'sandi', 'password', 'role', 'kasir', 'username'],
   },
   {
-    id: 'approval-auth', group: 'accounts', title: 'Otorisasi persetujuan',
+    id: 'approval-auth', group: 'accounts', title: 'Cara mengonfirmasi persetujuan',
     permission: ['settings.manage', 'user.manage', 'purchase_requisition.approve', 'inventory.adjust.approve', 'sales.credit_exception'],
     defaultOpen: true,
-    description: 'Atur metode autentikasi ulang dan kunci pribadi untuk pemegang izin persetujuan.',
+    description: 'Pilih cara pengguna membuktikan identitas saat menyetujui tindakan tertentu, serta kelola kunci persetujuan pribadi.',
     keywords: ['owner', 'admin', 'kunci', 'kode', 'passphrase', 'password', 'approval'],
   },
   {
     id: 'annual-receivable', group: 'billing', title: 'Laporan piutang tahunan', permission: 'settings.manage', defaultOpen: false,
-    description: '',
+    description: 'Atur bulan dan tanggal yang dicantumkan sebagai tanggal cetak laporan tahunan.',
     keywords: ['piutang', 'tutup tahun', 'cetak', 'tanggal'],
   },
 ];

@@ -73,7 +73,7 @@ describe('stockAuthorityLogic', () => {
       rule('supplier_return.warehouse'),
       rule('adjustment_approve'),
     ]);
-    expect(groups.map((g) => g.title)).toEqual(['Stok eksisting toko', 'Penerimaan barang', 'Retur supplier', 'Write-off retur supplier']);
+    expect(groups.map((g) => g.title)).toEqual(['Mencatat stok awal', 'Penerimaan barang', 'Mengembalikan barang ke pemasok', 'Menyetujui pengurangan stok barang retur']);
     expect(groups[1]?.rules.map(rowTitle)).toEqual(['Lokasi Toko', 'Lokasi Gudang']);
     expect(groups[2]?.rules.map(rowTitle)).toEqual(['Lokasi Toko', 'Lokasi Gudang']);
     expect(rowTitle(rule('opening_balance'))).toBe('Aturan opening_balance');

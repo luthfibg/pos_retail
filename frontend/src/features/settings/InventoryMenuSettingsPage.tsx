@@ -27,9 +27,9 @@ export function InventoryMenuSettingsPage({ embedded = false }: { embedded?: boo
   if (!query.data || !values) {
     return (
       <div className={pageClass(embedded)}>
-        <SettingsTitle embedded>Menu Inventory</SettingsTitle>
+        <SettingsTitle embedded>Menu stok</SettingsTitle>
         <ErrorNotice error={query.error} />
-        {!query.error && <p className="text-sm text-slate-500">Memuat pengaturan menu Inventory…</p>}
+        {!query.error && <p className="text-sm text-slate-500">Memuat pengaturan menu stok…</p>}
       </div>
     );
   }
@@ -40,7 +40,7 @@ export function InventoryMenuSettingsPage({ embedded = false }: { embedded?: boo
   return (
     <div className={pageClass(embedded, 'max-w-2xl')}>
       <div>
-        <SettingsTitle embedded>Menu Inventory</SettingsTitle>
+        <SettingsTitle embedded>Menu stok</SettingsTitle>
         <p className="mt-1 text-sm text-slate-600">
           Kedua menu disembunyikan secara default. Aktifkan hanya fitur yang digunakan toko.
         </p>
@@ -49,8 +49,8 @@ export function InventoryMenuSettingsPage({ embedded = false }: { embedded?: boo
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
         <ErrorNotice error={save.error} />
         {([
-          ['show_opening_balance', 'Stok Eksisting Toko', 'Tampilkan menu untuk memasukkan jumlah stok yang sudah tersedia di toko.'],
-          ['show_stock_transfer', 'Transfer Stok', 'Tampilkan menu untuk memindahkan stok antar lokasi.'],
+          ['show_opening_balance', 'Stok awal toko', 'Tampilkan menu untuk mencatat jumlah stok yang sudah tersedia di toko.'],
+          ['show_stock_transfer', 'Pemindahan stok', 'Tampilkan menu untuk memindahkan stok antar lokasi.'],
         ] as const).map(([key, title, description]) => (
           <label key={key} className="flex items-start gap-3">
             <input

@@ -34,7 +34,7 @@ export function validateVat(v: VatFormValues): VatErrors {
 /** Panggil validateVat lebih dulu. Menonaktifkan hanya mengirim `enabled: false` (riwayat tarif tidak dihapus). */
 export function buildVatInput(v: VatFormValues): VatInput {
   if (!v.enabled) return { enabled: false };
-  if (v.includes === null) throw new Error('Pilih status harga termasuk PPN sebelum menyimpan.');
+  if (v.includes === null) throw new Error('Pilih cara menghitung PPN sebelum menyimpan.');
   return { enabled: true, rate: normalizeDecimal(v.rate), price_includes_tax: v.includes };
 }
 
