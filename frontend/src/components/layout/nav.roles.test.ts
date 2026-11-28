@@ -158,6 +158,7 @@ describe('urutan sidebar mengikuti urutan grup yang ditetapkan', () => {
       'Keuangan > Laporan Kasir Jaga, Setoran Masuk, Laporan Piutang, Laporan Keuangan',
       'Data Master > Kategori, Supplier, Data Debitur',
       'Pengaturan',
+      'Panduan',
     ]);
   });
 });

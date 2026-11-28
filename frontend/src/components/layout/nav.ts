@@ -1,3 +1,4 @@
+import { GUIDE_ROLES } from '@/features/guide/guideContent';
 import { SETTINGS_PERMISSIONS } from '@/features/settings/settingsSections';
 import type { InventoryMenuSetting } from '@/lib/api/types';
 
@@ -26,6 +27,7 @@ export interface NavGroup {
  *  5. Keuangan       periksa kasir jaga -> terima setoran -> tagih HRD
  *  6. Data Master    kategori -> supplier -> debitur
  *  7. Pengaturan     satu layar untuk semua konfigurasi
+ *  8. Panduan        panduan pengguna per role (hanya role yang sudah punya panduan; lihat features/guide)
  *
  * Item disaring berdasarkan permission dan batas role dari /auth/me, jadi setiap role hanya melihat menunya sendiri.
  * Urutan di dalam grup juga mengikuti alur.
@@ -95,6 +97,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/settings', label: 'Pengaturan', permission: SETTINGS_PERMISSIONS },
       { to: '/cashier-settings', label: 'Pengaturan', roles: ['Kasir'] },
     ],
+  },
+  {
+    label: 'Panduan',
+    items: [{ to: '/guide', label: 'Panduan', roles: GUIDE_ROLES }],
   },
 ];
 

@@ -17,6 +17,8 @@ const SalesHistoryPage = lazy(() => import('@/features/sales/SalesHistoryPage').
 const CashierSettingsPage = lazy(() => import('@/features/sales/CashierSettingsPage').then((module) => ({ default: module.CashierSettingsPage })));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 import { LEGACY_REDIRECTS, SETTINGS_PERMISSIONS } from '@/features/settings/settingsSections';
+import { GUIDE_ROLES } from '@/features/guide/guideContent';
+const GuidePage = lazy(() => import('@/features/guide/GuidePage').then((module) => ({ default: module.GuidePage })));
 const ShiftPage = lazy(() => import('@/features/shifts/ShiftPage').then((module) => ({ default: module.ShiftPage })));
 const ShiftsAdminPage = lazy(() => import('@/features/shifts/ShiftsAdminPage').then((module) => ({ default: module.ShiftsAdminPage })));
 const DepositQueuePage = lazy(() => import('@/features/shifts/DepositQueuePage').then((module) => ({ default: module.DepositQueuePage })));
@@ -63,6 +65,10 @@ export const router = createBrowserRouter([
           {
             element: <RequireAnyRole roles={['Kasir']} />,
             children: [{ path: 'cashier-settings', element: <LazyPage><CashierSettingsPage /></LazyPage> }],
+          },
+          {
+            element: <RequireAnyRole roles={GUIDE_ROLES} />,
+            children: [{ path: 'guide', element: <LazyPage><GuidePage /></LazyPage> }],
           },
           {
             element: <RequirePermission permission="shift.review" />,

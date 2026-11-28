@@ -73,6 +73,16 @@ describe('sidebar navigation', () => {
     ]);
   });
 
+  it('Panduan tampil di akhir sidebar hanya untuk role yang sudah punya panduan', () => {
+    const adminGroups = getVisibleNavGroups(() => true, true, undefined, ['Admin']);
+    expect(adminGroups.at(-1)?.label).toBe('Panduan');
+    expect(adminGroups.at(-1)?.standalone).toBe(true);
+
+    const cashierPaths = getVisibleNavGroups(() => true, false, undefined, ['Kasir'])
+      .flatMap((group) => group.items.map((item) => item.to));
+    expect(cashierPaths).not.toContain('/guide');
+  });
+
   it('shift dibuka sebelum kasir dipakai dan penerimaan serta retur berada di grup Inventory', () => {
     const groups = getVisibleNavGroups(() => true, false, undefined, ['Kasir']);
     const paths = groups.flatMap((group) => group.items.map((item) => item.to));
