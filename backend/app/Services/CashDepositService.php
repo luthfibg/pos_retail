@@ -293,9 +293,11 @@ class CashDepositService
         if (! $canSeeAll) {
             $query->where('s.cashier_id', $actor->id);
         }
-        foreach (['status'] as $field) {
-            if (! empty($filters[$field])) {
-                $query->where("d.{$field}", $filters[$field]);
+        if (! empty($filters['status'])) {
+            if ($filters['status'] === 'received') {
+                $query->whereIn('d.status', ['received', 'discrepancy', 'corrected']);
+            } else {
+                $query->where('d.status', $filters['status']);
             }
         }
         if (! empty($filters['shift_id'])) {

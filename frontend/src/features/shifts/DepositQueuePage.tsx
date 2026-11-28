@@ -14,29 +14,27 @@ import {
 } from './depositForm';
 
 const STATUS_LABEL: Record<DepositStatus, string> = {
-  draft: 'Draft — belum diserahkan',
-  submitted: 'Diserahkan — menunggu Finance',
-  received: 'Diterima Finance',
-  discrepancy: 'Ada selisih — menunggu koreksi',
-  corrected: 'Selisih dikoreksi',
+  draft: 'Menunggu penerimaan',
+  submitted: 'Menunggu penerimaan',
+  received: 'Sudah diterima',
+  discrepancy: 'Sudah diterima',
+  corrected: 'Sudah diterima',
 };
-const STATUS_OPTIONS: Array<{ value: DepositStatus | 'all'; label: string }> = [
+type DepositQueueStatus = 'submitted' | 'received';
+const STATUS_OPTIONS: Array<{ value: DepositQueueStatus; label: string }> = [
   { value: 'submitted', label: 'Menunggu penerimaan' },
-  { value: 'discrepancy', label: 'Menunggu koreksi selisih' },
   { value: 'received', label: 'Sudah diterima' },
-  { value: 'corrected', label: 'Sudah dikoreksi' },
-  { value: 'all', label: 'Semua status' },
 ];
 
 export function DepositQueuePage() {
-  const [status, setStatus] = useState<DepositStatus | 'all'>('submitted');
+  const [status, setStatus] = useState<DepositQueueStatus>('submitted');
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const deposits = useQuery({
     queryKey: ['cash-deposits', 'finance', status, page],
     queryFn: () => cashDepositApi.list({
-      ...(status === 'all' ? {} : { status }),
+      status,
       page,
       per_page: 25,
     }),
@@ -64,7 +62,7 @@ export function DepositQueuePage() {
               className={inputCls}
               value={status}
               onChange={(event) => {
-                setStatus(event.target.value as DepositStatus | 'all');
+                setStatus(event.target.value as DepositQueueStatus);
                 setPage(1);
               }}
             >
@@ -153,7 +151,7 @@ function DepositDetailDialog({ depositId, onClose }: { depositId: number; onClos
   const [errors, setErrors] = useState<DepositErrors>({});
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState<string>();
-  const [confirming, setConfirming] = useState<'receive' | 'correct' | null>(null);
+  const [confirming, setConfirming] = useState<'correct' | null>(null);
 
   const detail = useQuery({
     queryKey: ['cash-deposit', depositId],
@@ -166,8 +164,7 @@ function DepositDetailDialog({ depositId, onClose }: { depositId: number; onClos
   };
   const receive = useMutation({
     mutationFn: () => cashDepositApi.receive(depositId, buildReceiveDepositInput(values)),
-    onSuccess: () => { setConfirming(null); invalidateFinance(); },
-    onError: () => setConfirming(null),
+    onSuccess: () => { invalidateFinance(); onClose(); },
   });
   const correct = useMutation({
     mutationFn: () => cashDepositApi.correct(depositId, reason.trim()),
@@ -185,7 +182,7 @@ function DepositDetailDialog({ depositId, onClose }: { depositId: number; onClos
     receive.reset();
     const found = validateReceiveDeposit(values, deposit?.deposit_amount ?? '');
     setErrors(found);
-    if (!Object.keys(found).length) setConfirming('receive');
+    if (!Object.keys(found).length) receive.mutate();
   }
 
   function reviewCorrection(event: FormEvent) {
@@ -237,7 +234,9 @@ function DepositDetailDialog({ depositId, onClose }: { depositId: number; onClos
               <Field label="Catatan penerimaan / selisih" error={errors.note ?? receiveErrors.note?.[0]} hint="Wajib bila jumlah diterima berbeda; maksimal 500 karakter.">
                 <textarea className={inputCls} rows={2} maxLength={500} value={values.note} onChange={(event) => update('note', event.target.value)} />
               </Field>
-              <button type="submit" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Periksa penerimaan</button>
+              <button type="submit" disabled={receive.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+                {receive.isPending ? 'Mencatat…' : 'Catat penerimaan'}
+              </button>
             </form>
           )}
 
@@ -251,20 +250,6 @@ function DepositDetailDialog({ depositId, onClose }: { depositId: number; onClos
               </Field>
               <button type="submit" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white">Periksa koreksi</button>
             </form>
-          )}
-
-          {confirming === 'receive' && (
-            <div className="space-y-3 rounded-md border border-slate-300 p-4">
-              <p className="text-sm">
-                Akan dicatat diterima <strong>{formatRupiah(values.amount.replace(',', '.'))}</strong> dari setoran {formatRupiah(deposit.deposit_amount)}.
-              </p>
-              <p className="text-xs text-slate-600">Kas Kecil dikurangi sebesar jumlah setoran, Kas Besar ditambah sebesar jumlah yang diterima. Perbedaan jumlah mewajibkan catatan dan menandai setoran berselisih.</p>
-              <ErrorNotice error={receive.error} />
-              <div className="flex justify-end gap-2">
-                <button type="button" disabled={receive.isPending} onClick={() => setConfirming(null)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Periksa lagi</button>
-                <button type="button" disabled={receive.isPending} onClick={() => receive.mutate()} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{receive.isPending ? 'Mencatat…' : 'Konfirmasi penerimaan'}</button>
-              </div>
-            </div>
           )}
 
           {confirming === 'correct' && (

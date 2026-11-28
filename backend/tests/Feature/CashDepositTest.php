@@ -252,6 +252,38 @@ class CashDepositTest extends SeededTestCase
         $this->postJson("/api/cash-deposits/{$depositId}/receive", ['received_amount' => '734000'])->assertUnprocessable()->assertJsonValidationErrors(['status']);
     }
 
+    public function test_finance_status_filter_has_waiting_and_received_buckets(): void
+    {
+        foreach (['734000', '733000', '733000'] as $index => $receivedAmount) {
+            [, $depositId] = $this->closedShiftWithDeposit();
+            $this->as($this->cashier);
+            $this->postJson("/api/cash-deposits/{$depositId}/submit")->assertOk();
+
+            $this->as($this->admin);
+            $payload = ['received_amount' => $receivedAmount];
+            if ($index > 0) {
+                $payload['note'] = 'Selisih dicatat saat penerimaan.';
+            }
+            $this->postJson("/api/cash-deposits/{$depositId}/receive", $payload)
+                ->assertOk()->assertJsonPath('data.status', $index === 0 ? 'received' : 'discrepancy');
+
+            if ($index === 2) {
+                $this->postJson("/api/cash-deposits/{$depositId}/correct", ['reason' => 'Selisih sudah ditinjau.'])
+                    ->assertOk()->assertJsonPath('data.status', 'corrected');
+            }
+        }
+
+        [, $pendingDepositId] = $this->closedShiftWithDeposit();
+        $this->as($this->cashier);
+        $this->postJson("/api/cash-deposits/{$pendingDepositId}/submit")->assertOk();
+
+        $this->as($this->admin);
+        $received = $this->getJson('/api/cash-deposits?status=received')->assertOk()->json('data');
+        $this->assertSame(3, count($received));
+        $this->assertEqualsCanonicalizing(['received', 'discrepancy', 'corrected'], array_column($received, 'status'));
+        $this->getJson('/api/cash-deposits?status=submitted')->assertOk()->assertJsonPath('total', 1);
+    }
+
     public function test_draft_cannot_be_received(): void
     {
         [, $depositId] = $this->closedShiftWithDeposit();

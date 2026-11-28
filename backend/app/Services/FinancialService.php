@@ -152,45 +152,6 @@ class FinancialService
         });
     }
 
-    /** Settle the remaining PO balance as part of a fully posted receipt; cash may go negative.
-     * @return array<string, mixed>|null
-     */
-    public function settleOnFullReceipt(User $actor, int $storeId, int $poId, string $receiptDocNo, string $paidAt): ?array
-    {
-        return DB::transaction(function () use ($actor, $storeId, $poId, $receiptDocNo, $paidAt) {
-            $po = DB::table('purchase_orders')
-                ->where('store_id', $storeId)
-                ->where('id', $poId)
-                ->lockForUpdate()
-                ->first();
-            abort_if($po === null, 404, 'PO tidak ditemukan.');
-            if ($po->status !== 'received' || $po->receipt_status !== 'complete') {
-                throw ValidationException::withMessages(['status' => ['Pelunasan otomatis hanya berlaku untuk PO yang diterima penuh.']]);
-            }
-
-            $total = Decimal::money((string) $po->total);
-            $paid = Decimal::money((string) $po->amount_paid);
-            $remaining = $total - $paid;
-            if ($remaining < 0) {
-                throw ValidationException::withMessages(['amount_paid' => ['Pembayaran PO melebihi total pesanan.']]);
-            }
-            if ($remaining === 0) {
-                return null;
-            }
-
-            return $this->createPurchaseOrderPayment(
-                $actor,
-                $storeId,
-                $po,
-                $this->lockedMainCash($storeId),
-                $remaining,
-                $paidAt,
-                $receiptDocNo,
-                'Pelunasan otomatis setelah penerimaan penuh '.$receiptDocNo,
-            );
-        });
-    }
-
     /** @param array{category: string, description: string, amount: string, paid_on: ?string} $data
      * @return array<string, mixed>
      */

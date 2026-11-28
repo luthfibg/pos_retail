@@ -11,7 +11,6 @@ return new class extends Migration
     {
         $partialDepositIds = DB::table('cash_deposits')->where('kind', 'partial')->pluck('id');
 
-        DB::table('fund_ledger_entries')->where('ref_type', 'cash_movement')->delete();
         if ($partialDepositIds->isNotEmpty()) {
             DB::table('fund_ledger_entries')
                 ->where('ref_type', 'cash_deposit')
@@ -20,31 +19,36 @@ return new class extends Migration
             DB::table('cash_deposits')->whereIn('id', $partialDepositIds)->delete();
         }
 
-        Schema::dropIfExists('cash_movements');
-        Schema::table('cash_deposits', function (Blueprint $table) {
-            $table->dropColumn('kind');
-        });
-
         $cashSales = DB::table('sales')
             ->where('status', 'posted')
             ->where('payment_mode', 'cash')
             ->select('shift_id')
             ->selectRaw('coalesce(sum(total), 0) as cash_sales')
             ->groupBy('shift_id');
+        $cashMovements = DB::table('cash_movements')
+            ->select('shift_id')
+            ->selectRaw("coalesce(sum(case when type = 'in' then amount else -amount end), 0) as cash_movement_net")
+            ->groupBy('shift_id');
         DB::table('cash_shifts as s')
             ->leftJoinSub($cashSales, 'sales', 'sales.shift_id', '=', 's.id')
+            ->leftJoinSub($cashMovements, 'movements', 'movements.shift_id', '=', 's.id')
             ->whereIn('s.status', ['closed', 'reviewed'])
             ->update([
-                'expected_cash' => DB::raw('s.opening_balance + coalesce(sales.cash_sales, 0)'),
-                'variance' => DB::raw('s.counted_cash - (s.opening_balance + coalesce(sales.cash_sales, 0))'),
+                'expected_cash' => DB::raw('s.opening_balance + coalesce(sales.cash_sales, 0) + coalesce(movements.cash_movement_net, 0)'),
+                'variance' => DB::raw('s.counted_cash - (s.opening_balance + coalesce(sales.cash_sales, 0) + coalesce(movements.cash_movement_net, 0))'),
                 'variance_note' => DB::raw(
                     "CASE
-                        WHEN s.counted_cash - (s.opening_balance + coalesce(sales.cash_sales, 0)) = 0 THEN NULL
+                        WHEN s.counted_cash - (s.opening_balance + coalesce(sales.cash_sales, 0) + coalesce(movements.cash_movement_net, 0)) = 0 THEN NULL
                         WHEN s.variance_note IS NULL OR trim(s.variance_note) = '' THEN 'Selisih dihitung ulang setelah penghapusan kas nonpenjualan dan setoran parsial.'
                         ELSE s.variance_note
                     END",
                 ),
             ]);
+
+        Schema::dropIfExists('cash_movements');
+        Schema::table('cash_deposits', function (Blueprint $table) {
+            $table->dropColumn('kind');
+        });
 
         $permissionIds = DB::table('permissions')->where('code', 'cash_movement.create')->pluck('id');
         DB::table('user_permissions')->whereIn('permission_id', $permissionIds)->delete();

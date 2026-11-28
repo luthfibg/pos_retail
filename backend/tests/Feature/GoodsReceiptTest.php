@@ -66,22 +66,19 @@ class GoodsReceiptTest extends SeededTestCase
 
         $this->assertSame('received', DB::table('purchase_orders')->where('id', $po)->value('status'));
         $this->assertSame('complete', DB::table('purchase_orders')->where('id', $po)->value('receipt_status'));
-        $this->assertSame('paid', DB::table('purchase_orders')->where('id', $po)->value('payment_status'));
-        $this->assertSame('20000.00', DB::table('purchase_orders')->where('id', $po)->value('amount_paid'));
-        $this->assertDatabaseHas('purchase_order_payments', [
-            'po_id' => $po,
-            'amount' => '20000.00',
-            'reference' => $response->json('data.doc_number'),
-        ]);
+        $this->assertSame('unpaid', DB::table('purchase_orders')->where('id', $po)->value('payment_status'));
+        $this->assertSame('0.00', DB::table('purchase_orders')->where('id', $po)->value('amount_paid'));
+        $this->assertSame(0, DB::table('purchase_order_payments')->where('po_id', $po)->count());
         $fundId = DB::table('fund_accounts')->where('store_id', $this->storeId())->where('type', 'main_cash')->value('id');
-        $this->assertSame(-2000000, (int) (DB::table('fund_ledger_entries')
+        $this->assertSame(0, (int) (DB::table('fund_ledger_entries')
             ->where('fund_account_id', $fundId)
+            ->where('ref_type', 'purchase_order_payment')
             ->sum(DB::raw('amount * 100'))));
         $this->assertSame(10.0, (float) DB::table('purchase_order_items')->where('id', $item)->value('qty_received'));
         $this->assertDatabaseHas('audit_logs', ['action' => 'goods_receipt.post', 'actor_id' => $this->cashier->id]);
     }
 
-    public function test_full_receipt_only_auto_pays_the_remaining_balance(): void
+    public function test_full_receipt_does_not_auto_pay_remaining_balance(): void
     {
         $productId = $this->product();
         [$po, $poItem] = $this->sentPo($productId);
@@ -112,15 +109,10 @@ class GoodsReceiptTest extends SeededTestCase
         $this->postJson('/api/goods-receipts', $this->receipt($po, $poItem, [], ['post' => true]))
             ->assertCreated();
 
-        $this->assertSame('paid', DB::table('purchase_orders')->where('id', $po)->value('payment_status'));
-        $this->assertSame('20000.00', DB::table('purchase_orders')->where('id', $po)->value('amount_paid'));
-        $this->assertSame(2, DB::table('purchase_order_payments')->where('po_id', $po)->count());
-        $this->assertDatabaseHas('purchase_order_payments', [
-            'po_id' => $po,
-            'amount' => '15000.00',
-            'reference' => DB::table('goods_receipts')->where('po_id', $po)->value('doc_number'),
-        ]);
-        $this->assertSame(-2000000, (int) (DB::table('fund_ledger_entries')
+        $this->assertSame('partial', DB::table('purchase_orders')->where('id', $po)->value('payment_status'));
+        $this->assertSame('5000.00', DB::table('purchase_orders')->where('id', $po)->value('amount_paid'));
+        $this->assertSame(1, DB::table('purchase_order_payments')->where('po_id', $po)->count());
+        $this->assertSame(-500000, (int) (DB::table('fund_ledger_entries')
             ->where('fund_account_id', $fundId)
             ->where('ref_type', 'purchase_order_payment')
             ->sum(DB::raw('amount * 100'))));

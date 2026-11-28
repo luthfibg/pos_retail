@@ -490,7 +490,7 @@ Permintaan buat:
 
 Setiap produk dalam PO harus terhubung ke `supplier_id` PO. Validasi ini berlaku di backend saat membuat PO maupun mengubah item/supplier pada PO draft. Untuk membagi Permintaan lintas supplier, buat PO terpisah untuk masing-masing supplier dan hanya masukkan produk yang terhubung dengannya.
 
-Status PO baru: `approved` → `sent` → `partially_received` → `received`; cabang `cancelled`. PO lama dapat tetap berstatus `draft` atau `pending_confirmation` dan memakai endpoint kompatibilitas. Semua PO baru memerlukan autentikasi Owner saat dibuat, tanpa auto-approval berdasarkan estimasi PR. Status penerimaan terpisah: `receipt_status` = `none|partial|complete`; `payment_status` = `unpaid` (pembayaran = Paket 2).
+Status PO baru: `approved` → `sent` → `partially_received` → `received`; cabang `cancelled`. PO lama dapat tetap berstatus `draft` atau `pending_confirmation` dan memakai endpoint kompatibilitas. Semua PO baru memerlukan autentikasi Owner saat dibuat, tanpa auto-approval berdasarkan estimasi PR. Status penerimaan terpisah: `receipt_status` = `none|partial|complete`; penerimaan barang tidak otomatis melunasi PO. `payment_status` berubah hanya saat pembayaran aktual dicatat (`unpaid|partial|paid`).
 
 Aturan: PO **wajib dari PR `approved`**; satu PR boleh dipecah ke beberapa PO (per supplier); qty per produk **kumulatif** tidak boleh melebihi qty PR (422 `errors["items.N.qty_ordered"]` memuat sisa); PR otomatis menjadi `converted` bila semua item sudah tercakup dan kembali `approved` bila PO dibatalkan.
 
@@ -594,7 +594,7 @@ Endapan = uang yang sengaja tetap di laci dan menjadi saldo awal shift berikutny
 |---|---|---|---|
 | GET | `/api/float-policies` | `float.propose` | Kebijakan aktif: `{ "data": { "petty_cash": {…}\|null, "main_cash": {…}\|null } }` |
 | PUT | `/api/float-policies/{scope}` | `float.configure` (Admin) | Tetapkan versi baru (`scope` = `petty_cash`\|`main_cash`); versi lama dinonaktifkan, tercatat di audit |
-| GET | `/api/cash-deposits?status=&shift_id=&per_page=` | `cash_deposit.create` **atau** `cash_deposit.receive` | Daftar (pemegang `create`: hanya shift sendiri; pemegang `receive`: semua) |
+| GET | `/api/cash-deposits?status=&shift_id=&per_page=` | `cash_deposit.create` **atau** `cash_deposit.receive` | Daftar (pemegang `create`: hanya shift sendiri; pemegang `receive`: semua); filter `submitted` = menunggu penerimaan, `received` = sudah diterima termasuk dokumen berselisih/dikoreksi |
 | GET | `/api/cash-deposits/{id}` | `cash_deposit.create` **atau** `cash_deposit.receive` | Detail (pemegang `create` dibatasi ke shift sendiri; pemegang `receive` dapat melihat semua) |
 | POST | `/api/cash-deposits/{id}/submit` | `cash_deposit.create` | Kasir menyerahkan uang: `draft` → `submitted` |
 | POST | `/api/cash-deposits/{id}/receive` | `cash_deposit.receive` (Admin) | Finance menghitung ulang: `{ "received_amount": "734000", "note"? }` |
@@ -609,7 +609,7 @@ Aturan hitung:
 - **Tutup shift** (`POST /api/shifts/{id}/close`) membuat setoran akhir berstatus `draft` bila ada yang disetor; `data.deposit` berisi `{ id, doc_number, status, deposit_amount, float_kept }`. Kasir menekan "Serahkan" (`submit`) → Finance `receive`. Shift berikutnya baru bisa dibuka setelah setoran akhir diserahkan, dan saldo awalnya = `float_kept`.
 
 Dokumen setoran (`data`): `{ id, doc_number "DEP-202610-000001", shift_id, shift_doc_number, status, counted_amount, float_kept, deposit_amount, received_amount, difference, received_by_name, received_at, note, created_by, created_by_name, created_at }`.
-Status: `draft` → `submitted` → `received` (cocok) atau `discrepancy` (berbeda; `note` **wajib** → `errors.note`) → `corrected` (alasan). Ledger saat `receive`: Kas Kecil −`deposit_amount`, Kas Besar +`received_amount`; `correct` tidak mengubah ledger. Selisih = `received_amount − deposit_amount` (negatif = kurang).
+Status internal: `draft` → `submitted` → `received` (cocok) atau `discrepancy` (berbeda; `note` **wajib** → `errors.note`) → `corrected` (alasan). Halaman Setoran Masuk menampilkan dua kelompok status: `submitted` = Menunggu penerimaan; `received`, `discrepancy`, dan `corrected` = Sudah diterima. Ledger saat `receive`: Kas Kecil −`deposit_amount`, Kas Besar +`received_amount`; `correct` tidak mengubah ledger. Selisih = `received_amount − deposit_amount` (negatif = kurang).
 
 Layar yang bisa dibuatkan UI: dialog hasil tutup shift (tampilkan setoran + endapan + `float_flags`), tombol "Serahkan setoran", antrean "Setoran masuk" untuk Finance/Admin (terima/selisih/koreksi), halaman kebijakan endapan (Admin), kartu saldo Kas Kecil/Kas Besar.
 

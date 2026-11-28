@@ -498,7 +498,7 @@ const ADMIN_SECTIONS: GuideSection[] = [
           'Klik setoran untuk Detail setoran.',
           'Hitung uang fisik, isi Jumlah diterima (Rp).',
           'Isi Catatan penerimaan / selisih (wajib bila jumlah berbeda).',
-          'Klik Periksa penerimaan, lalu Konfirmasi penerimaan.',
+          'Klik Catat penerimaan; setelah berhasil dialog tertutup dan saldo diperbarui.',
         ],
       },
       {
